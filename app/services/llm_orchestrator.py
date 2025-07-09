@@ -49,6 +49,11 @@ class LLMOrchestrator:
             Exception: If there's an error communicating with the LLM service
         """
         try:
+            if not query or not query.strip():
+                raise ValueError("Query cannot be empty or whitespace")
+            if len(query) > 1000: # TODO: Adjust appropriate length limit and don't make it magic number
+                raise ValueError("Query exceeds maximum length of 1000 characters")
+            
             logger.info(f"Processing query: {query}")
             
             # Construct messages for the LLM

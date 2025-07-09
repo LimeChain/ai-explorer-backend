@@ -2,6 +2,7 @@
 Configuration settings for the AI Explorer backend service.
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import SecretStr, Field
 
 
 class Settings(BaseSettings):
@@ -15,9 +16,9 @@ class Settings(BaseSettings):
     """
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
     
-    openai_api_key: str
-    environment: str = "development"
-    log_level: str = "INFO"
+    openai_api_key: SecretStr = Field(default=SecretStr("your-api-key"), min_length=1, description="OpenAI API key (required)")
+    environment: str = Field(default="development", pattern="^(development|production|staging)$")
+    log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
 
 
 # Global settings instance
