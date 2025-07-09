@@ -14,7 +14,23 @@ router = APIRouter()
 llm_orchestrator = LLMOrchestrator()
 
 
-@router.post("/")
+@router.post(
+    "/",
+    responses={
+        200: {
+            "description": "Successful streaming response",
+            "content": {"text/event-stream": {"example": "data: Hello\n\ndata: world\n\n"}}
+        },
+        400: {
+            "description": "Bad Request - Invalid input",
+            "content": {"application/json": {"example": {"detail": "Query cannot be empty or whitespace"}}}
+        },
+        503: {
+            "description": "Service Unavailable - AI service is temporarily unavailable",
+            "content": {"application/json": {"example": {"detail": "The AI service is currently unavailable. Please try again in a moment."}}}
+        }
+    }
+)
 async def chat(request: ChatRequest) -> StreamingResponse:
     """
     Main chat endpoint for the AI Explorer with streaming LLM responses.

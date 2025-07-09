@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.services.llm_orchestrator import LLMOrchestrator
+from app.exceptions import LLMServiceError, ValidationError
 
 
 class TestLLMOrchestrator:
@@ -127,3 +128,72 @@ class TestLLMOrchestrator:
         # Verify error message is yielded
         assert len(response_tokens) == 1
         assert "Error: Unable to process your request" in response_tokens[0]
+    
+    @pytest.mark.asyncio
+    async def test_validation_error_empty_query(self, mock_settings, mock_chat_openai):
+        """Test that empty queries raise ValidationError."""
+        mock_llm_instance = MagicMock()
+        mock_chat_openai.return_value = mock_llm_instance
+        
+        orchestrator = LLMOrchestrator()
+        
+        # Test empty query
+        with pytest.raises(ValidationError, match="Query cannot be empty or whitespace"):
+            async for _ in orchestrator.stream_llm_response(""):
+                pass
+                
+        # Test whitespace-only query
+        with pytest.raises(ValidationError, match="Query cannot be empty or whitespace"):
+            async for _ in orchestrator.stream_llm_response("   "):
+                pass
+    
+    @pytest.mark.asyncio
+    async def test_validation_error_long_query(self, mock_settings, mock_chat_openai):
+        """Test that overly long queries raise ValidationError."""
+        mock_llm_instance = MagicMock()
+        mock_chat_openai.return_value = mock_llm_instance
+        
+        orchestrator = LLMOrchestrator()
+        
+        # Create a query that exceeds the limit
+        long_query = "a" * 1001
+        
+        with pytest.raises(ValidationError, match="Query exceeds maximum length"):
+            async for _ in orchestrator.stream_llm_response(long_query):
+                pass
+    
+    @pytest.mark.asyncio
+    async def test_langchain_exception_handling(self, mock_settings, mock_chat_openai):
+        """Test that LangChain exceptions are converted to LLMServiceError."""
+        from langchain_core.exceptions import LangChainException
+        
+        # Create a mock that raises a LangChainException
+        async def mock_astream_langchain_error(messages):
+            raise LangChainException("API rate limit exceeded")
+        
+        mock_llm_instance = MagicMock()
+        mock_llm_instance.astream = mock_astream_langchain_error
+        mock_chat_openai.return_value = mock_llm_instance
+        
+        orchestrator = LLMOrchestrator()
+        
+        with pytest.raises(LLMServiceError, match="The AI service is currently unavailable"):
+            async for _ in orchestrator.stream_llm_response("test query"):
+                pass
+    
+    @pytest.mark.asyncio
+    async def test_unexpected_exception_handling(self, mock_settings, mock_chat_openai):
+        """Test that unexpected exceptions are converted to LLMServiceError."""
+        # Create a mock that raises an unexpected exception
+        async def mock_astream_unexpected_error(messages):
+            raise RuntimeError("Unexpected error")
+        
+        mock_llm_instance = MagicMock()
+        mock_llm_instance.astream = mock_astream_unexpected_error
+        mock_chat_openai.return_value = mock_llm_instance
+        
+        orchestrator = LLMOrchestrator()
+        
+        with pytest.raises(LLMServiceError, match="The AI service encountered an unexpected error"):
+            async for _ in orchestrator.stream_llm_response("test query"):
+                pass
