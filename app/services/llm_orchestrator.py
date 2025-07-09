@@ -54,7 +54,7 @@ class LLMOrchestrator:
             if len(query) > 1000: # TODO: Adjust appropriate length limit and don't make it magic number
                 raise ValueError("Query exceeds maximum length of 1000 characters")
             
-            logger.info(f"Processing query: {query}")
+            logger.info(f"Processing query of length: {len(query)}")
             
             # Construct messages for the LLM
             messages = [
