@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI
 
 from app.api.endpoints import chat
+from app.exception_handlers import register_exception_handlers
 
 
 # Configure logging
@@ -24,6 +25,9 @@ app = FastAPI(
     description="Backend service for the THF AI Explorer - a next-generation block explorer for the Hedera network",
     version="0.1.0",
 )
+
+# Register exception handlers
+register_exception_handlers(app)
 
 # Include routers
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
