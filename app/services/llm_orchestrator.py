@@ -77,8 +77,8 @@ class LLMOrchestrator:
         except LangChainException as e:
             # Handle LangChain-specific exceptions
             logger.error(f"LangChain error during streaming: {e}", exc_info=True)
-            raise LLMServiceError("The AI service is currently unavailable. Please try again in a moment.")
+            raise LLMServiceError("The AI service is currently unavailable. Please try again in a moment.") from e
         except Exception as e:
             # Handle any other unexpected exceptions
             logger.error(f"Unexpected error during LLM streaming: {e}", exc_info=True)
-            raise LLMServiceError("The AI service encountered an unexpected error. Please try again in a moment.")
+            raise LLMServiceError("The AI service encountered an unexpected error. Please try again in a moment.") from e
