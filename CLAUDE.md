@@ -41,7 +41,36 @@ Chat history is stored anonymously with temporary session IDs (not linked to wal
 
 ## Development Environment
 
-This appears to be a new repository with only documentation files. No source code, package.json, or build scripts are present yet.
+This repository is currently in the initial planning phase with no source code implementation yet. The project exists only as documentation (BRD and SDD).
+
+## Current Repository Status
+
+- **Implementation Phase**: Pre-development (documentation only)
+- **Available Files**: BRD.md, SDD.md, CLAUDE.md, README.md (empty)
+- **No build files, package managers, or source code present**
+
+## Planned Tech Stack (From SDD)
+
+- **Backend**: Python + FastAPI + LangGraph
+- **Database**: PostgreSQL
+- **Cache**: Redis
+- **Containerization**: Docker
+- **Cloud**: Google Cloud Run
+- **Infrastructure**: Terraform
+- **CI/CD**: GitHub Actions
+- **MCP Servers**: BigQuery MCP Server, Hedera SDK MCP Server
+
+## Development Commands
+
+*Note: These commands will be available once the project implementation begins*
+
+### Expected Future Commands
+- `python -m venv venv` - Create virtual environment
+- `uv install` - Install dependencies
+- `uvicorn main:app --reload` - Run FastAPI development server
+- `pytest` - Run tests
+- `docker-compose up` - Run full stack locally
+- `terraform plan` - Preview infrastructure changes
 
 ## Core Features (Phase 1 MVP)
 
