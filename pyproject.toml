@@ -12,3 +12,8 @@ dependencies = [
     "pytest-asyncio>=1.0.0",
     "uvicorn[standard]>=0.35.0",
 ]
+
+[tool.uv.workspace]
+members = [
+    "mcp-servers",
+]
