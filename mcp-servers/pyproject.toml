@@ -1,5 +1,5 @@
 [project]
-name = "mcp-mirror-node"
+name = "mcp-servers"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -8,4 +8,5 @@ dependencies = [
     "fastapi>=0.116.0",
     "pytest>=8.4.1",
     "uvicorn[standard]>=0.35.0",
+    "httpx>=0.28.1",
 ]
