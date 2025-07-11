@@ -45,7 +45,7 @@ async def chat(request: ChatRequest) -> StreamingResponse:
         StreamingResponse with text/event-stream content type
     """
     logger.info(f"Received chat request: {request.query}")
-    
+    # await llm_orchestrator.stream_llm_response(request.query)
     async def generate_response():
         """Generate streaming response from LLM."""
         async for token in llm_orchestrator.stream_llm_response(request.query):

@@ -26,7 +26,6 @@ class TestExceptionHandlers:
                 "/api/v1/chat/",
                 json={"query": "test query"}
             )
-            
             assert response.status_code == 503
             assert response.headers["content-type"] == "application/json"
             
@@ -49,12 +48,12 @@ class TestExceptionHandlers:
                 json={"query": ""}
             )
             
-            assert response.status_code == 400
+            assert response.status_code == 422
             assert response.headers["content-type"] == "application/json"
             
             error_data = response.json()
             assert "detail" in error_data
-            assert "Query cannot be empty" in error_data["detail"]
+            assert "String should have at least 1 character" in error_data["detail"][0]["msg"]
     
     def test_successful_request_not_affected(self):
         """Test that successful requests are not affected by exception handlers."""

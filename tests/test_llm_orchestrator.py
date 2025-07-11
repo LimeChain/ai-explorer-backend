@@ -32,30 +32,49 @@ class TestLLMOrchestrator:
         # Verify ChatOpenAI was called with correct parameters
         mock_chat_openai.assert_called_once_with(
             api_key="test-api-key",
-            model="gpt-4o-mini",
-            temperature=0.7,
+            model="gpt-4.1-mini",
+            temperature=0.1,
             streaming=True,
         )
     
     @pytest.mark.asyncio
-    async def test_stream_llm_response_success(self, mock_settings, mock_chat_openai):
+    @patch('app.services.llm_orchestrator.streamablehttp_client')
+    @patch('app.services.llm_orchestrator.ClientSession')
+    @patch('app.services.llm_orchestrator.load_mcp_tools')
+    @patch('app.services.llm_orchestrator.create_react_agent')
+    async def test_stream_llm_response_success(self, mock_create_agent, mock_load_tools, 
+                                             mock_client_session, mock_http_client,
+                                             mock_settings, mock_chat_openai):
         """Test successful streaming response from LLM."""
-        # Setup mock response chunks
-        mock_chunk1 = MagicMock()
-        mock_chunk1.content = "Hello"
-        mock_chunk2 = MagicMock()
-        mock_chunk2.content = " there"
-        mock_chunk3 = MagicMock()
-        mock_chunk3.content = "!"
+        from langchain_core.messages import AIMessageChunk
         
-        # Create an async generator for the mock
-        async def mock_astream(messages):
-            for chunk in [mock_chunk1, mock_chunk2, mock_chunk3]:
+        # Setup mock MCP components
+        mock_session = MagicMock()
+        mock_session.initialize = MagicMock()
+        mock_client_session.return_value.__aenter__.return_value = mock_session
+        
+        mock_http_client.return_value.__aenter__.return_value = (None, None, None)
+        
+        mock_tools = [MagicMock()]
+        mock_load_tools.return_value = mock_tools
+        
+        # Setup mock agent with streaming chunks
+        mock_agent = MagicMock()
+        
+        # Create AIMessageChunk objects for proper streaming
+        chunk1 = (AIMessageChunk(content="Hello"), {})
+        chunk2 = (AIMessageChunk(content=" there"), {})
+        chunk3 = (AIMessageChunk(content="!"), {})
+        
+        async def mock_astream(*args, **kwargs):
+            for chunk in [chunk1, chunk2, chunk3]:
                 yield chunk
         
-        # Create a mock LLM instance and set up the astream method
+        mock_agent.astream = mock_astream
+        mock_create_agent.return_value = mock_agent
+        
+        # Create a mock LLM instance
         mock_llm_instance = MagicMock()
-        mock_llm_instance.astream = mock_astream
         mock_chat_openai.return_value = mock_llm_instance
         
         orchestrator = LLMOrchestrator()
@@ -67,34 +86,43 @@ class TestLLMOrchestrator:
         
         # Verify results
         assert response_tokens == ["Hello", " there", "!"]
-        
-        # Verify ChatOpenAI was called with correct parameters
-        mock_chat_openai.assert_called_once_with(
-            api_key=mock_settings.openai_api_key,
-            model="gpt-4o-mini",
-            temperature=0.7,
-            streaming=True,
-        )
     
     @pytest.mark.asyncio
-    async def test_stream_llm_response_empty_content(self, mock_settings, mock_chat_openai):
+    @patch('app.services.llm_orchestrator.streamablehttp_client')
+    @patch('app.services.llm_orchestrator.ClientSession')
+    @patch('app.services.llm_orchestrator.load_mcp_tools')
+    @patch('app.services.llm_orchestrator.create_react_agent')
+    async def test_stream_llm_response_empty_content(self, mock_create_agent, mock_load_tools,
+                                                   mock_client_session, mock_http_client,
+                                                   mock_settings, mock_chat_openai):
         """Test handling of chunks with empty content."""
-        # Setup mock response chunks with some empty content
-        mock_chunk1 = MagicMock()
-        mock_chunk1.content = "Hello"
-        mock_chunk2 = MagicMock()
-        mock_chunk2.content = ""  # Empty content
-        mock_chunk3 = MagicMock()
-        mock_chunk3.content = " world"
+        from langchain_core.messages import AIMessageChunk
+        
+        # Setup mock MCP components
+        mock_session = MagicMock()
+        mock_session.initialize = MagicMock()
+        mock_client_session.return_value.__aenter__.return_value = mock_session
+        mock_http_client.return_value.__aenter__.return_value = (None, None, None)
+        mock_load_tools.return_value = [MagicMock()]
+        
+        # Setup mock agent with chunks including empty content
+        mock_agent = MagicMock()
+        
+        # Create AIMessageChunk objects including empty content
+        chunk1 = (AIMessageChunk(content="Hello"), {})
+        chunk2 = (AIMessageChunk(content=""), {})  # Empty content
+        chunk3 = (AIMessageChunk(content=" world"), {})
         
         # Create an async generator for the mock
-        async def mock_astream(messages):
-            for chunk in [mock_chunk1, mock_chunk2, mock_chunk3]:
+        async def mock_astream(*args, **kwargs):
+            for chunk in [chunk1, chunk2, chunk3]:
                 yield chunk
         
-        # Create a mock LLM instance and set up the astream method
+        mock_agent.astream = mock_astream
+        mock_create_agent.return_value = mock_agent
+        
+        # Create a mock LLM instance
         mock_llm_instance = MagicMock()
-        mock_llm_instance.astream = mock_astream
         mock_chat_openai.return_value = mock_llm_instance
         
         orchestrator = LLMOrchestrator()
@@ -108,14 +136,31 @@ class TestLLMOrchestrator:
         assert response_tokens == ["Hello", " world"]
     
     @pytest.mark.asyncio
-    async def test_stream_llm_response_exception_handling(self, mock_settings, mock_chat_openai):
+    @patch('app.services.llm_orchestrator.streamablehttp_client')
+    @patch('app.services.llm_orchestrator.ClientSession')
+    @patch('app.services.llm_orchestrator.load_mcp_tools')
+    @patch('app.services.llm_orchestrator.create_react_agent')
+    async def test_stream_llm_response_exception_handling(self, mock_create_agent, mock_load_tools,
+                                                        mock_client_session, mock_http_client,
+                                                        mock_settings, mock_chat_openai):
         """Test error handling when LLM service fails."""
-        # Create a mock that raises an exception
-        async def mock_astream_error(messages):
+        # Setup mock MCP components
+        mock_session = MagicMock()
+        mock_session.initialize = MagicMock()
+        mock_client_session.return_value.__aenter__.return_value = mock_session
+        mock_http_client.return_value.__aenter__.return_value = (None, None, None)
+        mock_load_tools.return_value = [MagicMock()]
+        
+        # Create a mock agent that raises an exception
+        mock_agent = MagicMock()
+        
+        async def mock_astream_error(*args, **kwargs):
             raise Exception("API Error")
         
+        mock_agent.astream = mock_astream_error
+        mock_create_agent.return_value = mock_agent
+        
         mock_llm_instance = MagicMock()
-        mock_llm_instance.astream = mock_astream_error
         mock_chat_openai.return_value = mock_llm_instance
         
         orchestrator = LLMOrchestrator()
@@ -177,7 +222,7 @@ class TestLLMOrchestrator:
         
         orchestrator = LLMOrchestrator()
         
-        with pytest.raises(LLMServiceError, match="The AI service is currently unavailable"):
+        with pytest.raises(LLMServiceError, match="The AI service encountered an unexpected error. Please try again in a moment."):
             async for _ in orchestrator.stream_llm_response("test query"):
                 pass
     
