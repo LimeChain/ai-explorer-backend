@@ -11,7 +11,7 @@ class TestMCPTools:
     @pytest.fixture
     def mock_sdk_service(self):
         """Create a mock SDK service for testing."""
-        with patch('mcp_servers.app.main.sdk_service') as mock_service:
+        with patch('app.main.sdk_service') as mock_service:
             yield mock_service
 
     @pytest.mark.asyncio
