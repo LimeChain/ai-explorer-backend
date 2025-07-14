@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from app.api.endpoints import chat
 from app.exception_handlers import register_exception_handlers
+from fastapi.middleware.cors import CORSMiddleware
 
 
 # Configure logging
@@ -24,6 +25,14 @@ app = FastAPI(
     title="AI Explorer Backend",
     description="Backend service for the THF AI Explorer - a next-generation block explorer for the Hedera network",
     version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins. Change to a list of allowed origins in production!
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers
 )
 
 # Register exception handlers

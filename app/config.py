@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     environment: str = Field(default="development", pattern="^(development|production|staging)$")
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
 
+    langsmith_tracing: bool = Field(default=False, description="Enable LangSmith tracing")
+    langsmith_project: str = Field(default="ai-explorer-backend", description="LangSmith project name")
+    langsmith_api_key: SecretStr = Field(default=SecretStr("your-api-key"), min_length=1, description="LangSmith API key (required)")
+    langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", description="LangSmith API endpoint")
+
 
 # Global settings instance
 settings = Settings()
