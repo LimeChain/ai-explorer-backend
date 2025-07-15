@@ -1223,25 +1223,22 @@ class MirrorNodeClient:
 
     # Pagination utilities
 
-    def get_accounts_paginated(
-        self,
-        limit: Optional[int] = None,
-        **kwargs,
-    ) -> Iterator[AccountsResponse]:
-        """Get accounts with automatic pagination.
-
+    def _paginate_request(self, initial_request_func, response_attr, **kwargs):
+        """Generic pagination helper for API endpoints.
+        
         Args:
-            limit: Page size
+            initial_request_func: Function to make the initial request
+            response_attr: Attribute name to access the response links
             **kwargs: Additional query parameters
-
+        
         Yields:
-            AccountsResponse objects for each page
+            Response objects for each page
         """
-        response = self.get_accounts(limit=limit, **kwargs)
+        response = initial_request_func(**kwargs)
         yield response
         
-        while response.links.next:
-            next_link = extract_next_link(response.links.__dict__)
+        while getattr(response, 'links').next:
+            next_link = extract_next_link(getattr(response, 'links').__dict__)
             if next_link:
                 # Parse query parameters from next link
                 query_params = dict(parse_qs(next_link))
@@ -1253,42 +1250,25 @@ class MirrorNodeClient:
                     elif isinstance(value, list) and len(value) > 1:
                         next_params[key] = value
                 
-                response = self.get_accounts(**next_params)
+                response = initial_request_func(**next_params)
                 yield response
             else:
                 break
 
-    def get_transactions_paginated(
-        self,
-        limit: Optional[int] = None,
-        **kwargs,
-    ) -> Iterator[TransactionsResponse]:
-        """Get transactions with automatic pagination.
+    def get_accounts_paginated(self, limit: Optional[int] = None, **kwargs) -> Iterator[AccountsResponse]:
+        """Get accounts with automatic pagination."""
+        return self._paginate_request(
+            self.get_accounts,
+            'links',
+            limit=limit,
+            **kwargs
+        )
 
-        Args:
-            limit: Page size
-            **kwargs: Additional query parameters
-
-        Yields:
-            TransactionsResponse objects for each page
-        """
-        response = self.get_transactions(limit=limit, **kwargs)
-        yield response
-        
-        while response.links.next:
-            next_link = extract_next_link(response.links.__dict__)
-            if next_link:
-                # Parse query parameters from next link
-                query_params = dict(parse_qs(next_link))
-                # Convert list values to single values and filter parameters
-                next_params = {}
-                for key, value in query_params.items():
-                    if isinstance(value, list) and len(value) == 1:
-                        next_params[key] = value[0]
-                    elif isinstance(value, list) and len(value) > 1:
-                        next_params[key] = value
-                
-                response = self.get_transactions(**next_params)
-                yield response
-            else:
-                break
+    def get_transactions_paginated(self, limit: Optional[int] = None, **kwargs) -> Iterator[TransactionsResponse]:
+        """Get transactions with automatic pagination."""
+        return self._paginate_request(
+            self.get_transactions,
+            'links',
+            limit=limit,
+            **kwargs
+        )
