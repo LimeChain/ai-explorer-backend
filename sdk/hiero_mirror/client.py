@@ -123,7 +123,7 @@ class MirrorNodeClient:
                     try:
                         return response.json()
                     except ValueError as e:
-                        raise MirrorNodeException(f"Invalid JSON response: {e}")
+                        raise MirrorNodeException(f"Invalid JSON response: {e}") from e
                 
                 # Handle error responses
                 try:
