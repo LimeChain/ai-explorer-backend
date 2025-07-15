@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI
 
 from app.api.endpoints import chat
+from app.config import settings
 from app.exception_handlers import register_exception_handlers
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -29,7 +30,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins. Change to a list of allowed origins in production!
+    allow_origins=settings.allowed_origins,  # Allows all origins. Change to a list of allowed origins in production!
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
     allow_headers=["*"],  # Allows all headers

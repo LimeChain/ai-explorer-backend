@@ -3,6 +3,8 @@ Configuration settings for the AI Explorer backend service.
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr, Field
+from typing import List
+
 
 
 class Settings(BaseSettings):
@@ -19,6 +21,13 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr = Field(default=SecretStr("your-api-key"), min_length=1, description="OpenAI API key (required)")
     environment: str = Field(default="development", pattern="^(development|production|staging)$")
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
+
+    mcp_endpoint: str = Field(default="http://localhost:8001/mcp/", description="MCP server endpoint")
+    chat_model: str = Field(default="gpt-4.1-mini", description="The model to use")
+    allowed_origins: List[str] = Field(
+        default=["*"],
+        description="List of allowed CORS origins"
+    )
 
     langsmith_tracing: bool = Field(default=False, description="Enable LangSmith tracing")
     langsmith_project: str = Field(default="ai-explorer-backend", description="LangSmith project name")

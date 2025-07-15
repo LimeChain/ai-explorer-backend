@@ -111,7 +111,7 @@ class AsyncMirrorNodeClient:
                     try:
                         return response.json()
                     except ValueError as e:
-                        raise MirrorNodeException(f"Invalid JSON response: {e}")
+                        raise MirrorNodeException(f"Invalid JSON response: {e}") from e
                 
                 # Handle error responses
                 try:
@@ -154,7 +154,7 @@ class AsyncMirrorNodeClient:
         try:
             return model_class.parse_obj(response_data)
         except ValidationError as e:
-            raise MirrorNodeException(f"Response validation error: {e}")
+            raise MirrorNodeException(f"Response validation error: {e}") from e
 
     # Account endpoints
 
