@@ -76,30 +76,85 @@ Once running, visit:
 
 ## API Usage
 
-### Chat Endpoint
+### WebSocket Chat Endpoint
 
-Send a POST request to `/api/v1/chat` with a JSON body containing your query. The response will be streamed token-by-token using Server-Sent Events (SSE):
+The chat functionality uses WebSocket connections for real-time streaming responses. Connect to the WebSocket endpoint at `/api/v1/chat/ws` and send JSON messages.
+
+#### Using Postman (Recommended)
+
+1. **Create a new WebSocket request in Postman**:
+   - Set URL to: `ws://localhost:8000/api/v1/chat/ws`
+   - Click "Connect"
+
+2. **Send a simple query**:
+   ```json
+   {
+     "query": "What is the Hedera network?"
+   }
+   ```
+
+3. **Send a query with wallet context**:
+   ```json
+   {
+     "query": "What is my wallet address?",
+     "account_id": "0.0.12345",
+     "session_id": "client-session-123"
+   }
+   ```
+
+4. **Send a multi-turn conversation**:
+   ```json
+   {
+     "messages": [
+       {"role": "user", "content": "Tell me about Hedera"},
+       {"role": "assistant", "content": "Hedera is a distributed ledger..."},
+       {"role": "user", "content": "What about its consensus mechanism?"}
+     ],
+     "account_id": "0.0.12345",
+     "session_id": "client-session-456"
+   }
+   ```
+
+#### Message Format
+
+**Request (Client → Server):**
+```json
+{
+  "query": "your question here",              // OR "messages": [...]
+  "account_id": "0.0.12345",                 // Optional: connected wallet
+  "session_id": "client-session-123"         // Optional: for traceability
+}
+```
+
+**Response (Server → Client):**
+```json
+{"token": "The"}
+{"token": " Hedera"}
+{"token": " network"}
+{"token": " is"}
+...
+{"complete": true}
+```
+
+**Error Response:**
+```json
+{"error": "Invalid request: Query cannot be empty"}
+```
+
+#### Using curl (Alternative)
+
+For testing with curl, you can use a WebSocket client like `wscat`:
 
 ```bash
-curl -N -X POST "http://localhost:8000/api/v1/chat" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What is the Hedera network?"}'
-```
+# Install wscat if you don't have it
+npm install -g wscat
 
-**Response (streamed):**
-```
-data: The
-data:  Hedera
-data:  network
-data:  is
-data:  a
-data:  distributed
-data:  ledger
-data:  technology
-...
-```
+# Connect and send a message
+wscat -c ws://localhost:8000/api/v1/chat/ws
 
-**Note:** Use the `-N` flag with curl to disable buffering and see the streaming response in real-time.
+# Then send:
+{"query": "What is the Hedera network?"}
+```
 
 ### Health Check
 
@@ -123,9 +178,11 @@ docker run -p 8000:8000 ai-explorer-backend
 
 ### Test the containerized service:
 ```bash
-curl -N -X POST "http://localhost:8000/api/v1/chat" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "test from docker"}'
+# Use wscat to test WebSocket connection
+wscat -c ws://localhost:8000/api/v1/chat/ws
+
+# Then send:
+{"query": "test from docker"}
 ```
 
 **Note:** You'll need to pass your OpenAI API key as an environment variable when running the container:
@@ -137,7 +194,9 @@ docker run -p 8000:8000 -e OPENAI_API_KEY=your_api_key_here ai-explorer-backend
 
 This implementation includes:
 - ✅ LLM integration with streaming responses using LangChain
-- ✅ Token-by-token streaming via Server-Sent Events (SSE)
+- ✅ Token-by-token streaming via WebSocket connections
+- ✅ Contextual user data support (wallet address integration)
+- ✅ Multi-turn conversation support
 - ✅ Configuration management with environment variables
 - ✅ Structured logging and error handling
 
