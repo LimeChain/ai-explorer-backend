@@ -5,7 +5,13 @@ from .services.sdk_service import HederaSDKService
 
 # Initialize the FastMCP server for Hedera Mirror Node
 mcp = FastMCP("HederaMirrorNode")
-sdk_service = HederaSDKService()
+sdk_service = None
+
+def get_sdk_service():
+    global sdk_service
+    if sdk_service is None:
+        sdk_service = HederaSDKService()
+    return sdk_service
 
 @mcp.tool()
 async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
@@ -27,7 +33,7 @@ async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
         - call_sdk_method(method_name="get_transaction", transaction_id="0.0.123@1234567890")
         - call_sdk_method(method_name="get_account", account_id="0.0.123")
     """
-    return await sdk_service.call_method(method_name, **kwargs)
+    return await get_sdk_service().call_method(method_name, **kwargs)
 
 @mcp.tool()
 async def get_available_methods() -> List[str]:
@@ -39,7 +45,7 @@ async def get_available_methods() -> List[str]:
     Returns:
         List of available method names
     """
-    return sdk_service.get_available_methods()
+    return get_sdk_service.get_available_methods()
 
 @mcp.tool()
 async def get_method_signature(method_name: str) -> Dict[str, Any]:
@@ -55,7 +61,7 @@ async def get_method_signature(method_name: str) -> Dict[str, Any]:
     Returns:
         Dict containing parameter information, types, and defaults
     """
-    return sdk_service.get_method_signature(method_name)
+    return get_sdk_service.get_method_signature(method_name)
 
 @mcp.tool()
 async def health_check() -> Dict[str, str]:
