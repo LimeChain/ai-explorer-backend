@@ -65,10 +65,10 @@ This repository is currently in the initial planning phase with no source code i
 *Note: These commands will be available once the project implementation begins*
 
 ### Expected Future Commands
-- `python -m venv venv` - Create virtual environment
-- `uv install` - Install dependencies
-- `uvicorn main:app --reload` - Run FastAPI development server
-- `pytest` - Run tests
+- `uv venv venv` - Create virtual environment
+- `uv sync` - Install dependencies
+- `uv run uvicorn app.main:app --reload --port 8000` - Run FastAPI development server
+- `uv run pytest` - Run tests
 - `docker-compose up` - Run full stack locally
 - `terraform plan` - Preview infrastructure changes
 
