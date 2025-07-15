@@ -1,12 +1,7 @@
-import sys
-import os
 from typing import Any, Dict, List
 from mcp.server.fastmcp import FastMCP
 
-# Add the current directory to Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from services.sdk_service import HederaSDKService
+from .services.sdk_service import HederaSDKService
 
 # Initialize the FastMCP server for Hedera Mirror Node
 mcp = FastMCP("HederaMirrorNode")
