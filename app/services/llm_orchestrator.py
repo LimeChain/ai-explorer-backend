@@ -6,7 +6,7 @@ import json
 from typing import AsyncGenerator, Dict, Any, List, Optional, TypedDict
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessageChunk, BaseMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.exceptions import LangChainException
 from langgraph.graph import StateGraph, END
 from langgraph.graph.state import CompiledStateGraph
@@ -15,6 +15,7 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 from app.config import settings
 from app.exceptions import LLMServiceError, ValidationError
 from app.prompts.system_prompts import AGENTIC_SYSTEM_PROMPT
+from app.schemas.chat import ChatMessage
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
@@ -42,6 +43,7 @@ class GraphState(TypedDict):
     final_response: Optional[str]  # The final response to return to user
     iteration_count: int  # Track iterations to prevent infinite loops
     pending_tool_call: Optional[Dict[str, Any]]  # Tool call waiting to be executed
+    account_id: Optional[str]  # Connected wallet address for personalized context
 
 
 class LLMOrchestrator:
@@ -56,17 +58,36 @@ class LLMOrchestrator:
         """Initialize the LLM Orchestrator with agentic workflow."""
         self.llm = ChatOpenAI(
             api_key=settings.openai_api_key,
-            model="gpt-4.1-mini",  # TODO: make this configurable
+            model=settings.chat_model,
             temperature=DEFAULT_TEMPERATURE,
             streaming=True,
         )
         logger.info("LLM Orchestrator initialized with agentic workflow")
 
+    def _create_context_aware_system_prompt(self, account_id: Optional[str]) -> str:
+        """Create a context-aware system prompt that includes account information."""
+        base_prompt = AGENTIC_SYSTEM_PROMPT
+        
+        if account_id:
+            context_addition = f"""
+            USER CONTEXT:
+            The user is connected with wallet address {account_id}. Use this address as the context for any relevant questions about 'my' account, 'my' transactions, 'my' balance, or similar personal queries. When the user asks about 'my' anything related to blockchain data, they are referring to this specific account: {account_id}.
+
+            Examples:
+            - "What is my wallet address?" -> "Your wallet address is {account_id}."
+            - "Show me my transactions" -> Query transactions for account {account_id}
+            - "What is my balance?" -> Check balance for account {account_id}
+            """
+            return base_prompt + context_addition
+        
+        return base_prompt
+
     async def _call_model_node(self, state: GraphState) -> GraphState:
         """Graph node that calls the LLM model."""
         try:
-            # Prepare messages for the model
-            messages = [SystemMessage(content=AGENTIC_SYSTEM_PROMPT)]
+            # Prepare messages for the model with context-aware system prompt
+            system_prompt = self._create_context_aware_system_prompt(state.get("account_id"))
+            messages = [SystemMessage(content=system_prompt)]
             messages.extend(state["messages"])
             
             # Add tool call context if available
@@ -242,12 +263,19 @@ class LLMOrchestrator:
             state["messages"] = state["messages"] + [error_message]
             return state
 
-    async def stream_llm_response(self, query: str) -> AsyncGenerator[str, None]:
+    async def stream_llm_response(
+        self, 
+        query: str, 
+        account_id: Optional[str] = None,
+        conversation_history: Optional[List[ChatMessage]] = None
+    ) -> AsyncGenerator[str, None]:
         """
         Stream LLM response using agentic workflow with real token streaming.
         
         Args:
             query: The user's natural language query
+            account_id: Optional connected wallet address for personalized context
+            conversation_history: Optional list of previous conversation messages
             
         Yields:
             str: Individual tokens from the LLM response
@@ -263,7 +291,7 @@ class LLMOrchestrator:
                 raise ValidationError(f"Query exceeds maximum length of {MAX_QUERY_LENGTH} characters")
             
             # Use the original approach with proper MCP connection management
-            async with streamablehttp_client('http://localhost:8001/mcp/') as (read, write, _):
+            async with streamablehttp_client(settings.mcp_endpoint) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     
@@ -300,22 +328,37 @@ class LLMOrchestrator:
                     # Compile graph
                     graph = workflow.compile()
                     
+                    # Build initial messages from conversation history
+                    initial_messages = []
+                    if conversation_history:
+                        # Convert ChatMessage objects to LangChain messages
+                        for msg in conversation_history:
+                            if msg.role == "user":
+                                initial_messages.append(HumanMessage(content=msg.content))
+                            elif msg.role == "assistant":
+                                initial_messages.append(AIMessage(content=msg.content))
+                    else:
+                        # If no conversation history, just use the current query
+                        initial_messages = [HumanMessage(content=query)]
+                    
                     # Initialize state and run workflow
                     initial_state: GraphState = {
-                        "messages": [HumanMessage(content=query)],
+                        "messages": initial_messages,
                         "tool_calls_made": [],
                         "current_query": query,
                         "final_response": None,
                         "iteration_count": 0,
-                        "pending_tool_call": None
+                        "pending_tool_call": None,
+                        "account_id": account_id
                     }
                     
                     # Execute the agentic workflow
                     final_state = await graph.ainvoke(initial_state)
                     # Stream the final response
                     final_messages = final_state["messages"]
-                    # Create streaming call with full conversation context
-                    messages_for_streaming = [SystemMessage(content=AGENTIC_SYSTEM_PROMPT)]
+                    # Create streaming call with full conversation context using context-aware prompt
+                    context_system_prompt = self._create_context_aware_system_prompt(account_id)
+                    messages_for_streaming = [SystemMessage(content=context_system_prompt)]
                     messages_for_streaming.extend(final_messages)
                     messages_for_streaming.append(HumanMessage(content="Please provide a clear, final summary based on the tool results above."))
                     # Stream the final response token by token

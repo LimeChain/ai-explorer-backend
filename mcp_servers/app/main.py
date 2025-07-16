@@ -45,7 +45,7 @@ async def get_available_methods() -> List[str]:
     Returns:
         List of available method names
     """
-    return get_sdk_service.get_available_methods()
+    return get_sdk_service().get_available_methods()
 
 @mcp.tool()
 async def get_method_signature(method_name: str) -> Dict[str, Any]:
@@ -61,7 +61,7 @@ async def get_method_signature(method_name: str) -> Dict[str, Any]:
     Returns:
         Dict containing parameter information, types, and defaults
     """
-    return get_sdk_service.get_method_signature(method_name)
+    return get_sdk_service().get_method_signature(method_name)
 
 @mcp.tool()
 async def health_check() -> Dict[str, str]:

@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
 
-from app.schemas.chat import ChatRequest
+from app.schemas.chat import ChatRequest, ChatMessage
 from app.services.llm_orchestrator import LLMOrchestrator
 
 
@@ -36,17 +36,41 @@ async def websocket_chat(websocket: WebSocket):
             logger.info(f"Received WebSocket message: {data}")
             
             try:
-                message = json.loads(data)
-                query = message.get("query")
+                message_data = json.loads(data)
                 
-                if not query or not query.strip():
+                # Validate using ChatRequest schema
+                try:
+                    chat_request = ChatRequest(**message_data)
+                except ValueError as e:
                     await websocket.send_text(json.dumps({
-                        "error": "Query cannot be empty or whitespace"
+                        "error": f"Invalid request: {str(e)}"
                     }))
                     continue
                 
-                # Stream LLM response
-                async for token in llm_orchestrator.stream_llm_response(query):
+                # Log account context for traceability  
+                if chat_request.account_id:
+                    logger.info(f"Processing request with account_id={chat_request.account_id}")
+                
+                # Extract query from messages (last user message)
+                query = None
+                if chat_request.messages:
+                    for msg in reversed(chat_request.messages):
+                        if msg.role == "user":
+                            query = msg.content
+                            break
+                
+                if not query:
+                    await websocket.send_text(json.dumps({
+                        "error": "No user message found in request"
+                    }))
+                    continue
+                
+                # Stream LLM response with account context only
+                async for token in llm_orchestrator.stream_llm_response(
+                    query, 
+                    account_id=chat_request.account_id,
+                    conversation_history=chat_request.messages
+                ):
                     await websocket.send_text(json.dumps({
                         "token": token
                     }))

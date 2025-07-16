@@ -1223,52 +1223,52 @@ class MirrorNodeClient:
 
     # Pagination utilities
 
-    def _paginate_request(self, initial_request_func, response_attr, **kwargs):
-        """Generic pagination helper for API endpoints.
-        
-        Args:
-            initial_request_func: Function to make the initial request
-            response_attr: Attribute name to access the response links
-            **kwargs: Additional query parameters
-        
-        Yields:
-            Response objects for each page
-        """
-        response = initial_request_func(**kwargs)
-        yield response
-        
-        while getattr(response, 'links').next:
-            next_link = extract_next_link(getattr(response, 'links').__dict__)
-            if next_link:
-                # Parse query parameters from next link
-                query_params = dict(parse_qs(next_link))
-                # Convert list values to single values and filter parameters
-                next_params = {}
-                for key, value in query_params.items():
-                    if isinstance(value, list) and len(value) == 1:
-                        next_params[key] = value[0]
-                    elif isinstance(value, list) and len(value) > 1:
-                        next_params[key] = value
-                
-                response = initial_request_func(**next_params)
-                yield response
-            else:
-                break
+def _paginate_request(self, initial_request_func, response_attr, **kwargs):
+    """Generic pagination helper for API endpoints.
+    
+    Args:
+        initial_request_func: Function to make the initial request
+        response_attr: Attribute name to access the response links
+        **kwargs: Additional query parameters
+    
+    Yields:
+        Response objects for each page
+    """
+    response = initial_request_func(**kwargs)
+    yield response
+    
+    while getattr(response, 'links').next:
+        next_link = extract_next_link(getattr(response, 'links').__dict__)
+        if next_link:
+            # Parse query parameters from next link
+            query_params = dict(parse_qs(next_link))
+            # Convert list values to single values and filter parameters
+            next_params = {}
+            for key, value in query_params.items():
+                if isinstance(value, list) and len(value) == 1:
+                    next_params[key] = value[0]
+                elif isinstance(value, list) and len(value) > 1:
+                    next_params[key] = value
+            
+            response = initial_request_func(**next_params)
+            yield response
+        else:
+            break
 
-    def get_accounts_paginated(self, limit: Optional[int] = None, **kwargs) -> Iterator[AccountsResponse]:
-        """Get accounts with automatic pagination."""
-        return self._paginate_request(
-            self.get_accounts,
-            'links',
-            limit=limit,
-            **kwargs
-        )
+def get_accounts_paginated(self, limit: Optional[int] = None, **kwargs) -> Iterator[AccountsResponse]:
+    """Get accounts with automatic pagination."""
+    return self._paginate_request(
+        self.get_accounts,
+        'links',
+        limit=limit,
+        **kwargs
+    )
 
-    def get_transactions_paginated(self, limit: Optional[int] = None, **kwargs) -> Iterator[TransactionsResponse]:
-        """Get transactions with automatic pagination."""
-        return self._paginate_request(
-            self.get_transactions,
-            'links',
-            limit=limit,
-            **kwargs
-        )
+def get_transactions_paginated(self, limit: Optional[int] = None, **kwargs) -> Iterator[TransactionsResponse]:
+    """Get transactions with automatic pagination."""
+    return self._paginate_request(
+        self.get_transactions,
+        'links',
+        limit=limit,
+        **kwargs
+    )
