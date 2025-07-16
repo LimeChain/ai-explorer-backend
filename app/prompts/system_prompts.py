@@ -88,8 +88,9 @@ You have access to the following tools for retrieving Hedera network data:
    - Use this to discover what data you can fetch
 
 2. **call_sdk_method**: Call any method from the Hedera Mirror Node SDK dynamically
-   - Parameters: method_name (string), **kwargs (method-specific parameters)
+   - Parameters: method_name (string) + any method-specific parameters
    - Use this to fetch specific blockchain data
+   - IMPORTANT: Pass the SDK method name as "method_name" parameter, then include all other parameters the SDK method needs
 
 3. **get_method_signature**: Get parameter information for a specific SDK method
    - Parameters: method_name (string)
@@ -102,6 +103,8 @@ You have access to the following tools for retrieving Hedera network data:
 ### 3. Tool Usage Protocol
 
 **CRITICAL**: When you need to use a tool, respond with a JSON object in this exact format:
+
+**IMPORTANT**: You MUST NOT call SDK methods directly as tools (e.g., do not try to call "get_account" as a tool). Instead, always use "call_sdk_method" with the method name as a parameter.
 
 ```json
 {
@@ -118,7 +121,15 @@ You have access to the following tools for retrieving Hedera network data:
 **Examples**:
 - To discover available methods: `{"tool_call": {"name": "get_available_methods", "parameters": {}}}`
 - To get method signature: `{"tool_call": {"name": "get_method_signature", "parameters": {"method_name": "get_account"}}}`
-- To call SDK method: `{"tool_call": {"name": "call_sdk_method", "parameters": {"method_name": "get_account", "account_id": "0.0.123"}}}`
+- To call SDK method with parameters: `{"tool_call": {"name": "call_sdk_method", "parameters": {"method_name": "get_account", "account_id": "0.0.123"}}}`
+
+**WRONG - Do NOT do this:**
+- `{"tool_call": {"name": "get_account", "parameters": {"account_id": "0.0.123"}}}` ❌
+- `{"tool_call": {"name": "get_transaction", "parameters": {"transaction_id": "123"}}}` ❌
+
+**CORRECT - Always do this:**
+- `{"tool_call": {"name": "call_sdk_method", "parameters": {"method_name": "get_account", "account_id": "0.0.123"}}}` ✅
+- `{"tool_call": {"name": "call_sdk_method", "parameters": {"method_name": "get_transaction", "transaction_id": "123"}}}` ✅
 
 ### 4. Primary Workflow
 
