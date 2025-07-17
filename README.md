@@ -29,11 +29,20 @@ This is the foundational backend service that provides a hardcoded `/chat` endpo
 cp .env .env.local
 ```
 
-2. Edit `.env.local` and add your OpenAI API key:
+2. Edit `.env.local` and add your configuration:
 ```bash
+# API Keys
 OPENAI_API_KEY=your_actual_openai_api_key_here
+
+# Environment
 ENVIRONMENT=development
 LOG_LEVEL=INFO
+
+# Database (for local development)
+DATABASE_URL=postgresql://ai_explorer:ai_explorer@localhost:5433/ai_explorer
+
+# MCP Server
+MCP_ENDPOINT=http://localhost:8001/mcp/
 ```
 
 ### Installation
@@ -51,22 +60,68 @@ uv sync
 source .venv/bin/activate
 ```
 
-3. Run the development server:
+### Database Setup
+
+3. Start the PostgreSQL database:
+```bash
+docker-compose up postgres
+```
+
+4. Run database migrations:
+```bash
+alembic upgrade head
+```
+
+5. Run the development server:
 ```bash
 uv run uvicorn app.main:app --reload --port 8000 
 ```
 
 The service will be available at `http://localhost:8000`.
 
-4. Install the SDK as a package:
+6. Install the SDK as a package:
 ```bash
+cd mcp_servers
+
 uv pip install -e ../sdk
 ```
 
-5. Run the MCP server:
+7. Run the MCP server:
 ```bash
 python main.py
 ```
+
+### Database Management
+
+#### Database Migration Commands
+
+Create a new migration:
+```bash
+alembic revision --autogenerate -m "Description of changes"
+```
+
+Apply migrations:
+```bash
+alembic upgrade head
+```
+
+Check migration status:
+```bash
+alembic current
+```
+
+#### Database Features
+
+The backend includes:
+- **GDPR-compliant chat history**: Anonymous session-based storage
+- **Conversation persistence**: Messages are saved with timestamps
+- **Session management**: Conversations are tracked by session ID
+- **Account context**: Optional account ID for personalized responses
+
+#### Database Schema
+
+- **conversations**: Stores session information and optional account context
+- **messages**: Stores individual user and assistant messages within conversations
 
 ### API Documentation
 
@@ -195,14 +250,18 @@ docker run -p 8000:8000 -e OPENAI_API_KEY=your_api_key_here ai-explorer-backend
 This implementation includes:
 - ✅ LLM integration with streaming responses using LangChain
 - ✅ Token-by-token streaming via WebSocket connections
-- ✅ Contextual user data support (wallet address integration)
+- ✅ Contextual user data support (account ID integration)
 - ✅ Multi-turn conversation support
 - ✅ Configuration management with environment variables
 - ✅ Structured logging and error handling
+- ✅ **Database persistence with PostgreSQL**
+- ✅ **GDPR-compliant chat history storage**
+- ✅ **Session-based conversation tracking**
+- ✅ **Database migrations with Alembic**
 
 Future iterations will include:
 - BigQuery integration for Hedera network data
 - Hedera SDK integration for real-time data
 - Authentication and rate limiting
-- Session management
 - Cost-based budget limiting
+- Chat history retrieval endpoints

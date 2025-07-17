@@ -13,4 +13,5 @@ dependencies = [
     "mcp>=1.0.0",
     "pydantic-settings>=2.0.0",
     "langchain-mcp-adapters>=0.1.9",
+    "hiero-mirror-node-sdk",
 ]
