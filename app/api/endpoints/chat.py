@@ -14,8 +14,8 @@ router = APIRouter()
 llm_orchestrator = LLMOrchestrator()
 
 
-@router.websocket("/ws")
-async def websocket_chat(websocket: WebSocket):
+@router.websocket("/ws/{session_id}")
+async def websocket_chat(websocket: WebSocket, session_id: str):
     """
     WebSocket endpoint for real-time chat with the AI Explorer.
     
@@ -40,7 +40,7 @@ async def websocket_chat(websocket: WebSocket):
                 
                 # Validate using ChatRequest schema
                 try:
-                    chat_request = ChatRequest(**message_data)
+                    chat_request = ChatRequest(session_id=session_id, **message_data)
                 except ValueError as e:
                     await websocket.send_text(json.dumps({
                         "error": f"Invalid request: {str(e)}"
@@ -65,11 +65,12 @@ async def websocket_chat(websocket: WebSocket):
                     }))
                     continue
                 
-                # Stream LLM response with account context only
+                # Stream LLM response with account context and session ID
                 async for token in llm_orchestrator.stream_llm_response(
                     query, 
                     account_id=chat_request.account_id,
-                    conversation_history=chat_request.messages
+                    conversation_history=chat_request.messages,
+                    session_id=chat_request.session_id
                 ):
                     await websocket.send_text(json.dumps({
                         "token": token

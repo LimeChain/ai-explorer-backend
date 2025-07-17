@@ -18,6 +18,7 @@ from app.config import settings
 from app.exceptions import LLMServiceError, ValidationError
 from app.prompts.system_prompts import AGENTIC_SYSTEM_PROMPT
 from app.schemas.chat import ChatMessage
+from app.services.chat_service import ChatService
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Constants
 MAX_QUERY_LENGTH = 1000
-MAX_ITERATIONS = 7
+MAX_ITERATIONS = 8
 MAX_TOOL_CONTEXT_ITEMS = 3
 DEFAULT_TEMPERATURE = 0.1
 
@@ -71,6 +72,7 @@ class LLMOrchestrator:
             temperature=DEFAULT_TEMPERATURE,
             streaming=True,
         )
+        self.chat_service = ChatService()
         logger.info("LLM Orchestrator initialized with agentic workflow")
 
     def _create_context_aware_system_prompt(self, account_id: Optional[str]) -> str:
@@ -277,7 +279,8 @@ class LLMOrchestrator:
         self, 
         query: str, 
         account_id: Optional[str] = None,
-        conversation_history: Optional[List[ChatMessage]] = None
+        conversation_history: Optional[List[ChatMessage]] = None,
+        session_id: Optional[str] = None
     ) -> AsyncGenerator[str, None]:
         """
         Stream LLM response using agentic workflow with real token streaming.
@@ -286,6 +289,7 @@ class LLMOrchestrator:
             query: The user's natural language query
             account_id: Optional connected wallet address for personalized context
             conversation_history: Optional list of previous conversation messages
+            session_id: Optional session identifier for conversation persistence
             
         Yields:
             str: Individual tokens from the LLM response
@@ -301,7 +305,7 @@ class LLMOrchestrator:
                 raise ValidationError(f"Query exceeds maximum length of {MAX_QUERY_LENGTH} characters")
             
             # Use the original approach with proper MCP connection management
-            async with streamablehttp_client(settings.mcp_endpoint) as (read, write, _):
+            async with streamablehttp_client("http://mcp-server:7001/mcp/") as (read, write, _): # TODO: remove hardcode
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     
@@ -370,12 +374,31 @@ class LLMOrchestrator:
                     context_system_prompt = self._create_context_aware_system_prompt(account_id)
                     messages_for_streaming = [SystemMessage(content=context_system_prompt)]
                     messages_for_streaming.extend(final_messages)
-                    messages_for_streaming.append(HumanMessage(content="Please provide a clear, final summary based on the tool results above."))
+                    # messages_for_streaming.append(HumanMessage(content="Please provide a clear, final summary based on the tool results above."))
+                    
+                    # Accumulate the response for saving to database
+                    accumulated_response = ""
+                    
                     # Stream the final response token by token
                     async for chunk in self.llm.astream(messages_for_streaming):
                         if isinstance(chunk, AIMessageChunk) and chunk.content:
                             if isinstance(chunk.content, str):
+                                accumulated_response += chunk.content
                                 yield chunk.content
+                    
+                    # Save the conversation to database after streaming is complete
+                    try:
+                        if accumulated_response.strip():  # Only save if we have a response
+                            saved_session_id = self.chat_service.save_conversation_turn(
+                                session_id=session_id,
+                                account_id=account_id,
+                                user_message=query,
+                                assistant_response=accumulated_response.strip()
+                            )
+                            logger.info(f"Conversation saved with session_id: {saved_session_id}")
+                    except Exception as save_error:
+                        logger.error(f"Failed to save conversation: {save_error}")
+                        # Don't raise the error as it shouldn't break the streaming response
 
         except ValidationError:
             raise
