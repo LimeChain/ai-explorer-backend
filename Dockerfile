@@ -34,19 +34,21 @@ COPY --from=builder /app/.venv /app/.venv
 COPY app/ ./app/
 COPY pyproject.toml ./
 
-# Make sure we use the virtual environment
-# ENV PATH="/app/.venv/bin:$PATH"
 
+# Setup for MCP servers
 COPY mcp_servers/ ./app/mcp_servers
 COPY sdk/ ./sdk/
 
-# RUN uv pip install --system -e ./sdk
+# Running script
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
 # Expose port
-EXPOSE 9000
+EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:9000/ || exit 1
+    CMD curl -f http://localhost:8000/ || exit 1
 
 # Run the application
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9000"]
+CMD ["/app/start.sh"]
