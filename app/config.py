@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     environment: str = Field(default="development", pattern="^(development|production|staging)$")
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
 
-    mcp_endpoint: str = Field(default="http://mcp-server:7001/mcp/", description="MCP server endpoint")
+    mcp_endpoint: str = Field(default="http://mcp-server:8001/mcp/", description="MCP server endpoint")
     chat_model: str = Field(default="gpt-4.1-mini", description="The model to use")
     allowed_origins: List[str] = Field(
         default=["*"],

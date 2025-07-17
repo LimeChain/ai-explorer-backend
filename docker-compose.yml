@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: ai_explorer
       POSTGRES_PASSWORD: ai_explorer
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -29,10 +29,10 @@ services:
     environment:
       DATABASE_URL: postgresql://ai_explorer:ai_explorer@postgres:5432/ai_explorer
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      MCP_ENDPOINT: ${MCP_ENDPOINT:-http://mcp-server:7001/mcp/}
+      MCP_ENDPOINT: ${MCP_ENDPOINT:-http://mcp-server:8001/mcp/}
       ENVIRONMENT: development
     ports:
-      - "9000:9000"
+      - "8000:8000"
     volumes:
       - .:/app
     working_dir: /app
@@ -46,7 +46,7 @@ services:
     environment:
       ENVIRONMENT: development
     ports:
-      - "7001:7001"
+      - "8001:8001"
     volumes:
       - .:/app
     working_dir: /app

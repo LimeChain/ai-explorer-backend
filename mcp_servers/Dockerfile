@@ -16,7 +16,7 @@ RUN cd sdk && uv pip install --system -e .
 RUN cd mcp_servers && uv pip install --system -e .
 
 # Expose the MCP server port
-EXPOSE 7001
+EXPOSE 8001
 
 # Run the MCP server
 CMD ["python", "mcp_servers/main.py"]

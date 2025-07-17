@@ -295,7 +295,7 @@ class LLMOrchestrator:
                 raise ValidationError(f"Query exceeds maximum length of {MAX_QUERY_LENGTH} characters")
             
             # Use the original approach with proper MCP connection management
-            async with streamablehttp_client("http://mcp-server:7001/mcp/") as (read, write, _): # TODO: remove hardcode
+            async with streamablehttp_client(settings.mcp_endpoint) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     
