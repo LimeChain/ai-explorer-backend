@@ -14,8 +14,10 @@ from langgraph.graph.state import CompiledStateGraph
 from langchain_mcp_adapters.tools import load_mcp_tools
 from langsmith import traceable
 
+from sqlalchemy.orm import Session
+
 from app.config import settings
-from app.exceptions import LLMServiceError, ValidationError
+from app.exceptions import LLMServiceError, ValidationError, ChatServiceError
 from app.prompts.system_prompts import AGENTIC_SYSTEM_PROMPT
 from app.schemas.chat import ChatMessage
 from app.services.chat_service import ChatService
@@ -72,7 +74,6 @@ class LLMOrchestrator:
             temperature=DEFAULT_TEMPERATURE,
             streaming=True,
         )
-        self.chat_service = ChatService()
         logger.info("LLM Orchestrator initialized with agentic workflow")
 
     def _create_context_aware_system_prompt(self, account_id: Optional[str]) -> str:
@@ -280,7 +281,8 @@ class LLMOrchestrator:
         query: str, 
         account_id: Optional[str] = None,
         conversation_history: Optional[List[ChatMessage]] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        db: Optional[Session] = None
     ) -> AsyncGenerator[str, None]:
         """
         Stream LLM response using agentic workflow with real token streaming.
@@ -290,6 +292,7 @@ class LLMOrchestrator:
             account_id: Optional connected wallet address for personalized context
             conversation_history: Optional list of previous conversation messages
             session_id: Optional session identifier for conversation persistence
+            db: Optional database session for conversation persistence
             
         Yields:
             str: Individual tokens from the LLM response
@@ -387,18 +390,22 @@ class LLMOrchestrator:
                                 yield chunk.content
                     
                     # Save the conversation to database after streaming is complete
-                    try:
-                        if accumulated_response.strip():  # Only save if we have a response
-                            saved_session_id = self.chat_service.save_conversation_turn(
+                    if db and accumulated_response.strip():  # Only save if we have a db session and response
+                        try:
+                            saved_session_id = ChatService.save_conversation_turn(
+                                db=db,
                                 session_id=session_id,
                                 account_id=account_id,
                                 user_message=query,
                                 assistant_response=accumulated_response.strip()
                             )
                             logger.info(f"Conversation saved with session_id: {saved_session_id}")
-                    except Exception as save_error:
-                        logger.error(f"Failed to save conversation: {save_error}")
-                        # Don't raise the error as it shouldn't break the streaming response
+                        except (ChatServiceError, ValidationError) as save_error:
+                            logger.error(f"Failed to save conversation: {save_error}")
+                            # Don't raise the error as it shouldn't break the streaming response
+                        except Exception as save_error:
+                            logger.error(f"Unexpected error saving conversation: {save_error}")
+                            # Don't raise the error as it shouldn't break the streaming response
 
         except ValidationError:
             raise

@@ -77,6 +77,7 @@ uv run uvicorn app.main:app --reload --port 8000
 
 The service will be available at `http://localhost:8000`.
 
+
 6. Install the SDK as a package:
 ```bash
 
@@ -87,6 +88,8 @@ uv pip install -e ../sdk
 
 7. Run the MCP server:
 ```bash
+cd .. # Go back to root
+
 uv run python mcp_servers/main.py
 ```
 
