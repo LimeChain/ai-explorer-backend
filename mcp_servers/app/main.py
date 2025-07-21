@@ -1,4 +1,5 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
+from datetime import datetime, timezone
 from mcp.server.fastmcp import FastMCP
 
 from .services.sdk_service import HederaSDKService
@@ -72,5 +73,62 @@ async def health_check() -> Dict[str, str]:
         Dict with status information
     """
     return {"status": "ok", "service": "HederaMirrorNode"}
+
+@mcp.tool()
+async def convert_timestamp(timestamp: Union[str, int, float]) -> Dict[str, Any]:
+    """
+    Convert Unix timestamp to human-readable date format.
+    
+    Handles both regular Unix timestamps (seconds since epoch) and Hedera timestamps 
+    with nanosecond precision (seconds.nanoseconds format).
+    
+    Args:
+        timestamp: Unix timestamp (can be int, float, or string format)
+        
+    Returns:
+        Dict containing original timestamp, converted date, and metadata
+        
+    Example usage:
+        - convert_timestamp(1752127198.022577) -> "2025-07-17 14:49:58 UTC"
+        - convert_timestamp("1752127198") -> "2025-07-17 14:49:58 UTC"
+    """
+    try:
+        # Convert input to string for consistent processing
+        timestamp_str = str(timestamp)
+        
+        # Handle different timestamp formats
+        if '.' in timestamp_str:
+            # Hedera format: seconds.nanoseconds
+            seconds_str = timestamp_str.split('.')[0]
+            nanoseconds_str = timestamp_str.split('.')[1]
+            unix_seconds = int(seconds_str)
+            nanoseconds = int(nanoseconds_str.ljust(9, '0')[:9])  # Pad/truncate to 9 digits
+        else:
+            # Regular Unix timestamp
+            unix_seconds = int(float(timestamp_str))
+            nanoseconds = 0
+        
+        # Convert to datetime object
+        dt = datetime.fromtimestamp(unix_seconds, tz=timezone.utc)
+        
+        # Format outputs
+        human_readable = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+        iso_format = dt.isoformat()
+        
+        return {
+            "original_timestamp": timestamp,
+            "unix_seconds": unix_seconds,
+            "nanoseconds": nanoseconds,
+            "human_readable": human_readable,
+            "iso_format": iso_format,
+            "success": True
+        }
+        
+    except (ValueError, OverflowError) as e:
+        return {
+            "original_timestamp": timestamp,
+            "error": f"Invalid timestamp format: {str(e)}",
+            "success": False
+        }
 
 

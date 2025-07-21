@@ -56,8 +56,6 @@ cd ai-explorer-backend
 2. Install dependencies using uv & activate venv:
 ```bash
 uv sync
-
-source .venv/bin/activate
 ```
 
 ### Database Setup
@@ -79,6 +77,7 @@ uv run uvicorn app.main:app --reload --port 8000
 
 The service will be available at `http://localhost:8000`.
 
+
 6. Install the SDK as a package:
 ```bash
 cd mcp_servers
@@ -88,7 +87,9 @@ uv pip install -e ../sdk
 
 7. Run the MCP server:
 ```bash
-python main.py
+cd .. # Go back to root
+
+uv run python mcp_servers/main.py
 ```
 
 ### Database Management

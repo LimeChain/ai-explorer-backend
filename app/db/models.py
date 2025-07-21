@@ -1,10 +1,13 @@
 """
 Database models for the AI Explorer backend.
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+import uuid
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum as DBEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import UUID
 from .base import Base
+from app.schemas.suggestions import SuggestionContext
 
 
 class Conversation(Base):
@@ -42,3 +45,18 @@ class Message(Base):
     
     # Relationship to conversation
     conversation = relationship("Conversation", back_populates="messages")
+
+
+class SuggestedQuery(Base):
+    """
+    Model for storing suggested queries.
+    
+    This table stores pre-defined suggested queries that are shown to users
+    based on their context (anonymous or connected wallet).
+    """
+    __tablename__ = 'suggested_queries'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    query = Column(String, nullable=False)
+    context = Column(DBEnum(SuggestionContext, name='suggestion_context_enum'), nullable=False, index=True)
+    display_order = Column(Integer, default=0, nullable=False)  # For ordering suggestions in the UI
