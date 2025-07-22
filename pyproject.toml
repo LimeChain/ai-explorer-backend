@@ -9,6 +9,7 @@ dependencies = [
     "langchain-mcp-adapters>=0.1.9",
     "langchain-openai>=0.3.27",
     "langgraph>=0.5.2",
+    "langsmith>=0.4.1",
     "pydantic-settings>=2.10.1",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.0.0",
@@ -16,6 +17,4 @@ dependencies = [
 ]
 
 [tool.uv.workspace]
-members = [
-    "mcp-servers",
-]
+members = ["mcp-servers"]

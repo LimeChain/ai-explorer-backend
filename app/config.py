@@ -1,6 +1,7 @@
 """
 Configuration settings for the AI Explorer backend service.
 """
+import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr, Field
 from typing import List
@@ -19,11 +20,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
     
     openai_api_key: SecretStr = Field(default=SecretStr("your-api-key"), min_length=1, description="OpenAI API key (required)")
+    chat_model: str = Field(default="gpt-4.1-mini", description="The model to use")
+
     environment: str = Field(default="development", pattern="^(development|production|staging)$")
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
 
     mcp_endpoint: str = Field(default="http://localhost:8001/mcp/", description="MCP server endpoint")
-    chat_model: str = Field(default="gpt-4.1-mini", description="The model to use")
     allowed_origins: List[str] = Field(
         default=["*"],
         description="List of allowed CORS origins"
@@ -33,6 +35,20 @@ class Settings(BaseSettings):
     langsmith_project: str = Field(default="ai-explorer-backend", description="LangSmith project name")
     langsmith_api_key: SecretStr = Field(default=SecretStr("your-api-key"), min_length=1, description="LangSmith API key (required)")
     langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", description="LangSmith API endpoint")
+
+    def model_post_init(self, __context) -> None:
+        """Initialize LangSmith environment variables after settings are loaded."""
+
+        if self.langsmith_tracing:
+            os.environ["LANGCHAIN_TRACING_V2"] = "true"
+            os.environ["LANGCHAIN_ENDPOINT"] = self.langsmith_endpoint
+            os.environ["LANGCHAIN_API_KEY"] = self.langsmith_api_key.get_secret_value()
+            os.environ["LANGCHAIN_PROJECT"] = self.langsmith_project
+        else:
+            os.environ.pop("LANGCHAIN_TRACING_V2", None)
+            os.environ.pop("LANGCHAIN_ENDPOINT", None)
+            os.environ.pop("LANGCHAIN_API_KEY", None)
+            os.environ.pop("LANGCHAIN_PROJECT", None)
 
 
 # Global settings instance

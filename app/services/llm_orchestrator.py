@@ -3,6 +3,7 @@ LLM Orchestrator service implementing agentic workflow with LangGraph.
 """
 import logging
 import json
+import os
 from typing import AsyncGenerator, Dict, Any, List, Optional, TypedDict
 
 from langchain_openai import ChatOpenAI
@@ -11,6 +12,7 @@ from langchain_core.exceptions import LangChainException
 from langgraph.graph import StateGraph, END
 from langgraph.graph.state import CompiledStateGraph
 from langchain_mcp_adapters.tools import load_mcp_tools
+from langsmith import traceable
 
 from app.config import settings
 from app.exceptions import LLMServiceError, ValidationError
@@ -18,6 +20,7 @@ from app.prompts.system_prompts import AGENTIC_SYSTEM_PROMPT
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
+
 
 
 logger = logging.getLogger(__name__)
@@ -54,6 +57,12 @@ class LLMOrchestrator:
     
     def __init__(self):
         """Initialize the LLM Orchestrator with agentic workflow."""
+
+        if settings.langsmith_tracing:
+            logger.info("LangSmith tracing enabled")
+        else:
+            logger.info("LangSmith tracing disabled")
+        
         self.llm = ChatOpenAI(
             api_key=settings.openai_api_key,
             model="gpt-4.1-mini",  # TODO: make this configurable
@@ -243,7 +252,7 @@ class LLMOrchestrator:
             return state
 
     async def stream_llm_response(self, query: str) -> AsyncGenerator[str, None]:
-        """
+        """ 
         Stream LLM response using agentic workflow with real token streaming.
         
         Args:

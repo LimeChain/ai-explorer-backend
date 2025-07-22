@@ -47,25 +47,23 @@ cd ai-explorer-backend
 2. Install dependencies using uv & activate venv:
 ```bash
 uv sync
-
-source .venv/bin/activate
 ```
 
 3. Run the development server:
 ```bash
-uv run uvicorn app.main:app --reload --port 8000 
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
 The service will be available at `http://localhost:8000`.
 
 4. Install the SDK as a package:
 ```bash
-uv pip install -e ../sdk
+uv pip install -e sdk
 ```
 
 5. Run the MCP server:
 ```bash
-python main.py
+uv run python mcp_servers/main.py
 ```
 
 ### API Documentation

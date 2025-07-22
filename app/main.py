@@ -2,6 +2,7 @@
 Main FastAPI application for the AI Explorer backend service.
 """
 import logging
+import os
 from fastapi import FastAPI
 
 from app.api.endpoints import chat
@@ -9,6 +10,10 @@ from app.config import settings
 from app.exception_handlers import register_exception_handlers
 from fastapi.middleware.cors import CORSMiddleware
 
+if settings.langsmith_tracing:
+    logging.info("LangSmith tracing enabled")
+else:
+    logging.info("LangSmith tracing disabled")
 
 # Configure logging
 logging.basicConfig(
