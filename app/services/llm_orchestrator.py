@@ -369,19 +369,6 @@ class LLMOrchestrator:
                         # If no conversation history, just use the current query
                         initial_messages = [HumanMessage(content=query)]
                     
-                    # Build initial messages from conversation history
-                    initial_messages = []
-                    if conversation_history:
-                        # Convert ChatMessage objects to LangChain messages
-                        for msg in conversation_history:
-                            if msg.role == "user":
-                                initial_messages.append(HumanMessage(content=msg.content))
-                            elif msg.role == "assistant":
-                                initial_messages.append(AIMessage(content=msg.content))
-                    else:
-                        # If no conversation history, just use the current query
-                        initial_messages = [HumanMessage(content=query)]
-                    
                     # Initialize state and run workflow
                     initial_state: GraphState = {
                         "messages": initial_messages,
@@ -400,9 +387,6 @@ class LLMOrchestrator:
                     # Create streaming call with full conversation context using context-aware prompt
                     context_system_prompt = self._create_context_aware_system_prompt(account_id)
                     messages_for_streaming = [SystemMessage(content=context_system_prompt)]
-                    # Create streaming call with full conversation context using context-aware prompt
-                    context_system_prompt = self._create_context_aware_system_prompt(account_id)
-                    messages_for_streaming = [SystemMessage(content=context_system_prompt)]
                     messages_for_streaming.extend(final_messages)
                     # messages_for_streaming.append(HumanMessage(content="Please provide a clear, final summary based on the tool results above."))
                     
@@ -413,7 +397,6 @@ class LLMOrchestrator:
                     async for chunk in self.llm.astream(messages_for_streaming):
                         if isinstance(chunk, AIMessageChunk) and chunk.content:
                             if isinstance(chunk.content, str):
-                                accumulated_response += chunk.content
                                 accumulated_response += chunk.content
                                 yield chunk.content
                     
