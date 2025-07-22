@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 # Constants
 MAX_QUERY_LENGTH = 1000
-MAX_ITERATIONS = 8
-MAX_TOOL_CONTEXT_ITEMS = 3
+MAX_ITERATIONS = 12
+MAX_TOOL_CONTEXT_ITEMS = 10
 DEFAULT_TEMPERATURE = 0.1
 
 
@@ -120,13 +120,23 @@ class LLMOrchestrator:
             # Try to parse tool call from response
             print(f"LLM Response content: {response.content}")
             tool_call = self._parse_tool_call(response.content)
+            print('tools to be added to pending_tool_calls: ', tool_call)
             print(f"Parsed tool call: {tool_call}")
+            
             if tool_call:
                 state["pending_tool_call"] = tool_call
                 print("Setting pending_tool_call")
             else:
-                state["final_response"] = response.content
-                print("Setting final_response")
+                # Check if this is a continuation vs final response
+                is_final = self._is_response_final(response.content)
+                logger.debug(f"Response analysis: is_final={is_final}, content_length={len(response.content)}")
+                if is_final:
+                    state["final_response"] = response.content
+                    print("Setting final_response - detected conclusive response")
+                    logger.info(f"Final response set at iteration {state.get('iteration_count', 0)}")
+                else:
+                    print("Detected partial response - continuing workflow without final_response")
+                    logger.info(f"Partial response detected at iteration {state.get('iteration_count', 0)} - workflow will continue")
                 
             state["iteration_count"] = state.get("iteration_count", 0) + 1
             return state
@@ -136,18 +146,146 @@ class LLMOrchestrator:
             state["final_response"] = "I apologize, but I encountered an error. Please try again."
             return state
 
-    def _should_continue(self, state: GraphState) -> str:
-        """Determine graph routing based on state."""
+    def _is_response_final(self, content: str) -> bool:
+        """
+        Determine if a response is final or if the workflow should continue.
         
-        if state.get("iteration_count", 0) >= MAX_ITERATIONS:
-            if not state.get("final_response"):
-                state["final_response"] = "I've reached the maximum number of steps. Please try rephrasing your question."
-            logger.warning(f"Maximum iterations ({MAX_ITERATIONS}) reached")
+        Args:
+            content: The LLM response content
+            
+        Returns:
+            True if this is a final response, False if it should continue
+        """
+        if not content:
+            return True
+            
+        content_lower = content.lower().strip()
+        
+        # Strong continuation signals - definitely not final
+        continuation_phrases = [
+            "i will continue", "let me continue", "continuing with", "for the remaining",
+            "next, i'll", "i'll also", "additionally", "furthermore", "i need to",
+            "let me also", "i should also", "i'll now", "proceeding with",
+            "i will now", "let me now", "i'll fetch", "i need to fetch",
+            "i should fetch", "let me get", "i'll get", "i will get"
+        ]
+        
+        # Check for explicit continuation signals
+        if any(phrase in content_lower for phrase in continuation_phrases):
+            logger.debug(f"Found continuation phrase in response")
+            return False
+            
+        # Check for incomplete lists or partial data
+        incomplete_indicators = [
+            "...", "more", "additional", "rest of", "remaining", 
+            "partial", "incomplete", "in progress", "continuing"
+        ]
+        
+        if any(indicator in content_lower for indicator in incomplete_indicators):
+            return False
+            
+        # Check for questions asking to continue
+        continuation_questions = [
+            "would you like me to", "shall i", "should i continue", 
+            "do you want", "need me to", "want me to continue"
+        ]
+        
+        if any(question in content_lower for question in continuation_questions):
+            return True  # This is actually final - asking for user input
+            
+        # Strong conclusive signals - definitely final
+        conclusive_phrases = [
+            "that completes", "that's all", "this completes", "finished",
+            "done", "complete", "summary", "in conclusion", "to summarize",
+            "final result", "total", "overall", "that's the"
+        ]
+        
+        if any(phrase in content_lower for phrase in conclusive_phrases):
+            return True
+            
+        # If none of the above, check the structure
+        # If it's a short response (< 100 chars), likely final
+        if len(content) < 100:
+            return True
+            
+        # If it ends with a question mark, it's asking user for input - final
+        if content_lower.endswith('?'):
+            return True
+            
+        # Default to continuing if uncertain - better to over-continue than under-continue
+        return False
+
+    def _should_continue(self, state: GraphState) -> str:
+        """Determine graph routing based on state with improved decision logic."""
+        
+        iteration_count = state.get("iteration_count", 0)
+        print('final response: ', state.get("final_response"))
+        print('pending tool calls: ', state.get('pending_tool_call'))
+        # Check for natural conclusion first (LLM provided final response without tool call)
+        if state.get("final_response") and not state.get("pending_tool_call"):
+            logger.info(f"Natural conclusion reached at iteration {iteration_count}")
             return "end"
         
+        # Check for maximum iterations
+        if iteration_count >= MAX_ITERATIONS:
+            if not state.get("final_response"):
+                # Use the last AI message as the final response instead of generic message
+                ai_messages = [msg for msg in state.get("messages", []) 
+                             if hasattr(msg, 'content') and hasattr(msg, '__class__') and 'AI' in msg.__class__.__name__]
+                if ai_messages and ai_messages[-1].content:
+                    state["final_response"] = ai_messages[-1].content
+                    logger.info(f"Using last AI response as final result after {iteration_count} iterations")
+                else:
+                    # Check if we have any useful tool results to summarize
+                    tool_calls = state.get("tool_calls_made", [])
+                    if tool_calls:
+                        state["final_response"] = f"I've completed {len(tool_calls)} data retrievals. While I reached my iteration limit, I was able to gather the requested information. Please let me know if you need clarification on any specific details."
+                        logger.info(f"Generated summary response after {iteration_count} iterations with {len(tool_calls)} tool calls")
+                    else:
+                        state["final_response"] = "I've reached the maximum number of steps without being able to complete your request. Please try rephrasing your question with more specific details."
+                        logger.warning(f"Reached max iterations without meaningful progress")
+            else:
+                logger.info(f"Max iterations reached but final response already set")
+            return "end"
+        
+        # Continue if there's a pending tool call
         if state.get("pending_tool_call"):
+            logger.debug(f"Continuing workflow - pending tool call at iteration {iteration_count}")
             return "continue"
         
+        # Check for excessive tool calls without progress (circular behavior detection)
+        tool_calls = state.get("tool_calls_made", [])
+        if len(tool_calls) > 8:  # If more than 8 tool calls, check for repetitive patterns
+            recent_tools = [call.get("name") for call in tool_calls[-4:]]
+            if len(set(recent_tools)) == 1:  # Same tool called 4 times in a row
+                state["final_response"] = "I notice I'm repeating the same operation. Let me provide what I've found so far."
+                logger.warning(f"Detected repetitive tool usage pattern: {recent_tools}")
+                return "end"
+        
+        # Enhanced natural termination detection
+        if not state.get("final_response"):
+            # Check the last AI message to see if it indicates continuation
+            messages = state.get("messages", [])
+            last_ai_message = None
+            
+            for msg in reversed(messages):
+                if hasattr(msg, 'content') and hasattr(msg, '__class__') and 'AI' in msg.__class__.__name__:
+                    last_ai_message = msg
+                    break
+            
+            if last_ai_message and last_ai_message.content:
+                # If the last message suggests continuation but has no tool call, continue anyway
+                if not self._is_response_final(last_ai_message.content):
+                    logger.debug(f"Continuing - last AI message suggests more work needed")
+                    return "continue"
+                else:
+                    # Natural final response - use it
+                    state["final_response"] = last_ai_message.content
+                    logger.debug(f"Using last AI message as final response")
+                    return "end"
+        
+        # Default to end (natural conclusion with explicit final_response)
+        logger.debug(f"Ending workflow - no pending actions at iteration {iteration_count}")
         return "end"
 
     def _extract_json_from_codeblock(self, content: str) -> Optional[str]:
@@ -173,6 +311,66 @@ class LLMOrchestrator:
             return None
         
         return content[start_idx:end_idx]
+    
+    def _extract_json_from_tool_call_marker(self, content: str) -> Optional[str]:
+        """Extract JSON by looking for 'tool_call' keyword as a marker."""
+        if "tool_call" not in content.lower():
+            return None
+            
+        # Find the first brace after "tool_call"
+        tool_call_idx = content.lower().find("tool_call")
+        search_start = max(0, tool_call_idx - 50)  # Look a bit before tool_call
+        
+        # Find the opening brace
+        start_idx = content.find("{", search_start)
+        if start_idx == -1:
+            return None
+            
+        # Find the matching closing brace
+        brace_count = 0
+        end_idx = start_idx
+        for i in range(start_idx, len(content)):
+            if content[i] == "{":
+                brace_count += 1
+            elif content[i] == "}":
+                brace_count -= 1
+                if brace_count == 0:
+                    end_idx = i + 1
+                    break
+        
+        if brace_count != 0:  # Unmatched braces
+            return None
+            
+        return content[start_idx:end_idx]
+    
+    def _extract_json_from_last_brace_pair(self, content: str) -> Optional[str]:
+        """Extract JSON from the last complete brace pair in content."""
+        if "{" not in content or "}" not in content:
+            return None
+            
+        # Find all opening braces and try the last one
+        brace_positions = [i for i, c in enumerate(content) if c == "{"]
+        
+        for start_idx in reversed(brace_positions):
+            # Find the matching closing brace
+            brace_count = 0
+            end_idx = start_idx
+            for i in range(start_idx, len(content)):
+                if content[i] == "{":
+                    brace_count += 1
+                elif content[i] == "}":
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end_idx = i + 1
+                        break
+            
+            if brace_count == 0:  # Found complete pair
+                candidate = content[start_idx:end_idx]
+                # Quick validation - should contain "tool_call"
+                if "tool_call" in candidate.lower():
+                    return candidate
+                    
+        return None
 
     def _validate_tool_call(self, parsed_json: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Validate and extract tool call from parsed JSON."""
@@ -186,17 +384,19 @@ class LLMOrchestrator:
         return tool_call
 
     def _parse_tool_call(self, content: str) -> Optional[Dict[str, Any]]:
-        """Parse tool call from LLM response expecting JSON format."""
+        """Parse tool call from LLM response, handling mixed content and JSON."""
         if not content or not content.strip():
             return None
         
         content = content.strip()
         
-        # Try different extraction strategies
+        # Enhanced extraction strategies that handle mixed content better
         extraction_strategies = [
-            self._extract_json_from_codeblock,
-            self._extract_json_from_braces,
-            lambda c: c  # Try parsing the entire content
+            self._extract_json_from_codeblock,           # ```json ... ```
+            self._extract_json_from_braces,              # { ... }
+            self._extract_json_from_tool_call_marker,    # Look for "tool_call" markers
+            self._extract_json_from_last_brace_pair,     # Last complete brace pair
+            lambda c: c  # Try parsing the entire content as fallback
         ]
         
         for strategy in extraction_strategies:
@@ -234,7 +434,7 @@ class LLMOrchestrator:
                 result = f"Error: Tool '{tool_name}' not found."
                 logger.warning(f"Tool '{tool_name}' not found in available tools")
             else:
-                logger.debug(f"Executing tool '{tool_name}' with parameters: {tool_params}")
+                logger.info(f"Executing tool '{tool_name}' with parameters: {tool_params}")
                 try:
                     # Special handling for call_sdk_method which expects method_name + **kwargs
                     if tool_name == "call_sdk_method":
@@ -245,9 +445,9 @@ class LLMOrchestrator:
                         result = await tool_to_call.ainvoke(tool_input)
                     else:
                         result = await tool_to_call.ainvoke(tool_params)
-                    logger.debug(f"Tool '{tool_name}' executed successfully")
+                    logger.info(f"Tool '{tool_name}' executed successfully")
                 except Exception as tool_error:
-                    logger.error(f"Tool '{tool_name}' execution failed: {tool_error}")
+                    logger.info(f"Tool '{tool_name}' execution failed: {tool_error}")
                     result = f"Error executing tool '{tool_name}': {str(tool_error)}"
             
             # Store the tool call result
@@ -256,6 +456,8 @@ class LLMOrchestrator:
                 "parameters": tool_params,
                 "result": result
             }
+
+            print('result: ', tool_call_record)
             
             state["tool_calls_made"] = state.get("tool_calls_made", []) + [tool_call_record]
             
@@ -371,23 +573,35 @@ class LLMOrchestrator:
                     
                     # Execute the agentic workflow
                     final_state = await graph.ainvoke(initial_state)
-                    # Stream the final response
-                    final_messages = final_state["messages"]
-                    # Create streaming call with full conversation context using context-aware prompt
-                    context_system_prompt = self._create_context_aware_system_prompt(account_id)
-                    messages_for_streaming = [SystemMessage(content=context_system_prompt)]
-                    messages_for_streaming.extend(final_messages)
-                    # messages_for_streaming.append(HumanMessage(content="Please provide a clear, final summary based on the tool results above."))
                     
-                    # Accumulate the response for saving to database
-                    accumulated_response = ""
-                    
-                    # Stream the final response token by token
-                    async for chunk in self.llm.astream(messages_for_streaming):
-                        if isinstance(chunk, AIMessageChunk) and chunk.content:
-                            if isinstance(chunk.content, str):
-                                accumulated_response += chunk.content
-                                yield chunk.content
+                    # Check if we have a pre-computed final response (from improved _should_continue logic)
+                    if final_state.get("final_response"):
+                        # Stream the pre-computed final response directly
+                        accumulated_response = final_state["final_response"]
+                        
+                        # Stream it word by word to simulate streaming
+                        import asyncio
+                        words = accumulated_response.split()
+                        for i, word in enumerate(words):
+                            if i == 0:
+                                yield word
+                            else:
+                                yield " " + word
+                            await asyncio.sleep(0.01)  # Small delay to simulate natural streaming
+                    else:
+                        # Fallback: Stream fresh response using LLM (should rarely happen now)
+                        final_messages = final_state["messages"]
+                        context_system_prompt = self._create_context_aware_system_prompt(account_id)
+                        messages_for_streaming = [SystemMessage(content=context_system_prompt)]
+                        messages_for_streaming.extend(final_messages)
+                        
+                        accumulated_response = ""
+                        
+                        async for chunk in self.llm.astream(messages_for_streaming):
+                            if isinstance(chunk, AIMessageChunk) and chunk.content:
+                                if isinstance(chunk.content, str):
+                                    accumulated_response += chunk.content
+                                    yield chunk.content
                     
                     # Save the conversation to database after streaming is complete
                     if db and accumulated_response.strip():  # Only save if we have a db session and response
