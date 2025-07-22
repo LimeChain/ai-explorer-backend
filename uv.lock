@@ -30,11 +30,8 @@ requires-dist = [
     { name = "langchain-mcp-adapters", specifier = ">=0.1.9" },
     { name = "langchain-openai", specifier = ">=0.3.27" },
     { name = "langgraph", specifier = ">=0.5.2" },
-<<<<<<< HEAD
     { name = "langsmith", specifier = ">=0.4.1" },
-=======
     { name = "psycopg2-binary", specifier = ">=2.9.0" },
->>>>>>> 6556e69 (persisting chat data in DB, and docker compose setup)
     { name = "pydantic-settings", specifier = ">=2.10.1" },
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest-asyncio", specifier = ">=1.0.0" },
