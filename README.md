@@ -30,23 +30,14 @@ cp .env .env.local
 ```
 
 2. Edit `.env.local` and add your configuration:
-2. Edit `.env.local` and add your configuration:
 ```bash
-# API Keys
 # API Keys
 OPENAI_API_KEY=your_actual_openai_api_key_here
 
-# Environment
 
 # Environment
 ENVIRONMENT=development
 LOG_LEVEL=INFO
-
-# Database (for local development)
-DATABASE_URL=postgresql://ai_explorer:ai_explorer@localhost:5433/ai_explorer
-
-# MCP Server
-MCP_ENDPOINT=http://localhost:8001/mcp/
 
 # Database (for local development)
 DATABASE_URL=postgresql://ai_explorer:ai_explorer@localhost:5433/ai_explorer
