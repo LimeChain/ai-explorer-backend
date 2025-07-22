@@ -251,7 +251,6 @@ class LLMOrchestrator:
             state["messages"] = state["messages"] + [error_message]
             return state
 
-    @traceable
     async def stream_llm_response(self, query: str) -> AsyncGenerator[str, None]:
         """ 
         Stream LLM response using agentic workflow with real token streaming.

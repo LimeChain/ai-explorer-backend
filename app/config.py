@@ -45,8 +45,10 @@ class Settings(BaseSettings):
             os.environ["LANGCHAIN_API_KEY"] = self.langsmith_api_key.get_secret_value()
             os.environ["LANGCHAIN_PROJECT"] = self.langsmith_project
         else:
-            # Tracing is disabled if not configured
             os.environ.pop("LANGCHAIN_TRACING_V2", None)
+            os.environ.pop("LANGCHAIN_ENDPOINT", None)
+            os.environ.pop("LANGCHAIN_API_KEY", None)
+            os.environ.pop("LANGCHAIN_PROJECT", None)
 
 
 # Global settings instance
