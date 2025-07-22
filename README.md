@@ -30,13 +30,23 @@ cp .env .env.local
 ```
 
 2. Edit `.env.local` and add your configuration:
+2. Edit `.env.local` and add your configuration:
 ```bash
+# API Keys
 # API Keys
 OPENAI_API_KEY=your_actual_openai_api_key_here
 
 # Environment
+
+# Environment
 ENVIRONMENT=development
 LOG_LEVEL=INFO
+
+# Database (for local development)
+DATABASE_URL=postgresql://ai_explorer:ai_explorer@localhost:5433/ai_explorer
+
+# MCP Server
+MCP_ENDPOINT=http://localhost:8001/mcp/
 
 # Database (for local development)
 DATABASE_URL=postgresql://ai_explorer:ai_explorer@localhost:5433/ai_explorer
@@ -56,6 +66,21 @@ cd ai-explorer-backend
 2. Install dependencies using uv & activate venv:
 ```bash
 uv sync
+```
+
+### Database Setup
+
+3. Start the PostgreSQL database:
+```bash
+docker-compose up postgres
+```
+
+4. Run database migrations:
+```bash
+alembic upgrade head
+```
+
+5. Run the development server:
 ```
 
 ### Database Setup
@@ -108,7 +133,44 @@ alembic upgrade head
 ```
 
 Check migration status:
+7. Run the MCP server:
 ```bash
+cd .. # Go back to root
+
+uv run python mcp_servers/main.py
+```
+
+### Database Management
+
+#### Database Migration Commands
+
+Create a new migration:
+```bash
+alembic revision --autogenerate -m "Description of changes"
+```
+
+Apply migrations:
+```bash
+alembic upgrade head
+```
+
+Check migration status:
+```bash
+alembic current
+```
+
+#### Database Features
+
+The backend includes:
+- **GDPR-compliant chat history**: Anonymous session-based storage
+- **Conversation persistence**: Messages are saved with timestamps
+- **Session management**: Conversations are tracked by session ID
+- **Account context**: Optional account ID for personalized responses
+
+#### Database Schema
+
+- **conversations**: Stores session information and optional account context
+- **messages**: Stores individual user and assistant messages within conversations
 alembic current
 ```
 
@@ -253,9 +315,14 @@ This implementation includes:
 - ✅ LLM integration with streaming responses using LangChain
 - ✅ Token-by-token streaming via WebSocket connections
 - ✅ Contextual user data support (account ID integration)
+- ✅ Contextual user data support (account ID integration)
 - ✅ Multi-turn conversation support
 - ✅ Configuration management with environment variables
 - ✅ Structured logging and error handling
+- ✅ **Database persistence with PostgreSQL**
+- ✅ **GDPR-compliant chat history storage**
+- ✅ **Session-based conversation tracking**
+- ✅ **Database migrations with Alembic**
 - ✅ **Database persistence with PostgreSQL**
 - ✅ **GDPR-compliant chat history storage**
 - ✅ **Session-based conversation tracking**
@@ -266,4 +333,5 @@ Future iterations will include:
 - Hedera SDK integration for real-time data
 - Authentication and rate limiting
 - Cost-based budget limiting
+- Chat history retrieval endpoints
 - Chat history retrieval endpoints

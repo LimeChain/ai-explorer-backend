@@ -12,8 +12,10 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.state import CompiledStateGraph
 from langchain_mcp_adapters.tools import load_mcp_tools
 
+from sqlalchemy.orm import Session
+
 from app.config import settings
-from app.exceptions import LLMServiceError, ValidationError
+from app.exceptions import LLMServiceError, ValidationError, ChatServiceError
 from app.prompts.system_prompts import AGENTIC_SYSTEM_PROMPT
 from app.schemas.chat import ChatMessage
 from app.services.chat_service import ChatService
@@ -44,6 +46,7 @@ class GraphState(TypedDict):
     final_response: Optional[str]  # The final response to return to user
     iteration_count: int  # Track iterations to prevent infinite loops
     pending_tool_call: Optional[Dict[str, Any]]  # Tool call waiting to be executed
+    account_id: Optional[str]  # Connected wallet address for personalized context
     account_id: Optional[str]  # Connected wallet address for personalized context
 
 
@@ -84,9 +87,30 @@ class LLMOrchestrator:
         
         return base_prompt
 
+    def _create_context_aware_system_prompt(self, account_id: Optional[str]) -> str:
+        """Create a context-aware system prompt that includes account information."""
+        base_prompt = AGENTIC_SYSTEM_PROMPT
+        
+        if account_id:
+            context_addition = f"""
+            USER CONTEXT:
+            The user is connected with wallet address {account_id}. Use this address as the context for any relevant questions about 'my' account, 'my' transactions, 'my' balance, or similar personal queries. When the user asks about 'my' anything related to blockchain data, they are referring to this specific account: {account_id}.
+
+            Examples:
+            - "What is my wallet address?" -> "Your wallet address is {account_id}."
+            - "Show me my transactions" -> Query transactions for account {account_id}
+            - "What is my balance?" -> Check balance for account {account_id}
+            """
+            return base_prompt + context_addition
+        
+        return base_prompt
+
     async def _call_model_node(self, state: GraphState) -> GraphState:
         """Graph node that calls the LLM model."""
         try:
+            # Prepare messages for the model with context-aware system prompt
+            system_prompt = self._create_context_aware_system_prompt(state.get("account_id"))
+            messages = [SystemMessage(content=system_prompt)]
             # Prepare messages for the model with context-aware system prompt
             system_prompt = self._create_context_aware_system_prompt(state.get("account_id"))
             messages = [SystemMessage(content=system_prompt)]
@@ -345,6 +369,19 @@ class LLMOrchestrator:
                         # If no conversation history, just use the current query
                         initial_messages = [HumanMessage(content=query)]
                     
+                    # Build initial messages from conversation history
+                    initial_messages = []
+                    if conversation_history:
+                        # Convert ChatMessage objects to LangChain messages
+                        for msg in conversation_history:
+                            if msg.role == "user":
+                                initial_messages.append(HumanMessage(content=msg.content))
+                            elif msg.role == "assistant":
+                                initial_messages.append(AIMessage(content=msg.content))
+                    else:
+                        # If no conversation history, just use the current query
+                        initial_messages = [HumanMessage(content=query)]
+                    
                     # Initialize state and run workflow
                     initial_state: GraphState = {
                         "messages": initial_messages,
@@ -363,6 +400,9 @@ class LLMOrchestrator:
                     # Create streaming call with full conversation context using context-aware prompt
                     context_system_prompt = self._create_context_aware_system_prompt(account_id)
                     messages_for_streaming = [SystemMessage(content=context_system_prompt)]
+                    # Create streaming call with full conversation context using context-aware prompt
+                    context_system_prompt = self._create_context_aware_system_prompt(account_id)
+                    messages_for_streaming = [SystemMessage(content=context_system_prompt)]
                     messages_for_streaming.extend(final_messages)
                     # messages_for_streaming.append(HumanMessage(content="Please provide a clear, final summary based on the tool results above."))
                     
@@ -373,6 +413,7 @@ class LLMOrchestrator:
                     async for chunk in self.llm.astream(messages_for_streaming):
                         if isinstance(chunk, AIMessageChunk) and chunk.content:
                             if isinstance(chunk.content, str):
+                                accumulated_response += chunk.content
                                 accumulated_response += chunk.content
                                 yield chunk.content
                     
