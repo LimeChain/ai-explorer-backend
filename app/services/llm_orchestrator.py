@@ -8,7 +8,7 @@ from typing import AsyncGenerator, Dict, Any, List, Optional, TypedDict
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.exceptions import LangChainException
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, START, END
 from langgraph.graph.state import CompiledStateGraph
 from langchain_mcp_adapters.tools import load_mcp_tools
 
@@ -150,7 +150,7 @@ class LLMOrchestrator:
             state["final_response"] = "I apologize, but I encountered an error. Please try again."
             return state
 
-    def _should_continue(self, state: GraphState) -> str:
+    def _continue_with_tool_or_end(self, state: GraphState) -> str:
         """Determine graph routing based on state."""
         
         # if state.get("iteration_count", 0) >= MAX_ITERATIONS:
@@ -159,9 +159,9 @@ class LLMOrchestrator:
         #     logger.warning(f"Maximum iterations ({MAX_ITERATIONS}) reached")
         #     return "end"
         if state.get("pending_tool_call"):
-            return "continue"
+            return "call_tool"
         
-        return "end"
+        return END
 
     def _extract_json_from_codeblock(self, content: str) -> Optional[str]:
         """Extract JSON from ```json code blocks."""
@@ -327,9 +327,6 @@ class LLMOrchestrator:
                     tools = await load_mcp_tools(session)
                     logger.info(f"Loaded {len(tools)} tools")
                     
-                    # Create workflow with tools in scope
-                    workflow = StateGraph(GraphState)
-                    
                     # Create node functions that capture tools in closure
                     async def call_model_node(state: GraphState) -> GraphState:
                         return await self._call_model_node(state)
@@ -337,25 +334,17 @@ class LLMOrchestrator:
                     async def call_tool_node(state: GraphState) -> GraphState:
                         return await self._call_tool_node_with_tools(state, tools)
                     
+                    # Create workflow with tools in scope
+                    workflow = StateGraph(GraphState)
                     # Add nodes
                     workflow.add_node("call_model", call_model_node)
                     workflow.add_node("call_tool", call_tool_node)
-                    
                     # Add edges
                     workflow.set_entry_point("call_model")
-                    workflow.add_conditional_edges(
-                        "call_model",
-                        self._should_continue,
-                        {
-                            "continue": "call_tool",
-                            "end": END
-                        }
-                    )
+                    workflow.add_conditional_edges("call_model", self._continue_with_tool_or_end)
                     workflow.add_edge("call_tool", "call_model")
-                    
-                    # Compile graph
                     graph = workflow.compile()
-                    
+
                     # Build initial messages from conversation history
                     initial_messages = []
                     if conversation_history:

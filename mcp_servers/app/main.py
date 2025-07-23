@@ -175,60 +175,80 @@ async def health_check() -> Dict[str, str]:
     return {"status": "ok", "service": "HederaMirrorNode"}
 
 @mcp.tool()
-async def convert_timestamp(timestamp: Union[str, int, float]) -> Dict[str, Any]:
+async def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, float]]]) -> Dict[str, Any]:
     """
-    Convert Unix timestamp to human-readable date format.
+    Convert Unix timestamp(s) to human-readable date format.
     
     Handles both regular Unix timestamps (seconds since epoch) and Hedera timestamps 
-    with nanosecond precision (seconds.nanoseconds format).
+    with nanosecond precision (seconds.nanoseconds format). Accepts single timestamp
+    or list of timestamps.
     
     Args:
-        timestamp: Unix timestamp (can be int, float, or string format)
+        timestamps: Single timestamp or list of timestamps (int, float, string)
         
     Returns:
-        Dict containing original timestamp, converted date, and metadata
+        Dict with "conversions" key mapping original timestamps to conversion details,
+        "count" with number of timestamps processed, and "success" indicating if all conversions succeeded
         
     Example usage:
-        - convert_timestamp(1752127198.022577) -> "2025-07-17 14:49:58 UTC"
-        - convert_timestamp("1752127198") -> "2025-07-17 14:49:58 UTC"
+        - convert_timestamp(1752127198.022577) -> {"conversions": {"1752127198.022577": {...}}, "count": 1, "success": True}
+        - convert_timestamp([1752127198, "1752127200.123456"]) -> {"conversions": {"1752127198": {...}, "1752127200.123456": {...}}, "count": 2, "success": True}
     """
-    try:
-        # Convert input to string for consistent processing
-        timestamp_str = str(timestamp)
-        
-        # Handle different timestamp formats
-        if '.' in timestamp_str:
-            # Hedera format: seconds.nanoseconds
-            seconds_str = timestamp_str.split('.')[0]
-            nanoseconds_str = timestamp_str.split('.')[1]
-            unix_seconds = int(seconds_str)
-            nanoseconds = int(nanoseconds_str.ljust(9, '0')[:9])  # Pad/truncate to 9 digits
-        else:
-            # Regular Unix timestamp
-            unix_seconds = int(float(timestamp_str))
-            nanoseconds = 0
-        
-        # Convert to datetime object
-        dt = datetime.fromtimestamp(unix_seconds, tz=timezone.utc)
-        
-        # Format outputs
-        human_readable = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
-        iso_format = dt.isoformat()
-        
-        return {
-            "original_timestamp": timestamp,
-            "unix_seconds": unix_seconds,
-            "nanoseconds": nanoseconds,
-            "human_readable": human_readable,
-            "iso_format": iso_format,
-            "success": True
-        }
-        
-    except (ValueError, OverflowError) as e:
-        return {
-            "original_timestamp": timestamp,
-            "error": f"Invalid timestamp format: {str(e)}",
-            "success": False
-        }
+    def convert_single_timestamp(timestamp):
+        try:
+            timestamp_str = str(timestamp)
+            
+            if '.' in timestamp_str:
+                # Hedera format with seconds.nanoseconds
+                seconds_str = timestamp_str.split('.')[0]
+                nanoseconds_str = timestamp_str.split('.')[1]
+                unix_seconds = int(seconds_str)
+                nanoseconds = int(nanoseconds_str.ljust(9, '0')[:9])  # Pad/truncate to 9 digits
+            else:
+                # Unix timestamp
+                unix_seconds = int(float(timestamp_str))
+                nanoseconds = 0
+            
+            dt = datetime.fromtimestamp(unix_seconds, tz=timezone.utc)
+            
+            human_readable = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+            iso_format = dt.isoformat()
+            
+            return {
+                "original_timestamp": timestamp,
+                "unix_seconds": unix_seconds,
+                "nanoseconds": nanoseconds,
+                "human_readable": human_readable,
+                "iso_format": iso_format,
+                "success": True
+            }
+            
+        except (ValueError, OverflowError) as e:
+            return {
+                "original_timestamp": timestamp,
+                "error": f"Invalid timestamp format: {str(e)}",
+                "success": False
+            }
+    
+    if isinstance(timestamps, list):
+        timestamp_list = timestamps
+    else:
+        timestamp_list = [timestamps]
+    
+    conversions = {}
+    all_successful = True
+    
+    for timestamp in timestamp_list:
+        result = convert_single_timestamp(timestamp)
+        key = str(timestamp)
+        conversions[key] = result
+        if not result.get("success", False):
+            all_successful = False
+    
+    return {
+        "conversions": conversions,
+        "count": len(conversions),
+        "success": all_successful
+    }
 
 

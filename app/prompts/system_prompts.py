@@ -30,8 +30,9 @@ You have access to the following tools for retrieving Hedera network data:
    - IMPORTANT: Pass the SDK method name as "method_name" parameter, then include all other parameters the SDK method needs
 
 4. **convert_timestamp**: Convert Unix timestamps to human-readable dates
-   - Parameters: timestamp (int, float, or string)
-   - Use this to convert any timestamp to readable format
+   - Parameters: timestamps (single timestamp or list of timestamps - int, float, or string)
+   - Returns: Always returns a dictionary with "conversions" (mapping timestamps to results), "count", and "success" keys
+   - Use this to convert single timestamp or multiple timestamps in one call
    - Handles both Unix timestamps and Hedera timestamps with nanoseconds
 
 5. **calculate_hbar_value**: Calculate USD value of HBAR tokens using current exchange rates
@@ -66,7 +67,8 @@ You have access to the following tools for retrieving Hedera network data:
 - To discover available methods: `{"tool_call": {"name": "get_available_methods", "parameters": {}}}`
 - To get method signature: `{"tool_call": {"name": "get_method_signature", "parameters": {"method_name": "get_account"}}}`
 - To call SDK method with parameters: `{"tool_call": {"name": "call_sdk_method", "parameters": {"method_name": "get_account", "account_id": "0.0.123"}}}`
-- To convert timestamp: `{"tool_call": {"name": "convert_timestamp", "parameters": {"timestamp": "1752127198.022577"}}}`
+- To convert single timestamp: `{"tool_call": {"name": "convert_timestamp", "parameters": {"timestamps": "1752127198.022577"}}}` (returns dict with conversions, count, success)
+- To convert multiple timestamps: `{"tool_call": {"name": "convert_timestamp", "parameters": {"timestamps": ["1752127198", "1752127200.123456"]}}}` (returns dict format)
 - To calculate HBAR to USD: `{"tool_call": {"name": "calculate_hbar_value", "parameters": {"hbar_amount": "1000000000000"}}}`
 
 **WRONG - Do NOT do this:**
@@ -76,7 +78,7 @@ You have access to the following tools for retrieving Hedera network data:
 **CORRECT - Always do this:**
 - `{"tool_call": {"name": "call_sdk_method", "parameters": {"method_name": "get_account", "account_id": "0.0.123"}}}` ✅
 - `{"tool_call": {"name": "call_sdk_method", "parameters": {"method_name": "get_transaction", "transaction_id": "123"}}}` ✅
-- `{"tool_call": {"name": "convert_timestamp", "parameters": {"timestamp": "1752127198.022577"}}}` ✅
+- `{"tool_call": {"name": "convert_timestamp", "parameters": {"timestamps": "1752127198.022577"}}}` ✅
 
 ### 4. Primary Workflow
 
@@ -100,7 +102,7 @@ For every user query:
 ✅ **CORRECT**: "Next, I will convert the timestamp for the second token:"
 
 ```json
-{"tool_call": {"name": "convert_timestamp", "parameters": {"timestamp": "1753172921.600280593"}}}
+{"tool_call": {"name": "convert_timestamp", "parameters": {"timestamps": "1753172921.600280593"}}}
 ```
 
 ### 4.2 Efficient Tool Usage
@@ -108,12 +110,13 @@ For every user query:
 **Batch Processing**: When you have multiple items to process (like timestamps), process them efficiently:
 
 ❌ **INEFFICIENT**: Call convert_timestamp 10 times for 10 timestamps
-✅ **EFFICIENT**: Convert timestamps as you present each item, or batch related conversions
+✅ **EFFICIENT**: Use convert_timestamp with list of timestamps for batch conversion
 
 **Example for token data**:
 ```json
-{"tool_call": {"name": "convert_timestamp", "parameters": {"timestamp": "1753172921.600280593"}}}
+{"tool_call": {"name": "convert_timestamp", "parameters": {"timestamps": "1753172921.600280593"}}}
 ```
+Response format: `{"conversions": {"1753172921.600280593": {...}}, "count": 1, "success": true}`
 Then immediately when you get the result, present that token's complete information before moving to the next.
 
 ### 5. Critical Rules
@@ -142,7 +145,9 @@ Then immediately when you get the result, present that token's complete informat
   - ALWAYS use the convert_timestamp tool for any timestamp conversion
   - Pass the timestamp as-is to the tool (whether it's Unix format or Hedera format with nanoseconds)
   - The tool handles both Unix timestamps and Hedera timestamps with nanoseconds automatically
-  - Example: Use `{"tool_call": {"name": "convert_timestamp", "parameters": {"timestamp": "1752127198.022577"}}}` 
+  - Tool always returns consistent format: {"conversions": {...}, "count": X, "success": true/false}
+  - Example single: Use `{"tool_call": {"name": "convert_timestamp", "parameters": {"timestamps": "1752127198.022577"}}}` 
+  - Example multiple: Use `{"tool_call": {"name": "convert_timestamp", "parameters": {"timestamps": ["1752127198", "1752127200.123456"]}}}`
   - NEVER attempt manual timestamp conversion - always use the tool
 
 ### 7. Response Guidelines
