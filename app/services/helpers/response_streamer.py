@@ -6,6 +6,7 @@ from typing import AsyncGenerator, List, Optional
 
 from langchain_core.messages import SystemMessage, AIMessageChunk
 from langchain_openai import ChatOpenAI
+from sqlalchemy.orm import Session
 
 from app.schemas.chat import ChatMessage
 from app.services.chat_service import ChatService
@@ -27,7 +28,8 @@ class ResponseStreamer:
         response_system_prompt: str,
         query: str,
         session_id: Optional[str] = None,
-        account_id: Optional[str] = None
+        account_id: Optional[str] = None,
+        db: Optional[Session] = None
     ) -> AsyncGenerator[str, None]:
         """Stream the final response and save to database."""
         # Prepare messages for final response
@@ -45,7 +47,7 @@ class ResponseStreamer:
         
         # Save conversation after streaming completes
         await self._save_conversation(
-            session_id, account_id, query, accumulated_response.strip()
+            session_id, account_id, query, accumulated_response.strip(), db
         )
     
     async def _save_conversation(
@@ -53,7 +55,8 @@ class ResponseStreamer:
         session_id: Optional[str], 
         account_id: Optional[str], 
         query: str, 
-        response: str
+        response: str,
+        db: Optional[Session] = None
     ) -> None:
         """Save conversation to database with error handling."""
         try:
@@ -62,7 +65,8 @@ class ResponseStreamer:
                     session_id=session_id,
                     account_id=account_id,
                     user_message=query,
-                    assistant_response=response
+                    assistant_response=response,
+                    db=db
                 )
                 logger.info(f"Conversation saved with session_id: {saved_session_id}")
         except Exception as save_error:

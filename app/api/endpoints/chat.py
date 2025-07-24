@@ -84,7 +84,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     account_id=chat_request.account_id,
                     conversation_history=chat_request.messages,
                     session_id=chat_request.session_id,
-                    # db=db  # Pass database session for conversation persistence
+                    db=db  # Pass database session for conversation persistence
                 ):
                     await websocket.send_text(json.dumps({
                         "token": token

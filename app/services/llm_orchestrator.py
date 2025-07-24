@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, Base
 from langchain_core.exceptions import LangChainException
 from langgraph.graph import END
 from langchain_mcp_adapters.tools import load_mcp_tools
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.exceptions import LLMServiceError, ValidationError
@@ -121,7 +122,8 @@ class LLMOrchestrator:
         query: str, 
         account_id: Optional[str] = None,
         conversation_history: Optional[List[ChatMessage]] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        db: Optional[Session] = None
     ) -> AsyncGenerator[str, None]:
         """Stream LLM response using agentic workflow with real token streaming."""
         try:
@@ -162,7 +164,8 @@ class LLMOrchestrator:
                         RESPONSE_FORMATTING_SYSTEM_PROMPT,
                         query,
                         session_id,
-                        account_id
+                        account_id,
+                        db
                     ):
                         yield token
 
