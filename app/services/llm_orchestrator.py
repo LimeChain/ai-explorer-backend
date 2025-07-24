@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.exceptions import LLMServiceError, ValidationError, ChatServiceError
-from app.prompts.system_prompts import AGENTIC_SYSTEM_PROMPT
+from app.prompts.system_prompts import AGENTIC_SYSTEM_PROMPT, RESPONSE_FORMATTING_SYSTEM_PROMPT
 from app.schemas.chat import ChatMessage
 from app.services.chat_service import ChatService
 
@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 # Constants
 MAX_QUERY_LENGTH = 1000
 MAX_ITERATIONS = 8
-MAX_TOOL_CONTEXT_ITEMS = 2
-DEFAULT_TEMPERATURE = 0.3
+MAX_TOOL_CONTEXT_ITEMS = 5
+DEFAULT_TEMPERATURE = 0.1
 
 
 class GraphState(TypedDict):
@@ -111,9 +111,6 @@ class LLMOrchestrator:
             # Prepare messages for the model with context-aware system prompt
             system_prompt = self._create_context_aware_system_prompt(state.get("account_id"))
             messages = [SystemMessage(content=system_prompt)]
-            # Prepare messages for the model with context-aware system prompt
-            system_prompt = self._create_context_aware_system_prompt(state.get("account_id"))
-            messages = [SystemMessage(content=system_prompt)]
             messages.extend(state["messages"])
             
             # Add tool call context if available
@@ -187,16 +184,18 @@ class LLMOrchestrator:
         
         return content[start_idx:end_idx]
 
+
     def _validate_tool_call(self, parsed_json: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Validate and extract tool call from parsed JSON."""
         if not isinstance(parsed_json, dict) or "tool_call" not in parsed_json:
             return None
-        
+    
         tool_call = parsed_json["tool_call"]
         if not isinstance(tool_call, dict) or "name" not in tool_call:
             return None
         
         return tool_call
+
 
     def _parse_tool_call(self, content: str) -> Optional[Dict[str, Any]]:
         """Parse tool call from LLM response expecting JSON format."""
@@ -223,7 +222,7 @@ class LLMOrchestrator:
                 except json.JSONDecodeError:
                     continue
         
-        return None
+        # return None
 
     async def _call_tool_node_with_tools(self, state: GraphState, tools: List[Any]) -> GraphState:
         """Graph node that executes tool calls with provided tools."""
@@ -373,17 +372,14 @@ class LLMOrchestrator:
                     final_state = await graph.ainvoke(initial_state, {"recursion_limit": 100})
                     # Stream the final response
                     final_messages = final_state["messages"]
-                    # Create streaming call with full conversation context using context-aware prompt
-                    context_system_prompt = self._create_context_aware_system_prompt(account_id)
-                    messages_for_streaming = [SystemMessage(content=context_system_prompt)]
-                    messages_for_streaming.extend(final_messages)
-                    # messages_for_streaming.append(HumanMessage(content="Please provide a clear, final summary based on the tool results above."))
-                    
+                    # final_messages.append(HumanMessage(content="Please provide a clear, final summary based on the results above."))
+
                     # Accumulate the response for saving to database
                     accumulated_response = ""
-                    
                     # Stream the final response token by token
-                    async for chunk in self.llm.astream(messages_for_streaming):
+                    result = [SystemMessage(content=RESPONSE_FORMATTING_SYSTEM_PROMPT)]
+                    result.extend(final_messages)
+                    async for chunk in self.llm.astream(result):
                         if isinstance(chunk, AIMessageChunk) and chunk.content:
                             if isinstance(chunk.content, str):
                                 accumulated_response += chunk.content

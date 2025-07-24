@@ -191,7 +191,7 @@ class AccountsResponse(BaseModel):
 class NftTransfer(BaseModel):
     """NFT transfer information."""
     is_approval: bool
-    receiver_account_id: str
+    receiver_account_id: Optional[str] = None
     sender_account_id: Optional[str] = None
     serial_number: int
     token_id: str

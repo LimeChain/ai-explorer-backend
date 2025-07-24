@@ -65,104 +65,129 @@ async def get_method_signature(method_name: str) -> Dict[str, Any]:
     return get_sdk_service().get_method_signature(method_name)
 
 @mcp.tool()
-async def calculate_hbar_value(hbar_amount: Union[str, int, float], timestamp: Union[str, int, float] = None) -> Dict[str, Any]:
+async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[str, int, float]]], timestamp: Union[str, int, float] = None) -> Dict[str, Any]:
     """
     Calculate the USD value of HBAR tokens using current exchange rates.
     
     This tool fetches the current HBAR exchange rate and calculates the equivalent
-    USD value for the specified amount in tinybars. 1 HBAR = 100,000,000 tinybars.
+    USD value for the specified amount(s) in tinybars. 1 HBAR = 100,000,000 tinybars.
+    Accepts single amount or list of amounts.
     
     Args:
-        hbar_amount: The amount in tinybars to calculate the USD value for (supports large integers)
+        hbar_amounts: Single amount or list of amounts in tinybars to calculate USD values for (supports large integers)
         timestamp: Optional Unix timestamp (epoch) to get historical exchange rates
         
     Returns:
-        Dict containing tinybar amount, HBAR amount, USD equivalent, exchange rate info, and calculation timestamp
+        Dict with "calculations" key mapping original amounts to calculation details,
+        "count" with number of amounts processed, and "success" indicating if all calculations succeeded
         
     Example usage:
-        - calculate_hbar_value(hbar_amount=150000000000) -> calculates USD value for 1,500 tinybars (0.000015 HBAR)
-        - calculate_hbar_value(hbar_amount="1000000000000") -> calculates USD value for large tinybar amounts
-        - calculate_hbar_value(hbar_amount=3000000000000, timestamp=1705276800) -> historical calculation for epoch timestamp
+        - calculate_hbar_value(hbar_amounts=150000000000) -> {"calculations": {"150000000000": {...}}, "count": 1, "success": True}
+        - calculate_hbar_value(hbar_amounts=["1000000000000", 3000000000000]) -> {"calculations": {"1000000000000": {...}, "3000000000000": {...}}, "count": 2, "success": True}
+        - calculate_hbar_value(hbar_amounts=3000000000000, timestamp=1705276800) -> historical calculation for epoch timestamp
     """
-    try:
-        # Get current exchange rate using the SDK
-        exchange_rate_params = {}
-        if timestamp:
-            exchange_rate_params["timestamp"] = str(timestamp)
+    async def calculate_single_hbar_value(hbar_amount, timestamp):
+        try:
+            # Get current exchange rate using the SDK
+            exchange_rate_params = {}
+            if timestamp:
+                exchange_rate_params["timestamp"] = str(timestamp)
+                
+            exchange_rate_result = await get_sdk_service().call_method(
+                "get_network_exchange_rate", **exchange_rate_params
+            )
             
-        exchange_rate_result = await get_sdk_service().call_method(
-            "get_network_exchange_rate", **exchange_rate_params
-        )
-        
-        if not exchange_rate_result.get("success", False):
+            if not exchange_rate_result.get("success", False):
+                return {
+                    "error": f"Failed to fetch exchange rate: {exchange_rate_result.get('error', 'Unknown error')}",
+                    "hbar_amount": hbar_amount,
+                    "success": False
+                }
+            
+            # Extract exchange rate data from Pydantic model
+            data = exchange_rate_result.get("data")
+            if not data:
+                return {
+                    "error": "No exchange rate data available",
+                    "hbar_amount": hbar_amount,
+                    "success": False
+                }
+            
+            # Access Pydantic model attributes directly
+            current_rate = data.current_rate
+            cent_equivalent = current_rate.cent_equivalent
+            hbar_equivalent = current_rate.hbar_equivalent
+            expiration_time = current_rate.expiration_time
+            
+            if hbar_equivalent == 0:
+                return {
+                    "error": "Invalid exchange rate data: hbar_equivalent is zero",
+                    "hbar_amount": hbar_amount,
+                    "success": False
+                }
+            
+            # Calculate USD values using integer arithmetic for precision
+            # Convert hbar_amount to int if it's a string
+            if isinstance(hbar_amount, str):
+                tinybar_amount = int(hbar_amount)
+            else:
+                tinybar_amount = int(hbar_amount)
+            
+            # Convert tinybars to HBAR (1 HBAR = 100,000,000 tinybars)
+            TINYBARS_PER_HBAR = 100000000
+            hbar_amount_actual = tinybar_amount / TINYBARS_PER_HBAR
+            
+            # cent_equivalent is in cents, so divide by 100 to get dollars
+            rate_usd_value = cent_equivalent / 100
+            # Price per HBAR = (cent_equivalent / hbar_equivalent) / 100
+            price_per_hbar = (cent_equivalent / hbar_equivalent) / 100
+            # Total USD value = hbar_amount_actual * price_per_hbar
+            total_usd_value = hbar_amount_actual * price_per_hbar
+            
             return {
-                "error": f"Failed to fetch exchange rate: {exchange_rate_result.get('error', 'Unknown error')}",
+                "success": True,
+                "tinybar_amount": tinybar_amount,
+                "hbar_amount": round(hbar_amount_actual, 8),
+                "usd_value": round(total_usd_value, 2),
+                "price_per_hbar": round(price_per_hbar, 4),
+                "exchange_rate_info": {
+                    "cent_equivalent": cent_equivalent,
+                    "hbar_equivalent": hbar_equivalent,
+                    "rate_usd_value": round(rate_usd_value, 2),
+                    "expiration_time": expiration_time
+                },
+                "calculation_timestamp": data.timestamp,
+                "requested_timestamp": timestamp
+            }
+            
+        except Exception as e:
+            return {
+                "error": f"Calculation failed: {str(e)}",
                 "hbar_amount": hbar_amount,
                 "success": False
             }
-        
-        # Extract exchange rate data from Pydantic model
-        data = exchange_rate_result.get("data")
-        if not data:
-            return {
-                "error": "No exchange rate data available",
-                "hbar_amount": hbar_amount,
-                "success": False
-            }
-        
-        # Access Pydantic model attributes directly
-        current_rate = data.current_rate
-        cent_equivalent = current_rate.cent_equivalent
-        hbar_equivalent = current_rate.hbar_equivalent
-        expiration_time = current_rate.expiration_time
-        
-        if hbar_equivalent == 0:
-            return {
-                "error": "Invalid exchange rate data: hbar_equivalent is zero",
-                "hbar_amount": hbar_amount,
-                "success": False
-            }
-        
-        # Calculate USD values using integer arithmetic for precision
-        # Convert hbar_amount to int if it's a string
-        if isinstance(hbar_amount, str):
-            tinybar_amount = int(hbar_amount)
-        else:
-            tinybar_amount = int(hbar_amount)
-        
-        # Convert tinybars to HBAR (1 HBAR = 100,000,000 tinybars)
-        TINYBARS_PER_HBAR = 100000000
-        hbar_amount_actual = tinybar_amount / TINYBARS_PER_HBAR
-        
-        # cent_equivalent is in cents, so divide by 100 to get dollars
-        rate_usd_value = cent_equivalent / 100
-        # Price per HBAR = (cent_equivalent / hbar_equivalent) / 100
-        price_per_hbar = (cent_equivalent / hbar_equivalent) / 100
-        # Total USD value = hbar_amount_actual * price_per_hbar
-        total_usd_value = hbar_amount_actual * price_per_hbar
-        
-        return {
-            "success": True,
-            "tinybar_amount": tinybar_amount,
-            "hbar_amount": round(hbar_amount_actual, 8),
-            "usd_value": round(total_usd_value, 2),
-            "price_per_hbar": round(price_per_hbar, 4),
-            "exchange_rate_info": {
-                "cent_equivalent": cent_equivalent,
-                "hbar_equivalent": hbar_equivalent,
-                "rate_usd_value": round(rate_usd_value, 2),
-                "expiration_time": expiration_time
-            },
-            "calculation_timestamp": data.timestamp,
-            "requested_timestamp": timestamp
-        }
-        
-    except Exception as e:
-        return {
-            "error": f"Calculation failed: {str(e)}",
-            "hbar_amount": hbar_amount,
-            "success": False
-        }
+    
+    if isinstance(hbar_amounts, list):
+        hbar_amount_list = hbar_amounts
+    else:
+        hbar_amount_list = [hbar_amounts]
+    
+    calculations = {}
+    all_successful = True
+    
+    for hbar_amount in hbar_amount_list:
+        result = await calculate_single_hbar_value(hbar_amount, timestamp)
+        key = str(hbar_amount)
+        calculations[key] = result
+        if not result.get("success", False):
+            all_successful = False
+    
+    return {
+        "calculations": calculations,
+        "count": len(calculations),
+        "success": all_successful
+    }
+
 
 @mcp.tool()
 async def health_check() -> Dict[str, str]:
