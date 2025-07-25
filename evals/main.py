@@ -1,4 +1,4 @@
-from langsmith import Client, wrappers
+from langsmith import Client
 
 from app.config import settings
 from app.services.llm_orchestrator import LLMOrchestrator

@@ -72,21 +72,6 @@ alembic upgrade head
 ```
 
 5. Run the development server:
-```
-
-### Database Setup
-
-3. Start the PostgreSQL database:
-```bash
-docker-compose up postgres
-```
-
-4. Run database migrations:
-```bash
-alembic upgrade head
-```
-
-5. Run the development server:
 ```bash
 uv run uvicorn app.main:app --reload --port 8000
 ```
@@ -129,25 +114,6 @@ Check migration status:
 cd .. # Go back to root
 
 uv run python mcp_servers/main.py
-```
-
-### Database Management
-
-#### Database Migration Commands
-
-Create a new migration:
-```bash
-alembic revision --autogenerate -m "Description of changes"
-```
-
-Apply migrations:
-```bash
-alembic upgrade head
-```
-
-Check migration status:
-```bash
-alembic current
 ```
 
 # Run evaluations

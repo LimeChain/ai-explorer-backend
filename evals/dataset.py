@@ -42,9 +42,14 @@ def load_examples_from_csv(csv_file: str = "examples.csv") -> List[Dict]:
     
     return examples
 
-EXAMPLES = load_examples_from_csv()
+_EXAMPLES = None
+def get_examples():
+    global _EXAMPLES
+    if _EXAMPLES is None:
+        _EXAMPLES = load_examples_from_csv()
+    return _EXAMPLES
 
-def get_or_create_dataset(client: Client, dataset_name: str = DATASET_NAME, examples: List[Dict] = EXAMPLES) -> Any:
+def get_or_create_dataset(client: Client, dataset_name: str = DATASET_NAME, examples: List[Dict] = get_examples()) -> Any:
     """
     Get an existing dataset by name or create a new one if it doesn't exist.
     If creating a new dataset, it will be populated with examples.
@@ -63,7 +68,16 @@ def get_or_create_dataset(client: Client, dataset_name: str = DATASET_NAME, exam
     else:
         print(f"Using existing dataset: {dataset_name}")
         datasets = list(client.list_datasets(dataset_name=dataset_name))
-        dataset = datasets[0]
+        if not datasets:
+            raise ValueError(f"Dataset {dataset_name} not found")
+        if len(datasets) > 1:
+            # Filter for exact match
+            exact_matches = [d for d in datasets if d.name == dataset_name]
+            if len(exact_matches) != 1:
+                raise ValueError(f"Multiple datasets found for name '{dataset_name}'")
+            dataset = exact_matches[0]
+        else:
+            dataset = datasets[0]
         
         existing_examples = list(client.list_examples(dataset_id=dataset.id))
         if not existing_examples:
