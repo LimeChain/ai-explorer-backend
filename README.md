@@ -40,7 +40,7 @@ ENVIRONMENT=development
 LOG_LEVEL=INFO
 
 # Database (for local development)
-DATABASE_URL=postgresql://ai_explorer:ai_explorer@localhost:5433/ai_explorer
+DATABASE_URL=postgresql://ai_explorer:ai_explorer@localhost:5432/ai_explorer
 
 # MCP Server
 MCP_ENDPOINT=http://localhost:8001/mcp/
@@ -81,16 +81,11 @@ The service will be available at `http://localhost:8000`.
 
 6. Install the SDK as a package:
 ```bash
-
-cd mcp_servers
-
-uv pip install -e ../sdk
+uv pip install -e ./sdk
 ```
 
 7. Run the MCP server:
 ```bash
-cd .. # Go back to root
-
 uv run python mcp_servers/main.py
 ```
 

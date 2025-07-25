@@ -39,7 +39,7 @@ class SuggestionDBOperations:
             
         except SQLAlchemyError as e:
             logger.error(f"Database error retrieving suggestions: {e}")
-            raise SuggestionServiceError("Database error occurred while retrieving suggestions", e)
+            raise SuggestionServiceError("Database error occurred while retrieving suggestions", e) from e
         except Exception as e:
             logger.error(f"Unexpected error retrieving suggestions: {e}")
-            raise SuggestionServiceError("Unexpected error occurred while retrieving suggestions", e)
+            raise SuggestionServiceError("Unexpected error occurred while retrieving suggestions", e) from e

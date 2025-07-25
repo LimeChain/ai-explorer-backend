@@ -3,10 +3,10 @@ LangGraph workflow building utilities.
 """
 import json
 import logging
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Callable
 
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from langgraph.graph import StateGraph, START, END
+from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.services.helpers.tool_call_parser import ToolCallParser
@@ -141,7 +141,7 @@ class WorkflowBuilder:
             f"Tool: {call['name']} -> Result: {call['result']}"
             for call in recent_tools
         ]
-        return "\\n\\nPrevious tool results:\\n" + "\\n".join(tool_summaries)
+        return "\n\nPrevious tool results:\n" + "\n".join(tool_summaries)
     
     async def _execute_tool(self, tools: List[Any], tool_name: str, tool_params: Dict) -> Any:
         """Execute a specific tool with given parameters."""

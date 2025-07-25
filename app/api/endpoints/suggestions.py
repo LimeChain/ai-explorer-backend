@@ -73,10 +73,10 @@ def get_suggested_queries(
         
     except ValidationError as e:
         logger.warning(f"Validation error in get_suggested_queries: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except SuggestionServiceError as e:
         logger.error(f"Service error in get_suggested_queries: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve suggestions")
+        raise HTTPException(status_code=500, detail="Failed to retrieve suggestions") from e
     except Exception as e:
         logger.error(f"Unexpected error in get_suggested_queries: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

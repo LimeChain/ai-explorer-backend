@@ -2,11 +2,11 @@
 Chat endpoint for the AI Explorer backend service.
 """
 import logging
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from sqlalchemy.orm import Session
 import json
 
-from app.schemas.chat import ChatRequest, ChatMessage
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from app.schemas.chat import ChatRequest
 from app.services.llm_orchestrator import LLMOrchestrator
 from app.db.session import get_session_local
 from app.exceptions import ChatServiceError, ValidationError, LLMServiceError

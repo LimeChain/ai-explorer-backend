@@ -49,15 +49,15 @@ def upgrade() -> None:
     # Define the seed data
     seed_data = [
         # Anonymous queries
-        {'id': str(uuid.uuid4()), 'query': 'What is the current price of HBAR?', 'context': 'ANONYMOUS', 'display_order': 1},
-        {'id': str(uuid.uuid4()), 'query': 'What happened in transaction 0.0.12345@1750376965.638444236?', 'context': 'ANONYMOUS', 'display_order': 2},
-        {'id': str(uuid.uuid4()), 'query': 'Show recent activity for wallet 0.0.98', 'context': 'ANONYMOUS', 'display_order': 3},
-        {'id': str(uuid.uuid4()), 'query': 'What are the latest transactions on the Hedera network?', 'context': 'ANONYMOUS', 'display_order': 4},
+        {'id': '550e8400-e29b-41d4-a716-446655440001', 'query': 'What is the current price of HBAR?', 'context': 'ANONYMOUS', 'display_order': 1},
+        {'id': '550e8400-e29b-41d4-a716-446655440002', 'query': 'What happened in transaction 0.0.12345@1750376965.638444236?', 'context': 'ANONYMOUS', 'display_order': 2},
+        {'id': '550e8400-e29b-41d4-a716-446655440003', 'query': 'Show recent activity for wallet 0.0.98', 'context': 'ANONYMOUS', 'display_order': 3},
+        {'id': '550e8400-e29b-41d4-a716-446655440004', 'query': 'What are the latest transactions on the Hedera network?', 'context': 'ANONYMOUS', 'display_order': 4},
         # Connected queries
-        {'id': str(uuid.uuid4()), 'query': 'What tokens do I currently hold?', 'context': 'CONNECTED', 'display_order': 1},
-        {'id': str(uuid.uuid4()), 'query': 'Show my last 5 transactions', 'context': 'CONNECTED', 'display_order': 2},
-        {'id': str(uuid.uuid4()), 'query': 'What is the total value of my wallet?', 'context': 'CONNECTED', 'display_order': 3},
-        {'id': str(uuid.uuid4()), 'query': 'Show my NFT collection', 'context': 'CONNECTED', 'display_order': 4},
+        {'id': '550e8400-e29b-41d4-a716-446655440005', 'query': 'What tokens do I currently hold?', 'context': 'CONNECTED', 'display_order': 1},
+        {'id': '550e8400-e29b-41d4-a716-446655440006', 'query': 'Show my last 5 transactions', 'context': 'CONNECTED', 'display_order': 2},
+        {'id': '550e8400-e29b-41d4-a716-446655440007', 'query': 'What is the total value of my wallet?', 'context': 'CONNECTED', 'display_order': 3},
+        {'id': '550e8400-e29b-41d4-a716-446655440008', 'query': 'Show my NFT collection', 'context': 'CONNECTED', 'display_order': 4},
     ]
     
     op.bulk_insert(suggested_queries_table, seed_data)

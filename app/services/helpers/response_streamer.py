@@ -8,7 +8,6 @@ from langchain_core.messages import SystemMessage, AIMessageChunk
 from langchain_openai import ChatOpenAI
 from sqlalchemy.orm import Session
 
-from app.schemas.chat import ChatMessage
 from app.services.chat_service import ChatService
 
 logger = logging.getLogger(__name__)

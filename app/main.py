@@ -2,7 +2,6 @@
 Main FastAPI application for the AI Explorer backend service.
 """
 import logging
-import os
 from fastapi import FastAPI
 
 from app.api.endpoints import chat, suggestions

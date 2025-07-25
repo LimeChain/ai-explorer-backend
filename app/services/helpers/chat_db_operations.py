@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 from app.db.models import Conversation, Message
 from app.schemas.chat import ChatMessage
-from app.exceptions import ChatServiceError, SessionNotFoundError
+from app.exceptions import ChatServiceError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -27,7 +27,7 @@ class ChatDBOperations:
             ).first()
         except SQLAlchemyError as e:
             logger.error(f"Database error finding conversation: {e}")
-            raise ChatServiceError("Database error occurred while finding conversation", e)
+            raise ChatServiceError("Database error occurred while finding conversation", e) from e
     
     @staticmethod
     def create_conversation(db: Session, session_id: str, account_id: Optional[str]) -> Conversation:
@@ -45,11 +45,11 @@ class ChatDBOperations:
         except IntegrityError as e:
             logger.error(f"Integrity constraint error creating conversation: {e}")
             db.rollback()
-            raise ChatServiceError("Failed to create conversation due to data constraints", e)
+            raise ChatServiceError("Failed to create conversation due to data constraints", e) from e
         except SQLAlchemyError as e:
             logger.error(f"Database error creating conversation: {e}")
             db.rollback()
-            raise ChatServiceError("Database error occurred while creating conversation", e)
+            raise ChatServiceError("Database error occurred while creating conversation", e) from e
     
     @staticmethod
     def update_conversation_account(db: Session, conversation: Conversation, account_id: str) -> None:
@@ -61,7 +61,7 @@ class ChatDBOperations:
         except SQLAlchemyError as e:
             logger.error(f"Database error updating conversation: {e}")
             db.rollback()
-            raise ChatServiceError("Database error occurred while updating conversation", e)
+            raise ChatServiceError("Database error occurred while updating conversation", e) from e
     
     @staticmethod
     def create_message(db: Session, conversation_id: int, role: str, content: str) -> Message:
@@ -80,11 +80,11 @@ class ChatDBOperations:
         except IntegrityError as e:
             logger.error(f"Integrity constraint error creating message: {e}")
             db.rollback()
-            raise ChatServiceError("Failed to add message due to data constraints", e)
+            raise ChatServiceError("Failed to add message due to data constraints", e) from e
         except SQLAlchemyError as e:
             logger.error(f"Database error creating message: {e}")
             db.rollback()
-            raise ChatServiceError("Database error occurred while adding message", e)
+            raise ChatServiceError("Database error occurred while adding message", e) from e
     
     @staticmethod
     def get_conversation_messages(db: Session, conversation_id: int, limit: int) -> List[Message]:
@@ -95,7 +95,7 @@ class ChatDBOperations:
             ).order_by(Message.created_at.asc()).limit(limit).all()
         except SQLAlchemyError as e:
             logger.error(f"Database error retrieving messages: {e}")
-            raise ChatServiceError("Database error occurred while retrieving messages", e)
+            raise ChatServiceError("Database error occurred while retrieving messages", e) from e
     
     @staticmethod
     def conversation_exists(db: Session, conversation_id: int) -> bool:
@@ -104,7 +104,7 @@ class ChatDBOperations:
             return db.query(Conversation).filter(Conversation.id == conversation_id).first() is not None
         except SQLAlchemyError as e:
             logger.error(f"Database error checking conversation existence: {e}")
-            raise ChatServiceError("Database error occurred while checking conversation", e)
+            raise ChatServiceError("Database error occurred while checking conversation", e) from e
     
     @staticmethod
     def messages_to_chat_messages(messages: List[Message]) -> List[ChatMessage]:
