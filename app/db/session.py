@@ -37,9 +37,6 @@ def get_session_local():
                 _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
     return _SessionLocal
 
-# Create module-level instances for backward compatibility
-engine = get_engine()
-SessionLocal = get_session_local()
 
 def get_db():
     """

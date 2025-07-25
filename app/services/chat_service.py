@@ -165,4 +165,4 @@ class ChatService:
         except Exception as e:
             logger.error(f"Unexpected error saving conversation turn: {e}")
             db.rollback()
-            raise ChatServiceError("Unexpected error occurred while saving conversation turn", e)
+            raise ChatServiceError("Unexpected error occurred while saving conversation turn", e) from e
