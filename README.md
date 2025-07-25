@@ -150,6 +150,12 @@ Check migration status:
 alembic current
 ```
 
+# Run evaluations
+
+```bash
+uv run python -m evals.main
+```
+
 #### Database Features
 
 The backend includes:
@@ -326,3 +332,5 @@ Future iterations will include:
 - Cost-based budget limiting
 - Chat history retrieval endpoints
 - Chat history retrieval endpoints
+
+
