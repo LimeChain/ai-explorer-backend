@@ -1,7 +1,9 @@
 """
-Constants for LLM orchestration.
+Constants for all services.
 """
 from enum import Enum
+
+# === LLM Orchestration Constants ===
 
 # Query and iteration limits
 MAX_QUERY_LENGTH = 1000
@@ -21,3 +23,25 @@ class GraphNode(str, Enum):
 # Tool names
 class ToolName(str, Enum):
     CALL_SDK_METHOD = "call_sdk_method"
+
+# === Chat Service Constants ===
+
+# Length limits
+MAX_SESSION_ID_LENGTH = 255
+MAX_ACCOUNT_ID_LENGTH = 255
+MAX_MESSAGE_CONTENT_LENGTH = 100000  # 100KB
+MAX_CONVERSATION_LIMIT = 1000
+
+# Message roles
+class MessageRole(str, Enum):
+    USER = "user"
+    ASSISTANT = "assistant"
+
+# Default values
+DEFAULT_CONVERSATION_LIMIT = 50
+
+# === Suggestion Service Constants ===
+
+# Query limits
+DEFAULT_SUGGESTION_LIMIT = 100
+MAX_SUGGESTION_LIMIT = 500

@@ -3,7 +3,7 @@ Validation utilities for suggestion service operations.
 """
 from app.exceptions import ValidationError
 from app.schemas.suggestions import SuggestionContext
-from app.services.helpers.suggestion_constants import MAX_SUGGESTION_LIMIT
+from app.services.helpers.constants import MAX_SUGGESTION_LIMIT
 
 
 class SuggestionValidators:

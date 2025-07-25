@@ -14,7 +14,7 @@ from app.schemas.chat import ChatMessage
 from app.exceptions import ChatServiceError, ValidationError, SessionNotFoundError
 from app.services.helpers.chat_validators import ChatValidators
 from app.services.helpers.chat_db_operations import ChatDBOperations
-from app.services.helpers.chat_constants import DEFAULT_CONVERSATION_LIMIT
+from app.services.helpers.constants import DEFAULT_CONVERSATION_LIMIT
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

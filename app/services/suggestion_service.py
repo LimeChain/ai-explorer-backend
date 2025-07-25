@@ -10,7 +10,7 @@ from app.schemas.suggestions import SuggestionContext
 from app.exceptions import ValidationError
 from app.services.helpers.suggestion_validators import SuggestionValidators
 from app.services.helpers.suggestion_db_operations import SuggestionDBOperations
-from app.services.helpers.suggestion_constants import DEFAULT_SUGGESTION_LIMIT
+from app.services.helpers.constants import DEFAULT_SUGGESTION_LIMIT
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

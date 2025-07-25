@@ -4,7 +4,7 @@ Validation utilities for chat service operations.
 from typing import Optional
 
 from app.exceptions import ValidationError
-from app.services.helpers.chat_constants import (
+from app.services.helpers.constants import (
     MAX_SESSION_ID_LENGTH, MAX_ACCOUNT_ID_LENGTH, MAX_MESSAGE_CONTENT_LENGTH,
     MAX_CONVERSATION_LIMIT, MessageRole
 )
