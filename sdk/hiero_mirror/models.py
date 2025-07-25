@@ -796,10 +796,16 @@ class NftTransactionHistory(BaseModel):
     transactions: List[NftTransactionTransfer]
     links: Links
 
+class InitialTransaction(BaseModel):
+    """Initial transaction ID."""
+    account_id: str
+    nonce: int
+    scheduled: bool
+    transaction_valid_start: str
 
 class ChunkInfo(BaseModel):
     """Chunk information for topic messages."""
-    initial_transaction_id: str
+    initial_transaction_id: InitialTransaction
     number: int
     total: int
 
