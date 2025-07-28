@@ -1,7 +1,7 @@
 """Add suggested_queries table
 
 Revision ID: ad6886ff187a
-Revises: 77ffb8af086d
+Revises: 928e3480ac21
 Create Date: 2025-07-17 17:26:49.222964
 
 """
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'ad6886ff187a'
-down_revision: Union[str, Sequence[str], None] = '77ffb8af086d'
+down_revision: Union[str, Sequence[str], None] = '928e3480ac21'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
