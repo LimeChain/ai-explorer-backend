@@ -4,11 +4,12 @@ Chat endpoint for the AI Explorer backend service.
 import logging
 import json
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy.orm import Session
 
 from app.schemas.chat import ChatRequest
 from app.services.llm_orchestrator import LLMOrchestrator
-from app.db.session import get_session_local
+from app.db.session import get_db, get_session_local
 from app.exceptions import ChatServiceError, ValidationError, LLMServiceError
 
 
@@ -18,7 +19,7 @@ llm_orchestrator = LLMOrchestrator()
 
 
 @router.websocket("/chat/ws/{session_id}")
-async def websocket_chat(websocket: WebSocket, session_id: str):
+async def websocket_chat(websocket: WebSocket, session_id: str, db: Session = Depends(get_db)):
     """
     WebSocket endpoint for real-time chat with the AI Explorer.
     
@@ -35,10 +36,6 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
     """
     await websocket.accept()
     logger.info(f"WebSocket connection established for session: {session_id}")
-    
-    # Create database session for this WebSocket connection
-    SessionLocal = get_session_local()
-    db = SessionLocal()
     
     try:
         while True:
@@ -123,7 +120,3 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
     except Exception as e:
         logger.error(f"WebSocket error for session {session_id}: {e}")
         await websocket.close(code=1011, reason="Internal server error")
-    finally:
-        # Always close the database session
-        db.close()
-        logger.info(f"Database session closed for WebSocket session {session_id}")
