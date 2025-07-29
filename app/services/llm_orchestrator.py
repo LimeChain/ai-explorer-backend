@@ -4,7 +4,7 @@ LLM Orchestrator service implementing agentic workflow with LangGraph.
 import logging
 from typing import AsyncGenerator, List, Optional, TypedDict
 
-from langchain_openai import ChatOpenAI
+from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_core.exceptions import LangChainException
 from langgraph.graph import END
@@ -48,11 +48,11 @@ class LLMOrchestrator:
     
     def __init__(self):
         """Initialize the LLM Orchestrator with agentic workflow."""
-        self.llm = ChatOpenAI(
-            api_key=settings.openai_api_key,
+        self.llm = init_chat_model(
             model=settings.chat_model,
             temperature=DEFAULT_TEMPERATURE,
             streaming=True,
+            api_key=settings.openai_api_key,
         )
         self.chat_service = ChatService()
         self.tool_parser = ToolCallParser()
