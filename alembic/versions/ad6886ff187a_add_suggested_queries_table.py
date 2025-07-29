@@ -28,6 +28,8 @@ def upgrade() -> None:
     sa.Column('query', sa.String(), nullable=False),
     sa.Column('context', sa.Enum('ANONYMOUS', 'CONNECTED', name='suggestion_context_enum'), nullable=False),
     sa.Column('display_order', sa.Integer(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_suggested_queries_context'), 'suggested_queries', ['context'], unique=False)
@@ -35,7 +37,7 @@ def upgrade() -> None:
     
     # Seed data for suggested queries
     from sqlalchemy.sql import table, column
-    from sqlalchemy import String, Integer, Enum as DBEnum
+    from sqlalchemy import String, Integer, Enum as DBEnum, DateTime
     from sqlalchemy.dialects.postgresql import UUID
 
     
@@ -43,7 +45,9 @@ def upgrade() -> None:
         column('id', UUID),
         column('query', String),
         column('context', DBEnum(name='suggestion_context_enum')),
-        column('display_order', Integer)
+        column('display_order', Integer),
+        column('created_at', DateTime(timezone=True)),
+        column('updated_at', DateTime(timezone=True))
     )
     
     # Define the seed data

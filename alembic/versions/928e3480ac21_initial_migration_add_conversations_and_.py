@@ -5,6 +5,8 @@ Revises:
 Create Date: 2025-07-17 18:00:00.000000
 
 """
+import uuid
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -22,7 +24,7 @@ def upgrade() -> None:
     """Upgrade schema."""
     # Create conversations table with account_id (not wallet_address)
     op.create_table('conversations',
-        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('id', sa.UUID(), nullable=False),
         sa.Column('session_id', sa.String(length=255), nullable=False),
         sa.Column('account_id', sa.String(length=50), nullable=True),  # Final column name
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -34,8 +36,8 @@ def upgrade() -> None:
     
     # Create messages table
     op.create_table('messages',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('conversation_id', sa.Integer(), nullable=False),
+        sa.Column('id', sa.UUID(), nullable=False),
+        sa.Column('conversation_id', sa.UUID(), nullable=False),
         sa.Column('role', sa.String(length=20), nullable=False),
         sa.Column('content', sa.Text(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),

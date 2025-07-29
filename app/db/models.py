@@ -19,7 +19,7 @@ class Conversation(Base):
     """
     __tablename__ = "conversations"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id = Column(String(255), unique=True, index=True, nullable=False)
     account_id = Column(String(50), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -37,7 +37,7 @@ class Message(Base):
     """
     __tablename__ = "messages"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
     role = Column(String(20), nullable=False)  # 'user' or 'assistant'
     content = Column(Text, nullable=False)
@@ -60,3 +60,6 @@ class SuggestedQuery(Base):
     query = Column(String, nullable=False)
     context = Column(DBEnum(SuggestionContext, name='suggestion_context_enum'), nullable=False, index=True)
     display_order = Column(Integer, default=0, nullable=False)  # For ordering suggestions in the UI
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
