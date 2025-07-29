@@ -4,12 +4,11 @@ Chat endpoint for the AI Explorer backend service.
 import logging
 import json
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.schemas.chat import ChatRequest
 from app.services.llm_orchestrator import LLMOrchestrator
-from app.db.session import get_db, get_session_local
+from app.db.session import get_session_local
 from app.exceptions import ChatServiceError, ValidationError, LLMServiceError
 
 
@@ -19,7 +18,7 @@ llm_orchestrator = LLMOrchestrator()
 
 
 @router.websocket("/chat/ws/{session_id}")
-async def websocket_chat(websocket: WebSocket, session_id: str, db: Session = Depends(get_db)):
+async def websocket_chat(websocket: WebSocket, session_id: str):
     """
     WebSocket endpoint for real-time chat with the AI Explorer.
     
@@ -42,8 +41,13 @@ async def websocket_chat(websocket: WebSocket, session_id: str, db: Session = De
             # Receive message from client
             data = await websocket.receive_text()
             logger.info(f"Received WebSocket message for session {session_id}: {data}")
-            
+
+            db = None
+
             try:
+                SessionLocal = get_session_local()
+                db = SessionLocal()  
+
                 message_data = json.loads(data)
                 
                 # Validate using ChatRequest schema
@@ -114,6 +118,9 @@ async def websocket_chat(websocket: WebSocket, session_id: str, db: Session = De
                 await websocket.send_text(json.dumps({
                     "error": "Internal server error"
                 }))
+            finally:
+                if db is not None:
+                    db.close()
                 
     except WebSocketDisconnect:
         logger.info(f"WebSocket client disconnected for session {session_id}")
