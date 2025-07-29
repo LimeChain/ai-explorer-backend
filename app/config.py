@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     database_pool_timeout: int = Field(default=30, description="Database connection pool timeout in seconds")
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
 
+    # Vector store settings
+    redis_url: str = Field(default="redis://localhost:6379", description="Redis connection URL for vector store")
+
 
 # Global settings instance
 settings = Settings()

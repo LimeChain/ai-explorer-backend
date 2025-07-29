@@ -5,6 +5,8 @@ This service handles GDPR-compliant storage of chat conversations for internal
 analysis and AI agent improvement while maintaining user privacy.
 """
 import logging
+
+from uuid import UUID
 from typing import Optional, List
 from uuid import UUID
 

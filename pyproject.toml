@@ -18,6 +18,8 @@ dependencies = [
     "psycopg2-binary>=2.9.0",
     "alembic>=1.13.0",
     "openevals>=0.1.0",
+    "langchain-redis>=0.2.3",
+    "redis>=5.0.0",
 ]
 
 [tool.uv.workspace]
