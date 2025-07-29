@@ -1,5 +1,8 @@
+import os
+
 from typing import Any, Dict, List, Union
 from datetime import datetime, timezone
+
 from mcp.server.fastmcp import FastMCP
 
 from .services.sdk_service import HederaSDKService
@@ -7,12 +10,51 @@ from .services.sdk_service import HederaSDKService
 # Initialize the FastMCP server for Hedera Mirror Node
 mcp = FastMCP("HederaMirrorNode")
 sdk_service = None
+vector_store_service = None
+document_processor = None
 
 def get_sdk_service():
     global sdk_service
     if sdk_service is None:
         sdk_service = HederaSDKService()
     return sdk_service
+
+async def get_vector_services():
+    """Initialize and return vector store services."""
+    global vector_store_service, document_processor
+    
+    if vector_store_service is None or document_processor is None:
+        try:
+            from .services.vector_store_service import VectorStoreService
+            from .services.document_processor import DocumentProcessor
+            
+            # Get configuration from environment variables
+            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379") # TODO: look for a way to utilize settings module
+            openai_api_key = os.getenv("OPENAI_API_KEY") # TODO: look for a way to utilize settings module
+            
+            if not openai_api_key:
+                raise ValueError("OPENAI_API_KEY environment variable is required")
+            
+            # Initialize services
+            vector_store_service = VectorStoreService(
+                redis_url=redis_url,
+                openai_api_key=openai_api_key,
+                index_name="sdk_methods" # TODO: make this dynamic
+            )
+            
+            document_processor = DocumentProcessor(vector_store_service)
+            
+            # Initialize with documentation file
+            doc_path = "hiero_mirror_sdk_methods_documentation.json" # TODO: make this dynamic
+            if os.path.exists(doc_path):
+                await document_processor.initialize_from_file(doc_path)
+            else:
+                raise FileNotFoundError(f"SDK documentation file not found: {doc_path}")
+                
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize vector services: {e}")
+    
+    return vector_store_service, document_processor
 
 @mcp.tool()
 async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
@@ -37,32 +79,53 @@ async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
     return await get_sdk_service().call_method(method_name, **kwargs)
 
 @mcp.tool()
-async def get_available_methods() -> List[str]:
+async def retrieve_sdk_method(query: str, max_results: int = 3) -> Dict[str, Any]:
     """
-    Get a list of all available public methods in the Hedera Mirror Node SDK.
+    Retrieve SDK methods using natural language queries via vector similarity search.
     
-    This tool helps the agent discover what methods are available to call.
-    
-    Returns:
-        List of available method names
-    """
-    return get_sdk_service().get_available_methods()
-
-@mcp.tool()
-async def get_method_signature(method_name: str) -> Dict[str, Any]:
-    """
-    Get the signature information for a specific SDK method.
-    
-    This tool helps the agent understand what parameters a method expects
-    and what types they should be.
+    This tool replaces get_available_methods and get_method_signature by using semantic
+    search to find the most relevant SDK methods based on the user's natural language query.
     
     Args:
-        method_name: The name of the method to inspect
+        query: Natural language description of what you want to do (e.g., "get account balance", "list transactions")
+        max_results: Maximum number of methods to return (default: 3, max: 10)
         
     Returns:
-        Dict containing parameter information, types, and defaults
+        Dict containing:
+        - query: The original query
+        - methods: List of matching methods with full details (name, description, parameters, returns, use_cases)
+        - count: Number of methods returned
+        
+    Example usage:
+        - retrieve_sdk_method(query="get account information")
+        - retrieve_sdk_method(query="list recent transactions", max_results=5)
+        - retrieve_sdk_method(query="check token balance")
     """
-    return get_sdk_service().get_method_signature(method_name)
+    try:
+        # Limit max_results to prevent excessive API calls
+        max_results = min(max(1, max_results), 10)
+        
+        # Get vector services
+        _, document_processor = await get_vector_services()
+        
+        # Search for methods
+        search_result = await document_processor.search_methods(query=query, k=3)
+        
+        return {
+            "query": query,
+            "methods": search_result.get("methods", []),
+            "count": search_result.get("results_count", 0),
+            "success": True
+        }
+        
+    except Exception as e:
+        return {
+            "query": query,
+            "methods": [],
+            "count": 0,
+            "success": False,
+            "error": str(e)
+        }
 
 @mcp.tool()
 async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[str, int, float]]], timestamp: Union[str, int, float] = None) -> Dict[str, Any]:

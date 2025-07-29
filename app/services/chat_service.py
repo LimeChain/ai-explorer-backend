@@ -5,6 +5,8 @@ This service handles GDPR-compliant storage of chat conversations for internal
 analysis and AI agent improvement while maintaining user privacy.
 """
 import logging
+
+from uuid import UUID
 from typing import Optional, List
 
 from sqlalchemy.orm import Session
@@ -60,25 +62,24 @@ class ChatService:
     @staticmethod
     def add_message(
         db: Session,
-        conversation_id: int, 
+        conversation_id: UUID, 
         role: str, 
         content: str
     ) -> Message:
         """Add a message to a conversation."""
         try:
             # Validate inputs
-            validated_conversation_id = ChatValidators.validate_conversation_id(conversation_id)
             validated_role = ChatValidators.validate_message_role(role)
             validated_content = ChatValidators.validate_message_content(content, role)
             
             logger.info(f"Adding {role} message to conversation {conversation_id}")
             
             # Verify conversation exists
-            if not ChatDBOperations.conversation_exists(db, validated_conversation_id):
+            if not ChatDBOperations.conversation_exists(db, conversation_id):
                 raise ValidationError(f"Conversation with ID {conversation_id} not found")
             
             # Create message
-            return ChatDBOperations.create_message(db, validated_conversation_id, validated_role, validated_content)
+            return ChatDBOperations.create_message(db, conversation_id, validated_role, validated_content)
             
         except ValidationError:
             logger.warning(f"Validation error in add_message: conversation_id={conversation_id}, role={role}")

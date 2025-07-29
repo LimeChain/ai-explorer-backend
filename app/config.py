@@ -26,7 +26,6 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
 
     mcp_endpoint: str = Field(default="http://mcp-server:8001/mcp/", description="MCP server endpoint")
-    chat_model: str = Field(default="gpt-4.1-mini", description="The model to use")
     allowed_origins: List[str] = Field(
         default=["*"],
         description="List of allowed CORS origins"
@@ -59,6 +58,9 @@ class Settings(BaseSettings):
     database_max_overflow: int = Field(default=0, description="Database connection pool max overflow")
     database_pool_timeout: int = Field(default=30, description="Database connection pool timeout in seconds")
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
+
+    # Vector store settings
+    redis_url: str = Field(default="redis://localhost:6379", description="Redis connection URL for vector store")
 
 
 # Global settings instance
