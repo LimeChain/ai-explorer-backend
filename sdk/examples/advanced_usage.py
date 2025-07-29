@@ -7,7 +7,7 @@ from hiero_mirror import MirrorNodeClient, AsyncMirrorNodeClient
 from hiero_mirror.utils import to_timestamp, from_timestamp, format_hbar_balance
 
 
-def timestamp_filtering_example():
+def timestamp_filtering_example() -> None:
     """Example of timestamp filtering."""
     print("=== Timestamp Filtering Example ===")
     
@@ -52,7 +52,7 @@ def timestamp_filtering_example():
         client.close()
 
 
-def token_analysis_example():
+def token_analysis_example() -> None:
     """Example of token analysis."""
     print("\n=== Token Analysis Example ===")
     
@@ -97,7 +97,7 @@ def token_analysis_example():
         client.close()
 
 
-def account_analysis_example():
+def account_analysis_example() -> None:
     """Example of account analysis."""
     print("\n=== Account Analysis Example ===")
     
@@ -162,7 +162,7 @@ def account_analysis_example():
         client.close()
 
 
-async def concurrent_data_fetching():
+async def concurrent_data_fetching() -> None:
     """Example of concurrent data fetching."""
     print("\n=== Concurrent Data Fetching Example ===")
     
@@ -202,7 +202,7 @@ async def concurrent_data_fetching():
             print(f"Error: {e}")
 
 
-def network_monitoring_example():
+def network_monitoring_example() -> None:
     """Example of network monitoring."""
     print("\n=== Network Monitoring Example ===")
     
@@ -254,7 +254,7 @@ def network_monitoring_example():
         client.close()
 
 
-def error_handling_example():
+def error_handling_example() -> None:
     """Example of error handling."""
     print("\n=== Error Handling Example ===")
     
@@ -291,7 +291,7 @@ def error_handling_example():
         client.close()
 
 
-def main():
+def main() -> None:
     """Main function to run all advanced examples."""
     print("Hiero Mirror Node SDK Advanced Examples")
     print("=" * 60)

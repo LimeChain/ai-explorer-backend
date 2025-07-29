@@ -2,7 +2,7 @@
 Global exception handlers for the AI Explorer backend service.
 """
 import logging
-from fastapi import Request
+from fastapi import Request, FastAPI
 from fastapi.responses import JSONResponse
 
 from app.exceptions import LLMServiceError, ValidationError
@@ -54,7 +54,7 @@ async def validation_error_handler(request: Request, exc: ValidationError) -> JS
     )
 
 
-def register_exception_handlers(app):
+def register_exception_handlers(app: FastAPI) -> None:
     """
     Register all exception handlers with the FastAPI application.
     

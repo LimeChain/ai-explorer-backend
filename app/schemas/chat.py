@@ -45,7 +45,7 @@ class ChatRequest(BaseModel):
         description="Client-generated session identifier for request traceability"
     )
     
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, __context: None) -> None:
         """Validate that either messages or query is provided."""
         if not self.messages and not self.query:
             raise ValueError("Either 'messages' or 'query' must be provided")

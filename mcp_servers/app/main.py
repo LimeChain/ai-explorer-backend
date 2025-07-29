@@ -8,7 +8,7 @@ from .services.sdk_service import HederaSDKService
 mcp = FastMCP("HederaMirrorNode")
 sdk_service = None
 
-def get_sdk_service():
+def get_sdk_service() -> HederaSDKService:
     global sdk_service
     if sdk_service is None:
         sdk_service = HederaSDKService()

@@ -43,7 +43,7 @@ def load_examples_from_csv(csv_file: str = "examples.csv") -> List[Dict]:
     return examples
 
 _EXAMPLES = None
-def get_examples():
+def get_examples() -> List[Dict[str, Any]]:
     global _EXAMPLES
     if _EXAMPLES is None:
         _EXAMPLES = load_examples_from_csv()

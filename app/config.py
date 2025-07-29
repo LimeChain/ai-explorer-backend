@@ -26,7 +26,6 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
 
     mcp_endpoint: str = Field(default="http://mcp-server:8001/mcp/", description="MCP server endpoint")
-    chat_model: str = Field(default="gpt-4.1-mini", description="The model to use")
     allowed_origins: List[str] = Field(
         default=["*"],
         description="List of allowed CORS origins"
@@ -37,7 +36,7 @@ class Settings(BaseSettings):
     langsmith_api_key: SecretStr = Field(default=SecretStr("your-api-key"), min_length=1, description="LangSmith API key (required)")
     langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", description="LangSmith API endpoint")
 
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, __context: None) -> None:
         """Initialize LangSmith environment variables after settings are loaded."""
 
         if self.langsmith_tracing:

@@ -51,6 +51,6 @@ logger.info("AI Explorer Backend service started")
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     """Root endpoint for health check."""
     return {"message": "AI Explorer Backend is running"}

@@ -37,7 +37,7 @@ def get_suggested_queries(
         description="Maximum number of suggestions to return (1-100)"
     ),
     db: Session = Depends(get_db)
-):
+) -> SuggestedQueriesResponse:
     """
     Retrieves a list of suggested queries from the database based on the user's context.
 
