@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
     
     openai_api_key: SecretStr = Field(default=SecretStr("your-api-key"), min_length=1, description="OpenAI API key (required)")
+    embedding_model: str = Field(default="text-embedding-3-small", description="The model to use for embeddings")
     chat_model: str = Field(default="gpt-4.1-mini", description="The model to use")
 
     environment: str = Field(default="development", pattern="^(development|production|staging)$")
@@ -60,8 +61,8 @@ class Settings(BaseSettings):
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
 
     # Vector store settings
-    redis_url: str = Field(default="redis://localhost:6379", description="Redis connection URL for vector store")
-
+    vector_store_url: str = Field(default="postgresql://ai_explorer:ai_explorer@localhost:5432/ai_explorer", description="Vector store connection URL")
+    collection_name: str = Field(default="sdk_methods", description="Vector store collection name")
 
 # Global settings instance
 settings = Settings()

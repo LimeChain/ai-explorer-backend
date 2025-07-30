@@ -7,6 +7,10 @@ from mcp.server.fastmcp import FastMCP
 
 from .services.sdk_service import HederaSDKService
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Initialize the FastMCP server for Hedera Mirror Node
 mcp = FastMCP("HederaMirrorNode")
 sdk_service = None
@@ -19,7 +23,7 @@ def get_sdk_service() -> HederaSDKService:
         sdk_service = HederaSDKService()
     return sdk_service
 
-async def get_vector_services():
+def get_vector_services():
     """Initialize and return vector store services."""
     global vector_store_service, document_processor
     
@@ -29,17 +33,20 @@ async def get_vector_services():
             from .services.document_processor import DocumentProcessor
             
             # Get configuration from environment variables
-            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379") # TODO: look for a way to utilize settings module
+            vector_store_url = os.getenv("VECTOR_STORE_URL") # TODO: look for a way to utilize settings module
             openai_api_key = os.getenv("OPENAI_API_KEY") # TODO: look for a way to utilize settings module
+            collection_name = os.getenv("COLLECTION_NAME") # TODO: look for a way to utilize settings module
+            embedding_model = os.getenv("EMBEDDING_MODEL") # TODO: look for a way to utilize settings module
             
             if not openai_api_key:
                 raise ValueError("OPENAI_API_KEY environment variable is required")
             
             # Initialize services
             vector_store_service = VectorStoreService(
-                redis_url=redis_url,
+                connection_string=vector_store_url,
                 openai_api_key=openai_api_key,
-                index_name="sdk_methods" # TODO: make this dynamic
+                collection_name=collection_name,
+                embedding_model=embedding_model
             )
             
             document_processor = DocumentProcessor(vector_store_service)
@@ -47,7 +54,7 @@ async def get_vector_services():
             # Initialize with documentation file
             doc_path = "hiero_mirror_sdk_methods_documentation.json" # TODO: make this dynamic
             if os.path.exists(doc_path):
-                await document_processor.initialize_from_file(doc_path)
+                document_processor.initialize_from_file(doc_path)
             else:
                 raise FileNotFoundError(f"SDK documentation file not found: {doc_path}")
                 
@@ -104,17 +111,15 @@ async def retrieve_sdk_method(query: str, max_results: int = 3) -> Dict[str, Any
     try:
         # Limit max_results to prevent excessive API calls
         max_results = min(max(1, max_results), 10)
-        
         # Get vector services
-        _, document_processor = await get_vector_services()
+        _, document_processor = get_vector_services()
         
         # Search for methods
-        search_result = await document_processor.search_methods(query=query, k=3)
+        search_result = document_processor.search_methods(query=query, k=max_results)
         
         return {
             "query": query,
             "methods": search_result.get("methods", []),
-            "count": search_result.get("results_count", 0),
             "success": True
         }
         
@@ -122,7 +127,6 @@ async def retrieve_sdk_method(query: str, max_results: int = 3) -> Dict[str, Any
         return {
             "query": query,
             "methods": [],
-            "count": 0,
             "success": False,
             "error": str(e)
         }

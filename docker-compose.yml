@@ -18,6 +18,23 @@ services:
       timeout: 5s
       retries: 5
 
+  pgvector:
+    image: pgvector/pgvector:pg16
+    container_name: pgvector-container
+    environment:
+      POSTGRES_DB: ai_explorer
+      POSTGRES_USER: ai_explorer
+      POSTGRES_PASSWORD: ai_explorer
+    ports:
+      - "6024:5432"
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_explorer -d ai_explorer"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: .
     container_name: ai-explorer-backend
@@ -54,3 +71,4 @@ services:
 
 volumes:
   postgres_data:
+  pgvector_data:

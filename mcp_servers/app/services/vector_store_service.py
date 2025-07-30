@@ -1,40 +1,46 @@
 """
-Vector store service for SDK method retrieval using Redis and LangChain embeddings.
+Vector store service for SDK method retrieval using PostgreSQL pgVector and LangChain embeddings.
 """
 import json
 import logging
 from typing import Dict, List, Any, Optional
-import redis
+from sqlalchemy import create_engine, text
 from langchain_openai import OpenAIEmbeddings
-from langchain_redis import RedisVectorStore
+from langchain_postgres import PGVector
+from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
 
 class VectorStoreService:
-    """Service for managing SDK method vector embeddings in Redis."""
+    """Service for managing SDK method vector embeddings in PostgreSQL with pgVector."""
     
-    def __init__(self, redis_url: str, openai_api_key: str, index_name: str = "sdk_methods"):
-        self.redis_url = redis_url
-        self.index_name = index_name
-        self.embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key, model="text-embedding-3-large")
-        self.redis_client = redis.from_url(redis_url)
-        self.vector_store: Optional[RedisVectorStore] = None
+    def __init__(self, connection_string: str, openai_api_key: str, collection_name: str, embedding_model: str):
+        self.connection_string = connection_string
+        self.collection_name = collection_name
+        self.embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key, model=embedding_model)
+        self.engine = create_engine(connection_string)
+        self.vector_store: Optional[PGVector] = None
         
-    async def initialize_vector_store(self):
-        """Initialize the Redis vector store."""
-        try:
-            self.vector_store = RedisVectorStore(
-                redis_url=self.redis_url,
-                index_name=self.index_name,
-                embeddings=self.embeddings
+    def initialize_vector_store(self):
+        """Initialize the PostgreSQL pgVector store."""
+        try:       
+            # Initialize PGVector following langchain-postgres documentation
+            self.vector_store = PGVector(
+                embeddings=self.embeddings,
+                collection_name=self.collection_name,
+                connection=self.connection_string,
+                use_jsonb=True
             )
-            logger.info(f"Vector store initialized with index: {self.index_name}")
+            logger.info(f"Vector store initialized with collection: {self.collection_name}")
+        except RuntimeError as e:
+            # Re-raise RuntimeError with pgVector installation message
+            raise
         except Exception as e:
             logger.error(f"Failed to initialize vector store: {e}")
-            raise
+            raise RuntimeError(f"Vector store initialization failed: {e}") from e
     
-    async def load_methods_from_documentation(self, documentation_path: str):
+    def load_methods_from_documentation(self, documentation_path: str):
         """Load and embed SDK methods from documentation JSON."""
         try:
             with open(documentation_path, 'r') as f:
@@ -44,33 +50,35 @@ class VectorStoreService:
             logger.info(f"Loading {len(methods)} methods into vector store")
             
             documents = []
-            metadatas = []
             
             for method in methods:
                 # Create searchable text combining all relevant information
                 searchable_text = self._create_searchable_text(method)
                 
-                # Prepare metadata with full method information
+                # Prepare metadata with optimized structure
                 metadata = {
                     "method_name": method["name"],
                     "description": method["description"],
-                    "parameters": json.dumps(method.get("parameters", [])),
-                    "returns": json.dumps(method.get("returns", {})),
-                    "use_cases": json.dumps(method.get("use_cases", [])),
-                    "category": method.get("category", "unknown")
+                    "category": method.get("category", "unknown"),
+                    "param_names": [p["name"] for p in method.get("parameters", [])],
+                    # Store return type for filtering
+                    "return_type": method.get("returns", {}).get("type", "unknown"),
+                    # Keep original data as JSON only for detailed responses
+                    "full_data": json.dumps(method)
                 }
                 
-                documents.append(searchable_text)
-                metadatas.append(metadata)
+                # Create Document object with content and metadata
+                doc = Document(
+                    page_content=searchable_text,
+                    metadata=metadata
+                )
+                documents.append(doc)
             
             # Add documents to vector store
             if self.vector_store is None:
-                await self.initialize_vector_store()
+                self.initialize_vector_store()
             
-            await self.vector_store.aadd_texts(
-                texts=documents,
-                metadatas=metadatas
-            )
+            self.vector_store.add_documents(documents)
             
             logger.info(f"Successfully loaded {len(documents)} methods into vector store")
             
@@ -79,58 +87,62 @@ class VectorStoreService:
             raise
     
     def _create_searchable_text(self, method: Dict[str, Any]) -> str:
-        """Create searchable text from method information."""
-        parts = [
-            f"Method: {method['name']}",
-            f"Description: {method['description']}"
-        ]
+        """Create optimized searchable text for vector embeddings."""
+        # Focus on natural language that will create good embeddings
+        parts = []
         
-        # Add parameter descriptions
+        # Method name and description are most important
+        parts.append(method['name'])
+        parts.append(method['description'])
+        
+        # Add parameter information in natural language
         if method.get("parameters"):
-            param_descriptions = []
+            param_texts = []
             for param in method["parameters"]:
-                param_desc = f"{param['name']} ({param['type']}): {param['description']}"
-                param_descriptions.append(param_desc)
-            parts.append(f"Parameters: {'; '.join(param_descriptions)}")
+                # Create natural language parameter description
+                param_text = f"{param['name']} parameter {param['description']}"
+                param_texts.append(param_text)
+            parts.extend(param_texts)
         
-        # Add use cases
+        # Add use cases as they provide good semantic context
         if method.get("use_cases"):
-            parts.append(f"Use cases: {'; '.join(method['use_cases'])}")
+            parts.extend(method['use_cases'])
         
-        # Add return type info
-        if method.get("returns"):
-            returns = method["returns"]
-            parts.append(f"Returns: {returns.get('type', 'Unknown')}")
+        # Add return information
+        if method.get("returns") and method["returns"].get("type"):
+            parts.append(f"returns {method['returns']['type']}")
         
-        # Add category
+        # Add category for semantic grouping
         if method.get("category"):
-            parts.append(f"Category: {method['category']}")
+            parts.append(f"{method['category']} functionality")
         
-        return " | ".join(parts)
+        # Join with spaces for natural language flow
+        return " ".join(parts)
     
-    async def retrieve_methods(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
+    def retrieve_methods(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
         """Retrieve most relevant methods based on query."""
         try:
             if self.vector_store is None:
-                await self.initialize_vector_store()
+                self.initialize_vector_store()
             
             # Perform similarity search
-            results = await self.vector_store.asimilarity_search(
+            results = self.vector_store.similarity_search(
                 query=query,
                 k=k
             )
             
             retrieved_methods = []
             for doc in results:
+                # Parse the full method data from metadata
+                full_method_data = json.loads(doc.metadata["full_data"])
+                
                 method_info = {
-                    # "method_name": doc.metadata["method_name"],
-                    # "description": doc.metadata["description"],
-                    # "parameters": json.loads(doc.metadata["parameters"]),
-                    # "returns": json.loads(doc.metadata["returns"]),
-                    # "use_cases": json.loads(doc.metadata["use_cases"]),
-                    # "category": doc.metadata["category"],
-                    # "similarity_score": float(score),
-                    "searchable_content": doc.page_content
+                    "method_name": doc.metadata["method_name"],
+                    "description": doc.metadata["description"],
+                    "parameters": full_method_data.get("parameters", []),
+                    "returns": full_method_data.get("returns", {}),
+                    "use_cases": full_method_data.get("use_cases", []),
+                    "category": doc.metadata["category"],
                 }
                 retrieved_methods.append(method_info)
             
@@ -141,53 +153,92 @@ class VectorStoreService:
             logger.error(f"Failed to retrieve methods for query '{query}': {e}")
             raise
     
-    async def check_index_exists(self) -> bool:
-        """Check if the vector store index exists."""
+    def check_index_exists(self) -> bool:
+        """Check if the vector store collection exists."""
         try:
-            # Check if index exists in Redis
-            index_info = self.redis_client.ft(self.index_name).info()
-            return True
-        except Exception:
+            # Check if the pgVector collection table exists
+            with self.engine.connect() as conn:
+                result = conn.execute(text(
+                    "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'langchain_pg_collection');"
+                ))
+                collection_table_exists = result.scalar()
+                
+                if not collection_table_exists:
+                    return False
+                
+                # Check if our specific collection exists
+                result = conn.execute(text(
+                    "SELECT EXISTS (SELECT 1 FROM langchain_pg_collection WHERE name = :collection_name);"
+                ), {"collection_name": self.collection_name})
+                return result.scalar()
+        except Exception as e:
+            logger.error(f"Error checking collection existence: {e}")
             return False
     
-    async def rebuild_index(self, documentation_path: str):
-        """Rebuild the entire vector index."""
+    def rebuild_index(self, documentation_path: str):
+        """Rebuild the entire vector collection."""
         try:
-            # Delete existing index if it exists
-            if await self.check_index_exists():
-                self.redis_client.ft(self.index_name).dropindex(delete_documents=True)
-                logger.info(f"Dropped existing index: {self.index_name}")
+            # Delete existing collection if it exists
+            if self.check_index_exists():
+                self._delete_collection()
+                logger.info(f"Dropped existing collection: {self.collection_name}")
             
             # Reinitialize and reload
             self.vector_store = None
-            await self.load_methods_from_documentation(documentation_path)
-            logger.info("Vector index rebuilt successfully")
+            self.load_methods_from_documentation(documentation_path)
+            logger.info("Vector collection rebuilt successfully")
             
         except Exception as e:
-            logger.error(f"Failed to rebuild index: {e}")
+            logger.error(f"Failed to rebuild collection: {e}")
             raise
     
-    async def health_check(self) -> Dict[str, Any]:
+    def _delete_collection(self):
+        """Delete the collection and its documents."""
+        try:
+            with self.engine.connect() as conn:
+                # Delete from embedding table first (if exists)
+                conn.execute(text(
+                    "DELETE FROM langchain_pg_embedding WHERE collection_id = "
+                    "(SELECT uuid FROM langchain_pg_collection WHERE name = :collection_name);"
+                ), {"collection_name": self.collection_name})
+                
+                # Delete the collection
+                conn.execute(text(
+                    "DELETE FROM langchain_pg_collection WHERE name = :collection_name;"
+                ), {"collection_name": self.collection_name})
+                
+                conn.commit()
+                logger.info(f"Successfully deleted collection: {self.collection_name}")
+        except Exception as e:
+            logger.error(f"Failed to delete collection: {e}")
+            raise
+    
+    def health_check(self) -> Dict[str, Any]:
         """Check the health of the vector store service."""
         try:
-            # Check Redis connection
-            self.redis_client.ping()
+            # Check PostgreSQL connection
+            with self.engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
             
-            # Check if index exists
-            index_exists = await self.check_index_exists()
+            # Check if collection exists
+            collection_exists = self.check_index_exists()
             
-            # Get index stats if it exists
+            # Get collection stats if it exists
             doc_count = 0
-            if index_exists:
-                info = self.redis_client.ft(self.index_name).info()
-                doc_count = info.get("num_docs", 0)
+            if collection_exists:
+                with self.engine.connect() as conn:
+                    result = conn.execute(text(
+                        "SELECT COUNT(*) FROM langchain_pg_embedding WHERE collection_id = "
+                        "(SELECT uuid FROM langchain_pg_collection WHERE name = :collection_name);"
+                    ), {"collection_name": self.collection_name})
+                    doc_count = result.scalar() or 0
             
             return {
                 "status": "healthy",
-                "redis_connected": True,
-                "index_exists": index_exists,
+                "postgres_connected": True,
+                "collection_exists": collection_exists,
                 "document_count": doc_count,
-                "index_name": self.index_name
+                "collection_name": self.collection_name
             }
             
         except Exception as e:
@@ -195,7 +246,7 @@ class VectorStoreService:
             return {
                 "status": "unhealthy",
                 "error": str(e),
-                "redis_connected": False,
-                "index_exists": False,
+                "postgres_connected": False,
+                "collection_exists": False,
                 "document_count": 0
             }
