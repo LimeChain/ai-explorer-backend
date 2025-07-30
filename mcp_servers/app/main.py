@@ -86,7 +86,7 @@ async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
     return await get_sdk_service().call_method(method_name, **kwargs)
 
 @mcp.tool()
-async def retrieve_sdk_method(query: str, max_results: int = 3) -> Dict[str, Any]:
+async def retrieve_sdk_method(query: str) -> Dict[str, Any]:
     """
     Retrieve SDK methods using natural language queries via vector similarity search.
     
@@ -95,7 +95,6 @@ async def retrieve_sdk_method(query: str, max_results: int = 3) -> Dict[str, Any
     
     Args:
         query: Natural language description of what you want to do (e.g., "get account balance", "list transactions")
-        max_results: Maximum number of methods to return (default: 3, max: 10)
         
     Returns:
         Dict containing:
@@ -105,17 +104,14 @@ async def retrieve_sdk_method(query: str, max_results: int = 3) -> Dict[str, Any
         
     Example usage:
         - retrieve_sdk_method(query="get account information")
-        - retrieve_sdk_method(query="list recent transactions", max_results=5)
         - retrieve_sdk_method(query="check token balance")
     """
     try:
-        # Limit max_results to prevent excessive API calls
-        max_results = min(max(1, max_results), 10)
         # Get vector services
         _, document_processor = get_vector_services()
         
         # Search for methods
-        search_result = document_processor.search_methods(query=query, k=max_results)
+        search_result = document_processor.search_methods(query=query, k=3)
         
         return {
             "query": query,
@@ -155,15 +151,6 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
     """
     async def calculate_single_hbar_value(hbar_amount, timestamp):
         try:
-            # Get current exchange rate using the SDK
-            exchange_rate_params = {}
-            if timestamp:
-                exchange_rate_params["timestamp"] = str(timestamp)
-                
-            exchange_rate_result = await get_sdk_service().call_method(
-                "get_network_exchange_rate", **exchange_rate_params
-            )
-            
             if not exchange_rate_result.get("success", False):
                 return {
                     "error": f"Failed to fetch exchange rate: {exchange_rate_result.get('error', 'Unknown error')}",
@@ -241,7 +228,15 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
     
     calculations = {}
     all_successful = True
-    
+    exchange_rate_params = {}
+
+    if timestamp:
+        exchange_rate_params["timestamp"] = str(timestamp)
+
+    exchange_rate_result = await get_sdk_service().call_method(
+        "get_network_exchange_rate", **exchange_rate_params
+    )
+
     for hbar_amount in hbar_amount_list:
         result = await calculate_single_hbar_value(hbar_amount, timestamp)
         key = str(hbar_amount)
@@ -254,17 +249,6 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
         "count": len(calculations),
         "success": all_successful
     }
-
-
-@mcp.tool()
-async def health_check() -> Dict[str, str]:
-    """
-    Check the health status of the Hedera Mirror Node MCP Server.
-    
-    Returns:
-        Dict with status information
-    """
-    return {"status": "ok", "service": "HederaMirrorNode"}
 
 @mcp.tool()
 async def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, float]]]) -> Dict[str, Any]:

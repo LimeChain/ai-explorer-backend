@@ -65,10 +65,26 @@ class ToolCallParser:
     def _try_parse_json(self, json_candidate: str) -> Optional[Dict[str, Any]]:
         """Attempt to parse JSON and validate tool call structure."""
         try:
-            parsed = json.loads(json_candidate)
+            # Fix common Python-to-JSON conversion issues
+            fixed_json = self._fix_python_syntax(json_candidate)
+            parsed = json.loads(fixed_json)
             return self._validate_tool_call(parsed)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
             return None
+    
+    def _fix_python_syntax(self, json_str: str) -> str:
+        """Fix common Python syntax issues in JSON strings."""
+        # Replace Python boolean literals with JSON boolean literals
+        json_str = json_str.replace(': True', ': true')
+        json_str = json_str.replace(': False', ': false')
+        json_str = json_str.replace(': None', ': null')
+        
+        # Handle cases with different spacing
+        json_str = json_str.replace(':True', ':true')
+        json_str = json_str.replace(':False', ':false')
+        json_str = json_str.replace(':None', ':null')
+        
+        return json_str
     
     def _validate_tool_call(self, parsed_json: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Validate and extract tool call from parsed JSON."""
