@@ -28,3 +28,48 @@ class ValidationError(Exception):
         message: Human-readable error message describing the validation failure
     """
     pass
+
+
+class DatabaseError(Exception):
+    """
+    Exception raised when database operations fail.
+    
+    This exception wraps SQLAlchemy exceptions and provides
+    application-specific error handling for database operations.
+    
+    Args:
+        message: Human-readable error message
+        original_error: The original exception that caused this error
+    """
+    def __init__(self, message: str, original_error: Exception = None):
+        super().__init__(message)
+        self.original_error = original_error
+
+
+class ChatServiceError(DatabaseError):
+    """
+    Exception raised when chat service operations fail.
+    
+    Specific to chat-related database operations like conversation
+    management and message persistence.
+    """
+    pass
+
+
+class SuggestionServiceError(DatabaseError):
+    """
+    Exception raised when suggestion service operations fail.
+    
+    Specific to suggestion-related database operations.
+    """
+    pass
+
+
+class SessionNotFoundError(DatabaseError):
+    """
+    Exception raised when a requested session is not found.
+    
+    Used when trying to retrieve conversation history or messages
+    for a non-existent session.
+    """
+    pass

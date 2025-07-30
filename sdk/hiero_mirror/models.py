@@ -191,8 +191,8 @@ class AccountsResponse(BaseModel):
 class NftTransfer(BaseModel):
     """NFT transfer information."""
     is_approval: bool
-    receiver_account_id: str
-    sender_account_id: str
+    receiver_account_id: Optional[str] = None
+    sender_account_id: Optional[str] = None
     serial_number: int
     token_id: str
 
@@ -796,10 +796,16 @@ class NftTransactionHistory(BaseModel):
     transactions: List[NftTransactionTransfer]
     links: Links
 
+class InitialTransaction(BaseModel):
+    """Initial transaction ID."""
+    account_id: str
+    nonce: int
+    scheduled: bool
+    transaction_valid_start: str
 
 class ChunkInfo(BaseModel):
     """Chunk information for topic messages."""
-    initial_transaction_id: str
+    initial_transaction_id: InitialTransaction
     number: int
     total: int
 

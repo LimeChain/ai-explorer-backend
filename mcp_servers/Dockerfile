@@ -1,38 +1,22 @@
-# Build stage
-FROM python:3.11-slim as builder
+FROM python:3.13-slim
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
-# Set working directory
 WORKDIR /app
 
-# Copy dependency files
-COPY pyproject.toml uv.lock ./
-
-# Install dependencies
-RUN uv sync --frozen --no-dev
-
-# Production stage
-FROM python:3.11-slim
-
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+RUN pip install uv
 
-# Set working directory
-WORKDIR /app
+# Copy the SDK and MCP server code
+COPY ./sdk ./sdk
+COPY ./mcp_servers ./mcp_servers
 
-# Copy virtual environment from builder
-COPY --from=builder /app/.venv /app/.venv
+# Install the local SDK as an editable package
+RUN cd sdk && uv pip install --system -e .
 
-# Copy application code
-COPY app/ ./app/
+# Install MCP server dependencies
+RUN cd mcp_servers && uv pip install --system -e .
 
-# Make sure to use venv
-ENV PATH="/app/.venv/bin:$PATH"
-
-# Expose port
+# Expose the MCP server port
 EXPOSE 8001
 
-# Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
+# Run the MCP server
+CMD ["python", "mcp_servers/main.py"]

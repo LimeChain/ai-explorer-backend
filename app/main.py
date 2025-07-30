@@ -2,10 +2,9 @@
 Main FastAPI application for the AI Explorer backend service.
 """
 import logging
-import os
 from fastapi import FastAPI
 
-from app.api.endpoints import chat
+from app.api.endpoints import chat, suggestions
 from app.config import settings
 from app.exception_handlers import register_exception_handlers
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,12 +44,13 @@ app.add_middleware(
 register_exception_handlers(app)
 
 # Include routers
-app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
+app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
+app.include_router(suggestions.router, prefix="/api/v1", tags=["suggestions"])
 
 logger.info("AI Explorer Backend service started")
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     """Root endpoint for health check."""
     return {"message": "AI Explorer Backend is running"}

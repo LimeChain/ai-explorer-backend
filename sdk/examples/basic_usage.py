@@ -5,7 +5,7 @@ import asyncio
 from hiero_mirror import MirrorNodeClient, AsyncMirrorNodeClient
 
 
-def sync_example():
+def sync_example() -> None:
     """Example using the synchronous client."""
     print("=== Synchronous Client Example ===")
     
@@ -60,7 +60,7 @@ def sync_example():
         client.close()
 
 
-async def async_example():
+async def async_example() -> None:
     """Example using the asynchronous client."""
     print("\n=== Asynchronous Client Example ===")
     
@@ -100,7 +100,7 @@ async def async_example():
             print(f"Error: {e}")
 
 
-def pagination_example():
+def pagination_example() -> None:
     """Example of pagination."""
     print("\n=== Pagination Example ===")
     
@@ -149,7 +149,7 @@ def pagination_example():
         client.close()
 
 
-def contract_example():
+def contract_example() -> None:
     """Example of contract operations."""
     print("\n=== Contract Example ===")
     
@@ -192,7 +192,7 @@ def contract_example():
         client.close()
 
 
-def main():
+def main() -> None:
     """Main function to run all examples."""
     print("Hiero Mirror Node SDK Examples")
     print("=" * 50)

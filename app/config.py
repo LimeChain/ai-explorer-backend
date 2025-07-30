@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     environment: str = Field(default="development", pattern="^(development|production|staging)$")
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
 
-    mcp_endpoint: str = Field(default="http://localhost:8001/mcp/", description="MCP server endpoint")
+    mcp_endpoint: str = Field(default="http://mcp-server:8001/mcp/", description="MCP server endpoint")
     allowed_origins: List[str] = Field(
         default=["*"],
         description="List of allowed CORS origins"
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     langsmith_api_key: SecretStr = Field(default=SecretStr("your-api-key"), min_length=1, description="LangSmith API key (required)")
     langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", description="LangSmith API endpoint")
 
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, __context: None) -> None:
         """Initialize LangSmith environment variables after settings are loaded."""
 
         if self.langsmith_tracing:
@@ -49,6 +49,15 @@ class Settings(BaseSettings):
             os.environ.pop("LANGCHAIN_ENDPOINT", None)
             os.environ.pop("LANGCHAIN_API_KEY", None)
             os.environ.pop("LANGCHAIN_PROJECT", None)
+    # Database settings
+    database_url: str = Field(
+        default="postgresql://ai_explorer:ai_explorer@localhost:5432/ai_explorer", 
+        description="Database connection URL"
+    )
+    database_pool_size: int = Field(default=20, description="Database connection pool size")
+    database_max_overflow: int = Field(default=5, description="Database connection pool max overflow")
+    database_pool_timeout: int = Field(default=30, description="Database connection pool timeout in seconds")
+    database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
 
 
 # Global settings instance
