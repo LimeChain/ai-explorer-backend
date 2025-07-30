@@ -3,6 +3,7 @@ Database operation utilities for chat service.
 """
 import logging
 from typing import List, Optional
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
@@ -64,7 +65,7 @@ class ChatDBOperations:
             raise ChatServiceError("Database error occurred while updating conversation", e) from e
     
     @staticmethod
-    def create_message(db: Session, conversation_id: int, role: str, content: str) -> Message:
+    def create_message(db: Session, conversation_id: UUID, role: str, content: str) -> Message:
         """Create new message."""
         try:
             message = Message(
@@ -87,7 +88,7 @@ class ChatDBOperations:
             raise ChatServiceError("Database error occurred while adding message", e) from e
     
     @staticmethod
-    def get_conversation_messages(db: Session, conversation_id: int, limit: int) -> List[Message]:
+    def get_conversation_messages(db: Session, conversation_id: UUID, limit: int) -> List[Message]:
         """Get messages for a conversation."""
         try:
             return db.query(Message).filter(
@@ -98,7 +99,7 @@ class ChatDBOperations:
             raise ChatServiceError("Database error occurred while retrieving messages", e) from e
     
     @staticmethod
-    def conversation_exists(db: Session, conversation_id: int) -> bool:
+    def conversation_exists(db: Session, conversation_id: UUID) -> bool:
         """Check if conversation exists."""
         try:
             return db.query(Conversation).filter(Conversation.id == conversation_id).first() is not None

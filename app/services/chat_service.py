@@ -6,6 +6,7 @@ analysis and AI agent improvement while maintaining user privacy.
 """
 import logging
 from typing import Optional, List
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -60,7 +61,7 @@ class ChatService:
     @staticmethod
     def add_message(
         db: Session,
-        conversation_id: int, 
+        conversation_id: UUID, 
         role: str, 
         content: str
     ) -> Message:

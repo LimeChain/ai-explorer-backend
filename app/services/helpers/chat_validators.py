@@ -69,13 +69,6 @@ class ChatValidators:
         return role
     
     @staticmethod
-    def validate_conversation_id(conversation_id: int) -> int:
-        """Validate conversation ID."""
-        if not isinstance(conversation_id, int) or conversation_id <= 0:
-            raise ValidationError("Conversation ID must be a positive integer")
-        return conversation_id
-    
-    @staticmethod
     def validate_limit(limit: int) -> int:
         """Validate conversation history limit."""
         if not isinstance(limit, int) or limit <= 0:
