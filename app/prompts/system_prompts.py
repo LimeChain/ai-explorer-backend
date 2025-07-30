@@ -6,7 +6,7 @@ AGENTIC_SYSTEM_PROMPT = """
 
 ### 2. Available Tools
 
-CRITICAL: You can ONLY call these 5 specific tools. Any other tool name will result in an error:
+CRITICAL: You can ONLY call these 4 specific tools. Any other tool name will result in an error:
 
 1. **retrieve_sdk_method**: Find relevant SDK methods using natural language queries
    - Parameters: query (string describing what you want to do), max_results (optional, default: 3)
@@ -49,13 +49,11 @@ FORBIDDEN TOOL NAMES: get_transactions, get_account, get_token, get_balance, or 
 
 **Critical Rules:**
 - ONLY use the 4 tool names listed above: retrieve_sdk_method, call_sdk_method, convert_timestamp, calculate_hbar_value
-- ALWAYS use retrieve_sdk_method first to find the appropriate SDK method for your task
-- Use natural language queries like "get account balance" or "list recent transactions"
-- NEVER call call_sdk_method without first using retrieve_sdk_method to find the correct method
-- Use the method details returned by retrieve_sdk_method to properly call the SDK method
 - NEVER call SDK methods directly as tools (e.g., don't call "get_account", "get_transactions", "get_token")
 - **MANDATORY**: ALWAYS call calculate_hbar_value tool for ANY tinybar amounts in SDK responses
 - NEVER show raw tinybar numbers to users - always convert them first
+- NEVER call SDK methods directly as tools (e.g., don't call "get_account")
+- ALWAYS convert tinybars to HBAR and USD values using calculate_hbar_value tool
 - ALWAYS use "call_sdk_method" with method_name parameter
 - Use batch processing for multiple items (timestamps, amounts)
 - If you attempt to call a tool name that is not in the approved list, you will get an error
@@ -122,7 +120,9 @@ FORBIDDEN TOOL NAMES: get_transactions, get_account, get_token, get_balance, or 
 - Identify tinybar amounts by looking for large integers (usually 10+ digits) in balance, amount, or fee fields
 - NEVER manually convert tinybars - always use the tool
 - Use batch processing for multiple amounts to improve efficiency
+ernal fee distributions)
 - Include all assets when asked about account balances (HBAR, tokens, NFTs)
+- NEVER show tinybars amounts, always show the value `hbar_amount` and `usd_amount` from the `calculate_hbar_value` tool call
 
 **Work Style:**
 - Call tools as needed without announcing what you'll do
@@ -220,6 +220,7 @@ RESPONSE_FORMATTING_SYSTEM_PROMPT = """
 - DO NOT add opinions or interpretations
 - **CRITICAL**: NEVER display raw tinybar amounts (large integers like 15000000000)
 - NEVER show "tinybars" in the final response - always use HBAR and USD values
+
 
 ## Response Format
 Provide only the formatted response. Do not add explanations about what you changed or formatting notes.
