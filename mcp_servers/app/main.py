@@ -63,46 +63,6 @@ def get_vector_services():
     
     return vector_store_service, document_processor
 
-def get_vector_services():
-    """Initialize and return vector store services."""
-    global vector_store_service, document_processor
-    
-    if vector_store_service is None or document_processor is None:
-        try:
-            from .services.vector_store_service import VectorStoreService
-            from .services.document_processor import DocumentProcessor
-            
-            # Get configuration from environment variables
-            vector_store_url = os.getenv("VECTOR_STORE_URL") # TODO: look for a way to utilize settings module
-            openai_api_key = os.getenv("OPENAI_API_KEY") # TODO: look for a way to utilize settings module
-            collection_name = os.getenv("COLLECTION_NAME") # TODO: look for a way to utilize settings module
-            embedding_model = os.getenv("EMBEDDING_MODEL") # TODO: look for a way to utilize settings module
-            
-            if not openai_api_key:
-                raise ValueError("OPENAI_API_KEY environment variable is required")
-            
-            # Initialize services
-            vector_store_service = VectorStoreService(
-                connection_string=vector_store_url,
-                openai_api_key=openai_api_key,
-                collection_name=collection_name,
-                embedding_model=embedding_model
-            )
-            
-            document_processor = DocumentProcessor(vector_store_service)
-            
-            # Initialize with documentation file
-            doc_path = "hiero_mirror_sdk_methods_documentation.json" # TODO: make this dynamic
-            if os.path.exists(doc_path):
-                document_processor.initialize_from_file(doc_path)
-            else:
-                raise FileNotFoundError(f"SDK documentation file not found: {doc_path}")
-                
-        except Exception as e:
-            raise RuntimeError(f"Failed to initialize vector services: {e}")
-    
-    return vector_store_service, document_processor
-
 @mcp.tool()
 async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
     """
@@ -126,7 +86,7 @@ async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
     return await get_sdk_service().call_method(method_name, **kwargs)
 
 @mcp.tool()
-async def retrieve_sdk_method(query: str) -> Dict[str, Any]:
+def retrieve_sdk_method(query: str) -> Dict[str, Any]:
     """
     Retrieve SDK methods using natural language queries via vector similarity search.
     
@@ -134,12 +94,38 @@ async def retrieve_sdk_method(query: str) -> Dict[str, Any]:
     search to find the most relevant SDK methods based on the user's natural language query.
     
     Args:
-        method_name: The name of the method to inspect
+        query: Natural language description of what you want to do (e.g., "get account balance", "list transactions")
         
     Returns:
-        Dict containing parameter information, types, and defaults
+        Dict containing:
+        - query: The original query
+        - methods: List of matching methods with full details (name, description, parameters, returns, use_cases)
+        - count: Number of methods returned
+        
+    Example usage:
+        - retrieve_sdk_method(query="get account information")
+        - retrieve_sdk_method(query="check token balance")
     """
-    return get_sdk_service().get_method_signature(method_name)
+    try:
+        # Get vector services
+        _, document_processor = get_vector_services()
+
+        # Search for methods
+        search_result = document_processor.search_methods(query=query, k=3)
+
+        return {
+            "query": query,
+            "methods": search_result.get("methods", []),
+            "success": True
+        }
+
+    except Exception as e:
+        return {
+            "query": query,
+            "methods": [],
+            "success": False,
+            "error": str(e)
+        }
 
 @mcp.tool()
 async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[str, int, float]]], timestamp: Union[str, int, float] = None) -> Dict[str, Any]:

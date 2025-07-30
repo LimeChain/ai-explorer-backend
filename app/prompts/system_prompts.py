@@ -9,7 +9,7 @@ AGENTIC_SYSTEM_PROMPT = """
 CRITICAL: You can ONLY call these 4 specific tools. Any other tool name will result in an error:
 
 1. **retrieve_sdk_method**: Find relevant SDK methods using natural language queries
-   - Parameters: query (string describing what you want to do), max_results (optional, default: 3)
+   - Parameters: query (string describing what you want to do)
    - Returns matching methods with full details (name, description, parameters, returns, use_cases)
    - Use when you need to find the right SDK method for a task
 
