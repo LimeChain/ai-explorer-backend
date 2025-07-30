@@ -18,8 +18,8 @@ Hederion AI Explorer is a next-generation block explorer for the Hedera network 
 - Storage
   - ✅ GDPR-compliant chat history with database persistence
 - MCP Servers
-  - ✅ Hedera REST API integration for real-time data
-  - [ ] Hedera's BigQuery integration for historical network data
+  - ✅ Hedera's REST API for real-time data
+  - [ ] Hedera's BigQuery for historical data
 - Benchmarking
   - ✅ Tracing
   - ✅ Evaluations
@@ -59,7 +59,7 @@ uv sync
 
 4. Start the database:
 ```bash
-docker compose up postgres
+docker compose up db
 ```
 
 5. Run database migrations:
@@ -86,19 +86,14 @@ uv run python scripts/ws_send_query.py
 
 ### Run Locally (with Docker)
 
-Build the Docker image:
+1. Start all services with Docker:
 ```bash
-docker build -t ai-explorer-backend .
+docker compose up
 ```
 
-Run the container (you'll need to pass your OpenAI API key as an environment variable):
+2. Send a sample query over WebSocket:
 ```bash
-docker run -p 8000:8000 -e OPENAI_API_KEY=your_api_key_here ai-explorer-backend
-```
-
-Check if the backend is running:
-```bash
-curl http://localhost:8000/
+docker compose exec api uv run python scripts/ws_send_query.py
 ```
 
 
