@@ -52,7 +52,7 @@ class LLMOrchestrator:
             model=settings.chat_model,
             temperature=DEFAULT_TEMPERATURE,
             streaming=True,
-            api_key=settings.openai_api_key,
+            api_key=settings.openai_api_key
         )
         self.chat_service = ChatService()
         self.tool_parser = ToolCallParser()
@@ -157,10 +157,10 @@ class LLMOrchestrator:
                     
                     # Execute workflow
                     final_state = await graph.ainvoke(initial_state, {"recursion_limit": RECURSION_LIMIT})
-                    
+
                     # Stream final response
                     async for token in self.response_streamer.stream_final_response(
-                        final_state["messages"],
+                        final_state["messages"][-1].content,
                         RESPONSE_FORMATTING_SYSTEM_PROMPT,
                         query,
                         session_id,

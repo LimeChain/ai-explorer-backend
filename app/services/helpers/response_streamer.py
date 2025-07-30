@@ -23,7 +23,7 @@ class ResponseStreamer:
     
     async def stream_final_response(
         self,
-        messages: List,
+        messages: str,
         response_system_prompt: str,
         query: str,
         session_id: Optional[str] = None,
@@ -33,10 +33,9 @@ class ResponseStreamer:
         """Stream the final response and save to database."""
         # Prepare messages for final response
         final_messages = [SystemMessage(content=response_system_prompt)]
-        final_messages.extend(messages)
-        
+        final_messages.append(messages)
+
         accumulated_response = ""
-        
         # Stream the response token by token
         async for chunk in self.llm.astream(final_messages):
             if isinstance(chunk, AIMessageChunk) and chunk.content:
