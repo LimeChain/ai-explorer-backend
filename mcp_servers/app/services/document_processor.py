@@ -19,7 +19,7 @@ class DocumentProcessor:
         self.documentation_path = None
         self.is_initialized = False
     
-    def initialize_from_file(self, documentation_path: str, force_rebuild: bool = False):
+    def initialize_from_file(self, documentation_path: str):
         """Initialize vector store from documentation file."""
         try:
             if not os.path.exists(documentation_path):
@@ -30,13 +30,10 @@ class DocumentProcessor:
             # Check if we need to rebuild or if collection already exists
             collection_exists = self.vector_store.check_index_exists()
             
-            if force_rebuild or not collection_exists:
-                logger.info(f"{'Rebuilding' if force_rebuild else 'Building'} vector collection from {documentation_path}")
+            if not collection_exists:
+                logger.info(f"Building vector collection from {documentation_path}")
                 
-                if force_rebuild:
-                    self.vector_store.rebuild_index(documentation_path)
-                else:
-                    self.vector_store.load_methods_from_documentation(documentation_path)
+                self.vector_store.load_methods_from_documentation(documentation_path)
             else:
                 logger.info("Vector collection already exists, skipping initialization")
             
