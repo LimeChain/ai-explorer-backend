@@ -1,0 +1,8 @@
+.env
+
+.cursorignore
+.cursorrules
+.cursorconfig
+.cursorconfig.json
+
+temp
