@@ -55,7 +55,7 @@ class Settings(BaseSettings):
         description="Database connection URL"
     )
     database_pool_size: int = Field(default=20, description="Database connection pool size")
-    database_max_overflow: int = Field(default=0, description="Database connection pool max overflow")
+    database_max_overflow: int = Field(default=5, description="Database connection pool max overflow")
     database_pool_timeout: int = Field(default=30, description="Database connection pool timeout in seconds")
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
 
