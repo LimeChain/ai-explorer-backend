@@ -40,8 +40,8 @@ COPY mcp_servers/ ./app/mcp_servers
 COPY sdk/ ./sdk/
 
 # Running script
-COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
+COPY scripts/start.sh /app/scripts/start.sh
+RUN chmod +x /app/scripts/start.sh
 
 # Expose port
 EXPOSE 8000
@@ -51,4 +51,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/ || exit 1
 
 # Run the application
-CMD ["/app/start.sh"]
+CMD ["/app/scripts/start.sh"]
