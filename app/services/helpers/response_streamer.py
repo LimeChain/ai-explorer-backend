@@ -4,7 +4,7 @@ Response streaming and persistence utilities.
 import logging
 from typing import AsyncGenerator, List, Optional
 
-from langchain_core.messages import SystemMessage, AIMessageChunk
+from langchain_core.messages import SystemMessage, HumanMessage,AIMessageChunk
 from langchain_openai import ChatOpenAI
 from sqlalchemy.orm import Session
 
@@ -33,7 +33,7 @@ class ResponseStreamer:
         """Stream the final response and save to database."""
         # Prepare messages for final response
         final_messages = [SystemMessage(content=response_system_prompt)]
-        final_messages.append(messages)
+        final_messages.append(HumanMessage(content=messages))
 
         accumulated_response = ""
         # Stream the response token by token

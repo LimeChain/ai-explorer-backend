@@ -33,7 +33,7 @@ class VectorStoreService:
                 use_jsonb=True
             )
             logger.info(f"Vector store initialized with collection: {self.collection_name}")
-        except RuntimeError as e:
+        except RuntimeError:
             # Re-raise RuntimeError with pgVector installation message
             raise
         except Exception as e:

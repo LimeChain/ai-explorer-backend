@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from mcp.server.fastmcp import FastMCP
 
 from .services.sdk_service import HederaSDKService
+from .settings import settings
 
 from dotenv import load_dotenv
 
@@ -32,14 +33,11 @@ def get_vector_services():
             from .services.vector_store_service import VectorStoreService
             from .services.document_processor import DocumentProcessor
             
-            # Get configuration from environment variables
-            vector_store_url = os.getenv("VECTOR_STORE_URL") # TODO: look for a way to utilize settings module
-            openai_api_key = os.getenv("OPENAI_API_KEY") # TODO: look for a way to utilize settings module
-            collection_name = os.getenv("COLLECTION_NAME") # TODO: look for a way to utilize settings module
-            embedding_model = os.getenv("EMBEDDING_MODEL") # TODO: look for a way to utilize settings module
-            
-            if not openai_api_key:
-                raise ValueError("OPENAI_API_KEY environment variable is required")
+            # Get configuration from settings
+            vector_store_url = settings.vector_store_url
+            openai_api_key = settings.openai_api_key.get_secret_value()
+            collection_name = settings.collection_name
+            embedding_model = settings.embedding_model
             
             # Initialize services
             vector_store_service = VectorStoreService(
@@ -52,14 +50,15 @@ def get_vector_services():
             document_processor = DocumentProcessor(vector_store_service)
             
             # Initialize with documentation file
-            doc_path = "hiero_mirror_sdk_methods_documentation.json" # TODO: make this dynamic
+            doc_path = settings.sdk_documentation_path
+
             if os.path.exists(doc_path):
                 document_processor.initialize_from_file(doc_path)
             else:
                 raise FileNotFoundError(f"SDK documentation file not found: {doc_path}")
                 
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize vector services: {e}")
+            raise RuntimeError(f"Failed to initialize vector services: {e}") from e
     
     return vector_store_service, document_processor
 

@@ -120,7 +120,6 @@ FORBIDDEN TOOL NAMES: get_transactions, get_account, get_token, get_balance, or 
 - Identify tinybar amounts by looking for large integers (usually 10+ digits) in balance, amount, or fee fields
 - NEVER manually convert tinybars - always use the tool
 - Use batch processing for multiple amounts to improve efficiency
-ernal fee distributions)
 - Include all assets when asked about account balances (HBAR, tokens, NFTs)
 - NEVER show tinybars amounts, always show the value `hbar_amount` and `usd_amount` from the `calculate_hbar_value` tool call
 
