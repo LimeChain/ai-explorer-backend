@@ -45,6 +45,27 @@ class MCPSettings(BaseSettings):
         default="hiero_mirror_sdk_methods_documentation.json",
         description="Path to the SDK documentation file"
     )
+    
+    # BigQuery settings for text-to-SQL functionality
+    bigquery_credentials_path: str = Field(
+        default="bq-credentials.json",
+        description="Path to BigQuery service account credentials JSON file"
+    )
+    
+    bigquery_dataset_id: str = Field(
+        default="hedera-etl-bq.hedera_restricted",
+        description="BigQuery dataset ID for Hedera data"
+    )
+    
+    text_to_sql_model: str = Field(
+        default="gpt-4.1-mini", 
+        description="LLM model to use for SQL generation"
+    )
+    
+    bigquery_query_timeout: int = Field(
+        default=300,
+        description="BigQuery query timeout in seconds"
+    )
 
 
 # Global settings instance

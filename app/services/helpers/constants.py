@@ -24,6 +24,7 @@ class GraphNode(str, Enum):
 class ToolName(str, Enum):
     CALL_SDK_METHOD = "call_sdk_method"
     RETRIEVE_SDK_METHOD = "retrieve_sdk_method"
+    TEXT_TO_SQL_QUERY = "text_to_sql_query"
 
 # === Chat Service Constants ===
 

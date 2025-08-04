@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from mcp.server.fastmcp import FastMCP
 
 from .services.sdk_service import HederaSDKService
+from .services.bigquery_service import BigQueryService
 from .settings import settings
 
 from dotenv import load_dotenv
@@ -17,6 +18,7 @@ mcp = FastMCP("HederaMirrorNode")
 sdk_service = None
 vector_store_service = None
 document_processor = None
+bigquery_service = None
 
 def get_sdk_service() -> HederaSDKService:
     global sdk_service
@@ -61,6 +63,31 @@ def get_vector_services():
             raise RuntimeError(f"Failed to initialize vector services: {e}") from e
     
     return vector_store_service, document_processor
+
+def get_bigquery_service() -> BigQueryService:
+    """Initialize and return BigQuery service."""
+    global bigquery_service
+    
+    if bigquery_service is None:
+        try:
+            # Get configuration from settings
+            credentials_path = settings.bigquery_credentials_path
+            dataset_id = settings.bigquery_dataset_id
+            openai_api_key = settings.openai_api_key.get_secret_value()
+            model_name = settings.text_to_sql_model
+            
+            # Initialize BigQuery service
+            bigquery_service = BigQueryService(
+                credentials_path=credentials_path,
+                dataset_id=dataset_id,
+                openai_api_key=openai_api_key,
+                model_name=model_name
+            )
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize BigQuery service: {e}") from e
+    
+    return bigquery_service
 
 @mcp.tool()
 async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
@@ -325,5 +352,55 @@ async def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, i
         "count": len(conversions),
         "success": all_successful
     }
+
+# @mcp.tool()
+async def text_to_sql_query(question: str) -> Dict[str, Any]:
+    """
+    Execute natural language queries against historical Hedera data using BigQuery.
+    
+    This tool automatically detects time-based/historical queries and generates SQL
+    to query historical Hedera blockchain data. It should be used for questions about
+    trends, historical data, time periods, and analytical queries.
+    
+    The tool will:
+    1. Detect if the question is historical/time-based
+    2. Generate appropriate BigQuery SQL based on the Hedera schema
+    3. Execute the query and return results
+    
+    Args:
+        question: Natural language question about historical Hedera data
+        
+    Returns:
+        Dict containing:
+        - success: Whether the query was successful
+        - question: The original question
+        - sql_query: The generated SQL query
+        - data: Query results as list of dictionaries
+        - row_count: Number of rows returned
+        - is_historical: Whether this was classified as a historical query
+        - error: Error message if something went wrong
+        
+    Example usage:
+        - text_to_sql_query(question="Who are the biggest token holders of 0.0.731861 as of 2025?")
+        - text_to_sql_query(question="Show me transaction trends for the last month")
+        - text_to_sql_query(question="What are the top 10 accounts by HBAR balance in 2024?")
+    """
+    try:
+        # Get BigQuery service
+        bq_service = get_bigquery_service()
+        
+        # Execute text-to-SQL pipeline
+        result = await bq_service.text_to_sql_query(question)
+        
+        return result
+        
+    except Exception as e:
+        print(f"Text-to-SQL tool failed: {e}", exc_info=True)
+        return {
+            "success": False,
+            "question": question,
+            "error": f"Text-to-SQL tool failed: {str(e)}",
+            "is_historical": True
+        }
 
 
