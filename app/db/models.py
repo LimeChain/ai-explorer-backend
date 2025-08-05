@@ -2,6 +2,7 @@
 Database models for the AI Explorer backend.
 """
 import uuid
+from enum import Enum
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum as DBEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -63,3 +64,22 @@ class SuggestedQuery(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class FeedbackType(Enum):
+    """
+    Enum for feedback types.
+    """
+    POSITIVE = "positive"
+    NEGATIVE = "negative"
+
+class Feedback(Base):
+    """
+    Model for storing feedback.
+    """
+    __tablename__ = 'feedback'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    message_id = Column(UUID(as_uuid=True), ForeignKey("messages.id"), nullable=False)
+    feedback = Column(DBEnum(FeedbackType, name='feedback_type_enum'), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
