@@ -9,7 +9,8 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.schemas.chat import ChatRequest
 from app.services.llm_orchestrator import LLMOrchestrator
 from app.db.session import get_db_session
-from app.exceptions import ChatServiceError, ValidationError, LLMServiceError
+from app.exceptions import ChatServiceError, ValidationError, LLMServiceError, RateLimitError
+from app.utils.rate_limiter import rate_limit_websocket
 
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ llm_orchestrator = LLMOrchestrator()
 
 
 @router.websocket("/chat/ws/{session_id}")
+@rate_limit_websocket()
 async def websocket_chat(websocket: WebSocket, session_id: str):
     """
     WebSocket endpoint for real-time chat with the AI Explorer.
@@ -123,6 +125,11 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 logger.error(f"LLM service error for session {session_id}: {e}")
                 await websocket.send_text(json.dumps({
                     "error": "AI service temporarily unavailable. Please try again."
+                }))
+            except RateLimitError as e:
+                logger.error(f"Rate limit exceeded for session {session_id}: {e}")
+                await websocket.send_text(json.dumps({
+                    "error": "Rate limit exceeded. Please try again later."
                 }))
             except Exception as e:
                 logger.error(f"Unexpected error processing message for session {session_id}: {e}")

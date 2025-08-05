@@ -91,5 +91,15 @@ class Settings(BaseSettings):
     # Vector store settings
     collection_name: str = Field(default="sdk_methods", description="Vector store collection name")
 
+    # Redis settings
+    redis_url: str = Field(default="redis://localhost:6379/0", description="Redis connection URL")
+    redis_max_connections: int = Field(default=20, description="Redis connection pool max connections")
+    redis_retry_on_timeout: bool = Field(default=True, description="Redis retry on timeout")
+    redis_socket_timeout: float = Field(default=5.0, description="Redis socket timeout in seconds")
+    
+    # Rate limiting settings
+    rate_limit_max_requests: int = Field(default=10, description="Max requests per window")
+    rate_limit_window_seconds: int = Field(default=60, description="Rate limiting window in seconds")
+
 # Global settings instance
 settings = Settings()
