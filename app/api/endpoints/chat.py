@@ -80,22 +80,33 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     continue
                 
                 # Stream LLM response with account context, session ID, and database session
+                assistant_msg_id = None
+                def on_complete(msg_id):
+                    nonlocal assistant_msg_id
+                    assistant_msg_id = msg_id
+
                 async for token in llm_orchestrator.stream_llm_response(
                     query=query,
                     account_id=chat_request.account_id,
                     conversation_history=chat_request.messages,
                     session_id=chat_request.session_id,
-                    db=db  # Pass database session for conversation persistence
+                    db=db,  # Pass database session for conversation persistence
+                    on_complete=on_complete
                 ):
                     await websocket.send_text(json.dumps({
                         "token": token
                     }))
                 
+                # Send assistant message ID to client
+                await websocket.send_text(json.dumps({
+                    "assistant_msg_id": str(assistant_msg_id)
+                }))
+
                 # Send completion signal
                 await websocket.send_text(json.dumps({
                     "complete": True
                 }))
-                
+
                 logger.info(f"Successfully processed query for session {session_id}")
                 
             except json.JSONDecodeError as e:
