@@ -11,6 +11,7 @@ from langchain_core.documents import Document
 
 from .database_manager import DatabaseManager
 from .text_processor import TextProcessor
+from ..settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +56,9 @@ class VectorSearchService:
                 connection=self.database_manager.connection_string,
                 use_jsonb=True,
                 engine_args={
-                    "pool_size": 5,
-                    "max_overflow": 10,
-                    "pool_recycle": -1,
-                    "pool_use_lifo": False,
-                    "pool_pre_ping": False,
-                    "pool_timeout": 30,
+                    "pool_size": settings.database_pool_size,
+                    "max_overflow": settings.database_max_overflow,
+                    "pool_timeout": settings.database_pool_timeout,
                 }
             )
             logger.info(f"Vector store initialized with collection: {self.collection_name}")

@@ -27,6 +27,10 @@ class TextProcessor:
         Returns:
             Processed text optimized for semantic search
         """
+        # Validate required fields
+        if 'name' not in method or 'description' not in method:
+            raise ValueError(f"Method must contain 'name' and 'description' fields")
+            
         # Focus on natural language that will create good embeddings
         parts = []
         
