@@ -8,7 +8,7 @@ class LLMServiceError(Exception):
     Exception raised when the LLM service is unavailable or fails.
     
     This exception is used to signal that the external LLM service
-    (OpenAI via LangChain) is experiencing issues and cannot process
+    (LLM service via LangChain) is experiencing issues and cannot process
     the user's request at this time.
     
     Args:
