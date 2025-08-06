@@ -52,7 +52,6 @@ class Settings(BaseSettings):
             os.environ.pop("LANGCHAIN_PROJECT", None)
     # Database settings
     database_url: str = Field(
-        default="postgresql://ai_explorer:ai_explorer@localhost:5432/ai_explorer", 
         description="Database connection URL"
     )
     database_pool_size: int = Field(default=20, description="Database connection pool size")
@@ -61,7 +60,6 @@ class Settings(BaseSettings):
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
 
     # Vector store settings
-    vector_store_url: str = Field(default="postgresql://ai_explorer:ai_explorer@localhost:5432/ai_explorer", description="Vector store connection URL")
     collection_name: str = Field(default="sdk_methods", description="Vector store collection name")
 
 # Global settings instance

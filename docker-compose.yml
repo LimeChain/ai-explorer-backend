@@ -1,41 +1,6 @@
 version: '3.8'
 
 services:
-  db:
-    image: postgres:15
-    container_name: ai-explorer-db
-    environment:
-      POSTGRES_DB: ai_explorer
-      POSTGRES_USER: ai_explorer
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ai_explorer}
-    ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ai_explorer -d ai_explorer"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    container_name: ai-explorer-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    restart: unless-stopped
-
-
   pgvector:
     image: pgvector/pgvector:pg16
     container_name: pgvector-container
@@ -46,7 +11,7 @@ services:
     ports:
       - "6024:5432"
     volumes:
-      - pgvector_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ai_explorer -d ai_explorer"]
       interval: 10s
@@ -57,15 +22,12 @@ services:
     build: .
     container_name: ai-explorer-api
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
+      pgvector:
         condition: service_healthy
       mcp-server-mirror-node:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://ai_explorer:${POSTGRES_PASSWORD:-ai_explorer}@db:5432/ai_explorer
-      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+psycopg://ai_explorer:${POSTGRES_PASSWORD:-ai_explorer}@pgvector:5432/ai_explorer
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       MCP_ENDPOINT: ${MCP_ENDPOINT:-http://mcp-server-mirror-node:8001/mcp}
       ENVIRONMENT: ${ENVIRONMENT:-development}
@@ -110,8 +72,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
-  pgvector_data:
+  db_data:
 
 
 networks:
