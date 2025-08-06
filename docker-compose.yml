@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  pgvector:
+  db:
     image: pgvector/pgvector:pg16
     container_name: pgvector-container
     environment:
@@ -22,7 +22,7 @@ services:
     build: .
     container_name: ai-explorer-api
     depends_on:
-      pgvector:
+      db:
         condition: service_healthy
       mcp-server-mirror-node:
         condition: service_healthy
