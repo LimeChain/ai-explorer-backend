@@ -5,7 +5,7 @@ import logging
 from typing import AsyncGenerator, List, Optional
 
 from langchain_core.messages import SystemMessage, AIMessageChunk
-from langchain_openai import ChatOpenAI
+from langchain_core.language_models.chat_models import BaseChatModel
 from sqlalchemy.orm import Session
 
 from app.services.chat_service import ChatService
@@ -17,7 +17,7 @@ logger.setLevel(logging.INFO)
 class ResponseStreamer:
     """Handles streaming responses and conversation persistence."""
     
-    def __init__(self, llm: ChatOpenAI, chat_service: ChatService):
+    def __init__(self, llm: BaseChatModel, chat_service: ChatService):
         self.llm = llm
         self.chat_service = chat_service
     

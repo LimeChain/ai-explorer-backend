@@ -2,6 +2,8 @@ from openevals.llm import create_llm_as_judge
 from openevals.prompts import CORRECTNESS_PROMPT
 from typing import Callable, Dict, Any
 
+from app.config import settings
+
 # Use a prebuilt evaluator from openevals (https://github.com/langchain-ai/openevals)
 
 def correctness_evaluator(model: str) -> Callable[[Dict[str, Any], Dict[str, Any], Dict[str, Any]], Any]:
@@ -11,7 +13,7 @@ def correctness_evaluator(model: str) -> Callable[[Dict[str, Any], Dict[str, Any
     
     evaluator = create_llm_as_judge(
         prompt=CORRECTNESS_PROMPT,
-        model=f"openai:{model}",
+        model=f"{settings.llm_provider}:{model}",
         feedback_key="correctness",
     )
     
