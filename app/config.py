@@ -13,15 +13,18 @@ class Settings(BaseSettings):
     Application settings loaded from environment variables.
     
     Attributes:
-        openai_api_key: OpenAI API key for LLM integration
+        llm_api_key: API key for LLM integration (OpenAI, Google Gemini, Anthropic, etc.)
+        llm_provider: LLM provider to use (openai, google_genai, anthropic, etc.)
+        llm_model: The LLM model to use
         environment: Current environment (development, production, etc.)
         log_level: Logging level
     """
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
     
-    openai_api_key: SecretStr = Field(default=SecretStr("your-api-key"), min_length=1, description="OpenAI API key (required)")
     embedding_model: str = Field(default="text-embedding-3-small", description="The model to use for embeddings")
-    chat_model: str = Field(default="gpt-4.1-mini", description="The model to use")
+    llm_provider: str = Field(..., description="LLM provider to use (openai, google_genai, anthropic, etc.)")
+    llm_model: str = Field(..., description="The LLM model to use (e.g., gpt-4o, gpt-4o-mini for OpenAI; gemini-2.5-pro for Google)")
+    llm_api_key: SecretStr = Field(default=SecretStr("your-api-key"), min_length=1, description="LLM API key (required)", alias="LLM_API_KEY")
 
     environment: str = Field(default="development", pattern="^(development|production|staging)$")
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
