@@ -62,11 +62,11 @@ experiment_results = client.evaluate(
     target,
     data=DATASET_NAME,
     evaluators=[
-                    correctness_evaluator(model=settings.llm_model),
+        correctness_evaluator(model=settings.llm_model),
         # multiple evaluators can be added here
     ],
     experiment_prefix=EXPERIMENT_PREFIX,
-    max_concurrency=2,
+    max_concurrency=1,
 )
 
 # link will be provided to view the results in langsmith
