@@ -29,7 +29,7 @@ class TextProcessor:
         """
         # Validate required fields
         if 'name' not in method or 'description' not in method:
-            raise ValueError(f"Method must contain 'name' and 'description' fields")
+            raise ValueError("Method must contain 'name' and 'description' fields")
             
         # Focus on natural language that will create good embeddings
         parts = []
@@ -42,6 +42,10 @@ class TextProcessor:
         if method.get("parameters"):
             param_texts = []
             for param in method["parameters"]:
+                # Skip malformed parameters
+                if not isinstance(param, dict) or 'name' not in param or 'description' not in param:
+                    logger.warning(f"Skipping malformed parameter in method '{method['name']}'")
+                    continue
                 # Create natural language parameter description
                 param_text = f"{param['name']} parameter {param['description']}"
                 param_texts.append(param_text)
@@ -75,6 +79,10 @@ class TextProcessor:
         Returns:
             Structured metadata dictionary
         """
+        # Validate required fields
+        if 'name' not in method or 'description' not in method:
+            raise ValueError("Method must contain 'name' and 'description' fields")
+        
         metadata = {
             "method_name": method["name"],
             "description": method["description"],
