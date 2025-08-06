@@ -32,7 +32,7 @@ services:
       MCP_ENDPOINT: ${MCP_ENDPOINT:-http://mcp-server-mirror-node:8001/mcp}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      CHAT_MODEL: ${CHAT_MODEL:-gpt-4o-mini}
+      CHAT_MODEL: ${CHAT_MODEL:-gpt-4.1-mini}
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
       LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
