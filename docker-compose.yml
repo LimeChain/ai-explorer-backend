@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: ai_explorer
       POSTGRES_PASSWORD: ai_explorer
     ports:
-      - "6024:5432"
+      - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
