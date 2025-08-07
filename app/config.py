@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     redis_socket_timeout: float = Field(default=5.0, description="Redis socket timeout in seconds")
     
     # Rate limiting settings
-    rate_limit_max_requests: int = Field(default=10, description="Max requests per window")
+    rate_limit_max_requests: int = Field(default=3, description="Max requests per window")
     rate_limit_window_seconds: int = Field(default=60, description="Rate limiting window in seconds")
 
 # Global settings instance

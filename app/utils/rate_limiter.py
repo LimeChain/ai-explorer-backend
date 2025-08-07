@@ -19,6 +19,14 @@ redis_client = redis.Redis.from_url(
     socket_timeout=settings.redis_socket_timeout
 )
 
+try:
+    redis_client.ping()
+    logger.info("Redis connection established successfully")
+except redis.ConnectionError as e:
+    logger.error(f"Failed to connect to Redis: {e}")
+    raise
+
+
 class FingerprintRateLimiter:
     def __init__(self, redis_client: redis.Redis, max_requests: int = 5, window_seconds: int = 60):
         self.redis = redis_client
@@ -84,33 +92,31 @@ class FingerprintRateLimiter:
             
         except Exception as e:
             logger.error(f"Redis error in rate limiting: {e}")
-            # Fail open - allow request if Redis is down
-            return True
+            # Fail closed for better security - deny request if Redis is down
+            logger.warning("Rate limiting unavailable, denying request for safety")
+            return False
 
 
 def rate_limit_websocket(max_requests: Optional[int] = None, window_seconds: Optional[int] = None):
     """Decorator to rate limit WebSocket connections"""
+    # Use config defaults if not specified
+    _max_requests = max_requests or settings.rate_limit_max_requests
+    _window_seconds = window_seconds or settings.rate_limit_window_seconds
+    
+    # Create rate limiter for this specific endpoint
+    rate_limiter = FingerprintRateLimiter(
+        redis_client, 
+        max_requests=_max_requests, 
+        window_seconds=_window_seconds
+    )
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(websocket: WebSocket, *args, **kwargs):
-            # Use config defaults if not specified
-            _max_requests = max_requests or settings.rate_limit_max_requests
-            _window_seconds = window_seconds or settings.rate_limit_window_seconds
-            
-            # Create rate limiter for this specific endpoint
-            rate_limiter = FingerprintRateLimiter(
-                redis_client, 
-                max_requests=_max_requests, 
-                window_seconds=_window_seconds
-            )
             
             # Check rate limit before processing
             if not rate_limiter.is_allowed(websocket):
                 error_msg = f"Rate limit exceeded. Max {_max_requests} requests per {_window_seconds} seconds."
                 raise RateLimitError(error_msg)
-            
-            # Add rate limit info to websocket for later use
-            websocket.rate_limiter = rate_limiter
             
             # Call the original function
             return await func(websocket, *args, **kwargs)
