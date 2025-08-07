@@ -22,7 +22,7 @@ class FeedbackResponse(BaseModel):
     feedback_id: UUID
     created_at: datetime
 
-@router.post("/message/feedback/{message_id}", response_model=FeedbackResponse)
+@router.post("/message/{message_id}/feedback", response_model=FeedbackResponse)
 async def feedback(
     message_id: UUID, 
     feedback_request: FeedbackRequest, 
