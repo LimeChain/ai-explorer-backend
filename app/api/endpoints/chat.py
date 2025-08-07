@@ -97,10 +97,11 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         "token": token
                     }))
                 
-                # Send assistant message ID to client
-                await websocket.send_text(json.dumps({
-                    "assistant_msg_id": str(assistant_msg_id)
-                }))
+                # Send assistant message ID to client if available
+                if assistant_msg_id:
+                    await websocket.send_text(json.dumps({
+                        "assistant_msg_id": str(assistant_msg_id)
+                    }))
 
                 # Send completion signal
                 await websocket.send_text(json.dumps({
