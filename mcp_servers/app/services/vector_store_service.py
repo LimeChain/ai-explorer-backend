@@ -18,13 +18,13 @@ class VectorStoreService:
     Maintains backward compatibility while providing a cleaner separation of concerns.
     """
     
-    def __init__(self, connection_string: str, openai_api_key: str, collection_name: str, embedding_model: str):
+    def __init__(self, connection_string: str, llm_api_key: str, collection_name: str, embedding_model: str):
         """
         Initialize the vector store service with composed components.
         
         Args:
             connection_string: PostgreSQL connection string
-            openai_api_key: OpenAI API key for embeddings
+            llm_api_key: OpenAI API key for embeddings
             collection_name: Name of the vector collection
             embedding_model: OpenAI embedding model to use
         """
@@ -34,7 +34,7 @@ class VectorStoreService:
         self.vector_search_service = VectorSearchService(
             database_manager=self.database_manager,
             text_processor=self.text_processor,
-            openai_api_key=openai_api_key,
+            llm_api_key=llm_api_key,
             collection_name=collection_name,
             embedding_model=embedding_model
         )

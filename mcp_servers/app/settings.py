@@ -11,7 +11,7 @@ class MCPSettings(BaseSettings):
     
     Attributes:
         database_url: Connection string for the vector database
-        openai_api_key: OpenAI API key for embeddings and AI operations
+        llm_api_key: OpenAI API key for embeddings and AI operations
         collection_name: Name of the vector store collection
         embedding_model: Model to use for embeddings
         sdk_documentation_path: Path to the SDK documentation file
@@ -30,8 +30,8 @@ class MCPSettings(BaseSettings):
     database_pool_timeout: int = Field(default=30, description="Database connection pool timeout in seconds")
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
     
-    openai_api_key: SecretStr = Field(
-        description="OpenAI API key (required)"
+    llm_api_key: SecretStr = Field(
+        description="LLM API key (required)"
     )
     
     collection_name: str = Field(

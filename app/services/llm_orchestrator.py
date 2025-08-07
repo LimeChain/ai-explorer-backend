@@ -53,7 +53,7 @@ class LLMOrchestrator:
             model=settings.llm_model,
             temperature=DEFAULT_TEMPERATURE,
             streaming=True,
-            api_key=settings.openai_api_key
+            api_key=settings.llm_api_key.get_secret_value(),
         )
         self.chat_service = ChatService()
         self.tool_parser = ToolCallParser()

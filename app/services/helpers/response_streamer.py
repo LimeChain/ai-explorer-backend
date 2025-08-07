@@ -5,7 +5,6 @@ import logging
 from typing import AsyncGenerator, List, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessageChunk
-from langchain_openai import ChatOpenAI
 from langchain_core.language_models.chat_models import BaseChatModel
 from sqlalchemy.orm import Session
 

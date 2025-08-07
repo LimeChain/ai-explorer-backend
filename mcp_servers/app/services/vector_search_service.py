@@ -23,7 +23,7 @@ class VectorSearchService:
         self, 
         database_manager: DatabaseManager,
         text_processor: TextProcessor,
-        openai_api_key: str, 
+        llm_api_key: str, 
         collection_name: str, 
         embedding_model: str
     ):
@@ -33,14 +33,14 @@ class VectorSearchService:
         Args:
             database_manager: Database manager instance
             text_processor: Text processor instance
-            openai_api_key: OpenAI API key for embeddings
+            llm_api_key: OpenAI API key for embeddings
             collection_name: Name of the vector collection
             embedding_model: OpenAI embedding model to use
         """
         self.database_manager = database_manager
         self.text_processor = text_processor
         self.collection_name = collection_name
-        self.embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key, model=embedding_model)
+        self.embeddings = OpenAIEmbeddings(openai_api_key=llm_api_key, model=embedding_model)
         self.vector_store: Optional[PGVector] = None
         
     def initialize_vector_store(self):

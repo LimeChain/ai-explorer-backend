@@ -35,14 +35,14 @@ def get_vector_services():
             
             # Get configuration from settings
             vector_store_url = settings.database_url
-            openai_api_key = settings.openai_api_key.get_secret_value()
+            llm_api_key = settings.llm_api_key.get_secret_value()
             collection_name = settings.collection_name
             embedding_model = settings.embedding_model
             
             # Initialize services
             vector_store_service = VectorStoreService(
                 connection_string=vector_store_url,
-                openai_api_key=openai_api_key,
+                llm_api_key=llm_api_key,
                 collection_name=collection_name,
                 embedding_model=embedding_model
             )
