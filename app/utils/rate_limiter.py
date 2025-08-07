@@ -38,8 +38,6 @@ class FingerprintRateLimiter:
             websocket.headers.get("x-real-ip", "") or
             (websocket.client.host if websocket.client else "unknown")
         )
-
-        print('real_ipp: ', real_ip[:45])
         
         fingerprint_data = {
             "ip": real_ip[:45],  # Handles both IPv4 and IPv6
