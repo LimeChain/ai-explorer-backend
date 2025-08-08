@@ -137,7 +137,6 @@ class LLMOrchestrator:
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     logger.info("MCP session initialized")
-                    print('MCP session initialized')
                     
                     # Load tools and create workflow
                     tools = await load_mcp_tools(session)

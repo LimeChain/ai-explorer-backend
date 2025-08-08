@@ -101,6 +101,9 @@ async def feedback(
                 created_at=feedback.created_at,
             )
         
+    except HTTPException:
+        # Re-raise HTTPExceptions (like 404) without modification
+        raise
     except IntegrityError as e:
         logger.error(f"Database integrity error while saving feedback: {e}")
         db.rollback()

@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     
     llm_provider: str = Field(..., description="LLM provider to use (openai, google_genai, anthropic, etc.)")
     llm_model: str = Field(..., description="The LLM model to use (e.g., gpt-4o, gpt-4o-mini for OpenAI; gemini-2.5-pro for Google)")
-    llm_api_key: SecretStr = Field(default=SecretStr("your-api-key"), min_length=1, description="LLM API key (required)", alias="LLM_API_KEY")
+    llm_api_key: SecretStr = Field(..., description="LLM API key (required)", alias="LLM_API_KEY")
 
     environment: str = Field(default="development", pattern="^(development|production|staging)$")
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     langsmith_tracing: bool = Field(default=False, description="Enable LangSmith tracing")
     langsmith_project: str = Field(default="ai-explorer-backend", description="LangSmith project name")
-    langsmith_api_key: SecretStr = Field(default=SecretStr("your-api-key"), min_length=1, description="LangSmith API key (required)")
+    langsmith_api_key: SecretStr = Field(..., description="LangSmith API key (required)")
     langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", description="LangSmith API endpoint")
 
     def model_post_init(self, __context: None) -> None:
@@ -52,14 +52,39 @@ class Settings(BaseSettings):
             os.environ.pop("LANGCHAIN_ENDPOINT", None)
             os.environ.pop("LANGCHAIN_API_KEY", None)
             os.environ.pop("LANGCHAIN_PROJECT", None)
+
     # Database settings
-    database_url: str = Field(
-        default="postgresql://ai_explorer:ai_explorer@localhost:5432/ai_explorer", 
+    database_url: str = Field( 
         description="Database connection URL"
     )
-    database_pool_size: int = Field(default=20, description="Database connection pool size")
-    database_max_overflow: int = Field(default=5, description="Database connection pool max overflow")
-    database_pool_timeout: int = Field(default=30, description="Database connection pool timeout in seconds")
+    database_pool_size: int = Field(
+        default=50, 
+        ge=5, 
+        le=200, 
+        description="Database connection pool size (5-200 connections)"
+    )
+    database_max_overflow: int = Field(
+        default=20, 
+        ge=0, 
+        le=100, 
+        description="Database connection pool max overflow (0-100 connections)"
+    )
+    database_pool_timeout: int = Field(
+        default=30, 
+        ge=5, 
+        le=60, 
+        description="Database connection pool timeout in seconds (5-60s)"
+    )
+    database_pool_recycle: int = Field(
+        default=3600,
+        ge=300,
+        le=7200, 
+        description="Database connection recycle time in seconds (5min-2hr)"
+    )
+    database_pool_pre_ping: bool = Field(
+        default=True,
+        description="Enable pool pre-ping to handle disconnected connections"
+    )
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
 
 
