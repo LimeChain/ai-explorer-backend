@@ -3,7 +3,7 @@ Database models for the AI Explorer backend.
 """
 import uuid
 from enum import Enum
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum as DBEnum
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum as DBEnum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID
@@ -76,8 +76,13 @@ class FeedbackType(Enum):
 class Feedback(Base):
     """
     Model for storing feedback.
+    
+    Each message can only have one feedback entry (enforced by unique constraint).
     """
     __tablename__ = 'feedback'
+    __table_args__ = (
+        UniqueConstraint('message_id', name='uq_feedback_message_id'),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     message_id = Column(UUID(as_uuid=True), ForeignKey("messages.id"), nullable=False)

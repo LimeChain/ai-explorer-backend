@@ -49,33 +49,8 @@ def feedback(
                 detail=f"Message with ID {message_id} not found"
             )
         
-        # Check if feedback already exists for this message
-        existing_feedback = db.query(Feedback).filter(Feedback.message_id == message_id).first()
-        
-        if existing_feedback:
-            # Update existing feedback
-            existing_feedback.feedback = feedback_request.feedback_type
-            
-            db.commit()
-            db.refresh(existing_feedback)
-            
-            logger.info(
-                f"Feedback updated successfully",
-                extra={
-                    "feedback_id": str(existing_feedback.id),
-                    "message_id": str(message_id),
-                    "feedback_type": feedback_request.feedback_type.value,
-                    "action": "updated"
-                }
-            )
-            
-            return FeedbackResponse(
-                message="Feedback updated successfully",
-                feedback_id=existing_feedback.id,
-                created_at=existing_feedback.created_at,
-            )
-        else:
-            # Create new feedback
+        # Try to create new feedback (will fail if duplicate due to unique constraint)
+        try:
             feedback = Feedback(
                 message_id=message_id,
                 feedback=feedback_request.feedback_type
@@ -100,17 +75,52 @@ def feedback(
                 feedback_id=feedback.id,
                 created_at=feedback.created_at,
             )
+            
+        except IntegrityError as e:
+            # Handle unique constraint violation - feedback already exists
+            db.rollback()
+            
+            # Check if it's our unique constraint violation
+            if "uq_feedback_message_id" in str(e):
+                # Update existing feedback instead
+                existing_feedback = db.query(Feedback).filter(Feedback.message_id == message_id).first()
+                if existing_feedback:
+                    existing_feedback.feedback = feedback_request.feedback_type
+                    
+                    db.commit()
+                    db.refresh(existing_feedback)
+                    
+                    logger.info(
+                        f"Feedback updated successfully",
+                        extra={
+                            "feedback_id": str(existing_feedback.id),
+                            "message_id": str(message_id),
+                            "feedback_type": feedback_request.feedback_type.value,
+                            "action": "updated"
+                        }
+                    )
+                    
+                    return FeedbackResponse(
+                        message="Feedback updated successfully",
+                        feedback_id=existing_feedback.id,
+                        created_at=existing_feedback.created_at,
+                    )
+                else:
+                    # This shouldn't happen but handle gracefully
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Feedback constraint violation but no existing feedback found"
+                    )
+            else:
+                # Re-raise if it's a different integrity error
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid feedback data"
+                )
         
     except HTTPException:
         # Re-raise HTTPExceptions (like 404) without modification
         raise
-    except IntegrityError as e:
-        logger.error(f"Database integrity error while saving feedback: {e}")
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid feedback data"
-        )
     except Exception as e:
         logger.error(f"Unexpected error saving feedback: {e}", exc_info=True)
         db.rollback()
