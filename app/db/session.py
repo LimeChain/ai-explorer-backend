@@ -65,6 +65,7 @@ def get_db_session() -> Generator[Session, None, None]:
     Context manager to get database session with automatic cleanup.
     
     This ensures proper session management and prevents connection leaks.
+    The caller is responsible for committing or rolling back transactions.
     
     Yields:
         Session: Database session
@@ -73,13 +74,13 @@ def get_db_session() -> Generator[Session, None, None]:
         with get_db_session() as db:
             # Use db here
             result = db.query(Model).all()
+            db.commit()  # Caller handles commit
         # db is automatically closed
     """
     session_local = get_session_local()
     db = session_local()
     try:
         yield db
-        db.commit()  # Auto-commit successful transactions
     except Exception:
         db.rollback()  # Auto-rollback on any exception
         raise

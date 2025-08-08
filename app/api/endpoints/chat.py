@@ -106,7 +106,8 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     }))
 
                     logger.info(f"Successfully processed query for session {session_id}")
-                    # Database session is automatically closed and committed by context manager
+                    # Explicit commit for any remaining uncommitted changes
+                    db.commit()
                 
             except json.JSONDecodeError as e:
                 logger.warning(f"Invalid JSON received for session {session_id}: {e}")
