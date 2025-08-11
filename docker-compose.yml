@@ -1,25 +1,6 @@
 version: '3.8'
 
 services:
-  db:
-    image: postgres:15
-    container_name: ai-explorer-db
-    environment:
-      POSTGRES_DB: ai_explorer
-      POSTGRES_USER: ai_explorer
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ai_explorer}
-    ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ai_explorer -d ai_explorer"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    restart: unless-stopped
-
   redis:
     image: redis:7-alpine
     container_name: ai-explorer-redis
@@ -36,17 +17,17 @@ services:
     restart: unless-stopped
 
 
-  pgvector:
+  db:
     image: pgvector/pgvector:pg16
-    container_name: pgvector-container
+    container_name: ai-explorer-db
     environment:
       POSTGRES_DB: ai_explorer
       POSTGRES_USER: ai_explorer
       POSTGRES_PASSWORD: ai_explorer
     ports:
-      - "6024:5432"
+      - "5432:5432"
     volumes:
-      - pgvector_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ai_explorer -d ai_explorer"]
       interval: 10s
@@ -111,8 +92,8 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
-  pgvector_data:
+  db_data:
+  redis_data:
 
 
 networks:
