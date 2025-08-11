@@ -28,7 +28,8 @@ class ResponseStreamer:
         query: str,
         session_id: Optional[str] = None,
         account_id: Optional[str] = None,
-        db: Optional[Session] = None
+        db: Optional[Session] = None,
+        on_complete: Optional[callable] = None
     ) -> AsyncGenerator[str, None]:
         """Stream the final response and save to database."""
         # Prepare messages for final response
@@ -44,9 +45,12 @@ class ResponseStreamer:
                     yield chunk.content
         
         # Save conversation after streaming completes
-        await self._save_conversation(
+        assistant_msg_id = await self._save_conversation(
             session_id, account_id, query, accumulated_response.strip(), db
         )
+
+        if on_complete and assistant_msg_id:
+            on_complete(assistant_msg_id)
     
     async def _save_conversation(
         self, 
@@ -59,13 +63,15 @@ class ResponseStreamer:
         """Save conversation to database with error handling."""
         try:
             if response:
-                saved_session_id = self.chat_service.save_conversation_turn(
+                saved_session_id, assistant_msg_id = self.chat_service.save_conversation_turn(
                     session_id=session_id,
                     account_id=account_id,
                     user_message=query,
                     assistant_response=response,
                     db=db
                 )
+
+                return assistant_msg_id
                 logger.info(f"Conversation saved with session_id: {saved_session_id}")
         except Exception as save_error:
             logger.error(f"Failed to save conversation: {save_error}")

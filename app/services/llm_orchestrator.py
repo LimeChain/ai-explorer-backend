@@ -2,7 +2,8 @@
 LLM Orchestrator service implementing agentic workflow with LangGraph.
 """
 import logging
-from typing import AsyncGenerator, List, Optional, TypedDict
+from typing import AsyncGenerator, Callable, List, Optional, TypedDict
+from uuid import UUID
 
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
@@ -124,7 +125,8 @@ class LLMOrchestrator:
         account_id: Optional[str] = None,
         conversation_history: Optional[List[ChatMessage]] = None,
         session_id: Optional[str] = None,
-        db: Optional[Session] = None
+        db: Optional[Session] = None,
+        on_complete: Optional[Callable[[UUID], None]] = None
     ) -> AsyncGenerator[str, None]:
         """Stream LLM response using agentic workflow with real token streaming."""
         try:
@@ -135,7 +137,6 @@ class LLMOrchestrator:
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     logger.info("MCP session initialized")
-                    print('MCP session initialized')
                     
                     # Load tools and create workflow
                     tools = await load_mcp_tools(session)
@@ -159,6 +160,13 @@ class LLMOrchestrator:
                     # Execute workflow
                     final_state = await graph.ainvoke(initial_state, {"recursion_limit": RECURSION_LIMIT})
 
+                    assistant_msg_id = None
+        
+                    def on_complete_callback(msg_id):
+                        nonlocal assistant_msg_id
+                        assistant_msg_id = msg_id
+
+
                     # Stream final response
                     async for token in self.response_streamer.stream_final_response(
                         final_state["messages"][-1].content,
@@ -166,9 +174,13 @@ class LLMOrchestrator:
                         query,
                         session_id,
                         account_id,
-                        db
+                        db,
+                        on_complete=on_complete_callback
                     ):
                         yield token
+
+                    if on_complete and assistant_msg_id:
+                        on_complete(assistant_msg_id)
 
         except ValidationError:
             raise
