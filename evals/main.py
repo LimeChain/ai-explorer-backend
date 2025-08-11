@@ -2,7 +2,7 @@ from langsmith import Client
 
 from app.config import settings
 from app.services.llm_orchestrator import LLMOrchestrator
-from app.db.session import get_session_local
+from app.db.session import get_db_session
 from app.schemas.chat import ChatMessage
 from app.exceptions import ChatServiceError, ValidationError, LLMServiceError
 from evals.evaluator import correctness_evaluator
@@ -13,7 +13,6 @@ import logging
 import os
 import re
 from typing import List, Optional
-from sqlalchemy.orm import Session
 
 EXPERIMENT_PREFIX = "ai-explorer-eval"
 
@@ -39,24 +38,25 @@ async def get_orchestrator_response(
     This mirrors the flow used in the chat endpoint.
     """
     response_parts = []
-    db = None
     
     try:
-        SessionLocal = get_session_local()
-        db = SessionLocal()
-        
-        if account_id:
-            logger.info(f"Processing evaluation request with account_id={account_id}")
-        
-        async for token in llm_orchestrator.stream_llm_response(
-            query=query,
-            account_id=account_id,
-            conversation_history=conversation_history,
-            session_id=session_id,
-            db=db
-        ):
-            response_parts.append(token)
+        # Use context manager for safe database session handling
+        with get_db_session() as db:
+            if account_id:
+                logger.info(f"Processing evaluation request with account_id={account_id}")
             
+            async for token in llm_orchestrator.stream_llm_response(
+                query=query,
+                account_id=account_id,
+                conversation_history=conversation_history,
+                session_id=session_id,
+                db=db
+            ):
+                response_parts.append(token)
+            
+            # Explicit commit for any remaining uncommitted changes
+            db.commit()
+                
     except (ValidationError, ChatServiceError) as e:
         logger.error(f"Service error for session {session_id}: {e}")
         return f"Service error: {str(e)}"
@@ -69,9 +69,6 @@ async def get_orchestrator_response(
             return "".join(response_parts)
         else:
             return "Internal server error"
-    finally:
-        if db is not None:
-            db.close()
             
     return "".join(response_parts)
 

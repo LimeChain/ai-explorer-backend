@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: ai_explorer
       POSTGRES_USER: ai_explorer
-      POSTGRES_PASSWORD: ai_explorer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ai_explorer}
     ports:
       - "5432:5432"
     volumes:
