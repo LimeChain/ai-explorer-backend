@@ -68,5 +68,7 @@ class Settings(BaseSettings):
     vector_store_url: str = Field(default="postgresql://ai_explorer:ai_explorer@localhost:5432/ai_explorer", description="Vector store connection URL")
     collection_name: str = Field(default="sdk_methods", description="Vector store collection name")
 
+    cost_threshold: float = Field(default=0.01, description="Cost threshold for BigQuery queries")
+
 # Global settings instance
 settings = Settings()

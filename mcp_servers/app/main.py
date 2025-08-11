@@ -389,12 +389,14 @@ async def text_to_sql_query(question: str) -> Dict[str, Any]:
         - text_to_sql_query(question="Show me transaction trends for the last month")
         - text_to_sql_query(question="What are the top 10 accounts by HBAR balance in 2024?")
     """
+    cost_threshold = settings.cost_threshold
+
     try:
         # Get BigQuery service
         bq_service = get_bigquery_service()
         
         # Execute text-to-SQL pipeline
-        result = await bq_service.text_to_sql_query(question)
+        result = await bq_service.text_to_sql_query(question, cost_threshold)
         
         return {
             "success": result.get("success", False),
@@ -402,7 +404,10 @@ async def text_to_sql_query(question: str) -> Dict[str, Any]:
             "sql_query": result.get("sql_query", ""),
             "data": result.get("data", []),
             "row_count": result.get("row_count", 0),
-            "error": result.get("error", "")
+            "error": result.get("error", ""),
+            "cost": result.get("cost", 0),
+            "bytes_to_process": result.get("bytes_to_process", 0),
+            "total_attempts": result.get("total_attempts", 0)
         }
         
     except Exception as e:
@@ -411,7 +416,6 @@ async def text_to_sql_query(question: str) -> Dict[str, Any]:
             "success": False,
             "question": question,
             "error": f"Text-to-SQL tool failed: {str(e)}",
-            "is_historical": True
         }
 
 

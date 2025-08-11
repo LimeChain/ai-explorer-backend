@@ -68,7 +68,11 @@ class MCPSettings(BaseSettings):
         description="BigQuery dataset ID for Hedera data"
     )
 
-    
+    cost_threshold: float = Field(
+        default=0.01,
+        description="Cost threshold for BigQuery queries"
+    )
+
     bigquery_query_timeout: int = Field(
         default=300,
         description="BigQuery query timeout in seconds"
