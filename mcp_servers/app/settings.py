@@ -22,8 +22,7 @@ class MCPSettings(BaseSettings):
         extra="ignore"
     )
     
-    vector_store_url: str = Field(
-        default="postgresql://ai_explorer:ai_explorer@localhost:5432/ai_explorer",
+    database_url: str = Field(
         description="Vector store connection URL"
     )
     

@@ -36,14 +36,14 @@ def get_vector_services():
             from .services.document_processor import DocumentProcessor
             
             # Get configuration from settings
-            vector_store_url = settings.vector_store_url
+            database_url = settings.database_url
             openai_api_key = settings.openai_api_key.get_secret_value()
             collection_name = settings.collection_name
             embedding_model = settings.embedding_model
             
             # Initialize services
             vector_store_service = VectorStoreService(
-                connection_string=vector_store_url,
+                connection_string=database_url,
                 openai_api_key=openai_api_key,
                 collection_name=collection_name,
                 embedding_model=embedding_model
@@ -75,13 +75,16 @@ def get_bigquery_service() -> BigQueryService:
             dataset_id = settings.bigquery_dataset_id
             openai_api_key = settings.openai_api_key.get_secret_value()
             model_name = settings.text_to_sql_model
-            
+            embedding_model = settings.embedding_model
+            connection_string = settings.database_url
             # Initialize BigQuery service
             bigquery_service = BigQueryService(
                 credentials_path=credentials_path,
                 dataset_id=dataset_id,
                 openai_api_key=openai_api_key,
-                model_name=model_name
+                connection_string=connection_string,
+                model_name=model_name,
+                embedding_model=embedding_model
             )
             
         except Exception as e:
@@ -138,7 +141,6 @@ def retrieve_sdk_method(query: str) -> Dict[str, Any]:
 
         # Search for methods
         search_result = document_processor.search_methods(query=query, k=3)
-
         return {
             "query": query,
             "methods": search_result.get("methods", []),
@@ -353,7 +355,7 @@ async def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, i
         "success": all_successful
     }
 
-# @mcp.tool()
+@mcp.tool()
 async def text_to_sql_query(question: str) -> Dict[str, Any]:
     """
     Execute natural language queries against historical Hedera data using BigQuery.
@@ -392,10 +394,17 @@ async def text_to_sql_query(question: str) -> Dict[str, Any]:
         # Execute text-to-SQL pipeline
         result = await bq_service.text_to_sql_query(question)
         
-        return result
+        return {
+            "success": result.get("success", False),
+            "question": question,
+            "sql_query": result.get("sql_query", ""),
+            "data": result.get("data", []),
+            "row_count": result.get("row_count", 0),
+            "error": result.get("error", "")
+        }
         
     except Exception as e:
-        print(f"Text-to-SQL tool failed: {e}", exc_info=True)
+        print(f"Text-to-SQL tool failed: {e}")
         return {
             "success": False,
             "question": question,
