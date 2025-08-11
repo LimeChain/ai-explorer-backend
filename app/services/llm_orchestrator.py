@@ -49,10 +49,11 @@ class LLMOrchestrator:
     def __init__(self):
         """Initialize the LLM Orchestrator with agentic workflow."""
         self.llm = init_chat_model(
-            model=settings.chat_model,
+            model_provider=settings.llm_provider,
+            model=settings.llm_model,
+            api_key=settings.llm_api_key,
             temperature=DEFAULT_TEMPERATURE,
-            streaming=True,
-            api_key=settings.openai_api_key
+            streaming=True
         )
         self.chat_service = ChatService()
         self.tool_parser = ToolCallParser()

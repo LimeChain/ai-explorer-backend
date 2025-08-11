@@ -37,14 +37,14 @@ def get_vector_services():
             
             # Get configuration from settings
             database_url = settings.database_url
-            openai_api_key = settings.openai_api_key.get_secret_value()
+            llm_api_key = settings.llm_api_key.get_secret_value()
             collection_name = settings.collection_name
             embedding_model = settings.embedding_model
             
             # Initialize services
             vector_store_service = VectorStoreService(
                 connection_string=database_url,
-                openai_api_key=openai_api_key,
+                llm_api_key=llm_api_key,
                 collection_name=collection_name,
                 embedding_model=embedding_model
             )
@@ -73,17 +73,19 @@ def get_bigquery_service() -> BigQueryService:
             # Get configuration from settings
             credentials_path = settings.bigquery_credentials_path
             dataset_id = settings.bigquery_dataset_id
-            openai_api_key = settings.openai_api_key.get_secret_value()
-            model_name = settings.text_to_sql_model
+            llm_api_key = settings.llm_api_key.get_secret_value()
+            llm_model = settings.llm_model
+            llm_provider = settings.llm_provider
             embedding_model = settings.embedding_model
             connection_string = settings.database_url
             # Initialize BigQuery service
             bigquery_service = BigQueryService(
                 credentials_path=credentials_path,
                 dataset_id=dataset_id,
-                openai_api_key=openai_api_key,
+                llm_api_key=llm_api_key,
                 connection_string=connection_string,
-                model_name=model_name,
+                llm_model=llm_model,
+                llm_provider=llm_provider,
                 embedding_model=embedding_model
             )
             

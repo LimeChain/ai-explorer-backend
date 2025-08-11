@@ -22,9 +22,10 @@ class BigQueryService:
         self, 
         credentials_path: str, 
         dataset_id: str, 
-        openai_api_key: str,
+        llm_api_key: str,
         connection_string: str,
-        model_name: str,
+        llm_model: str,
+        llm_provider: str,
         embedding_model: str
     ):
         """
@@ -33,9 +34,10 @@ class BigQueryService:
         Args:
             credentials_path: Path to BigQuery service account JSON file
             dataset_id: BigQuery dataset ID (e.g., "hedera-etl-bq.hedera_restricted")
-            openai_api_key: OpenAI API key for LLM
+            llm_api_key: API key for LLM
             connection_string: PostgreSQL connection string for vector store (required)
-            model_name: LLM model name for SQL generation
+            llm_model: LLM model name for SQL generation
+            llm_provider: LLM provider for SQL generation
             embedding_model: OpenAI embedding model for schema search
         """
         try:
@@ -46,12 +48,12 @@ class BigQueryService:
             self.dataset_id = dataset_id
             
             # Initialize LLM for SQL generation
-            self.llm = init_chat_model(model_name, model_provider="openai", api_key=openai_api_key)
+            self.llm = init_chat_model(llm_model, model_provider=llm_provider, api_key=llm_api_key)
             
             # Initialize schema vector store (required)
             self.schema_vector_store = VectorStoreService(
                 connection_string=connection_string,
-                openai_api_key=openai_api_key,
+                llm_api_key=llm_api_key,
                 collection_name=f"bigquery_schemas_{dataset_id.replace('-', '_').replace('.', '_')}",
                 embedding_model=embedding_model
             )

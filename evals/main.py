@@ -11,8 +11,11 @@ import re
 
 EXPERIMENT_PREFIX = "ai-explorer-eval"
 
-# Set the API key for openevals to use
-os.environ["OPENAI_API_KEY"] = settings.openai_api_key.get_secret_value()
+# Set the API key for openevals based on provider
+if settings.llm_provider == "openai":
+    os.environ["OPENAI_API_KEY"] = settings.llm_api_key.get_secret_value()
+elif settings.llm_provider == "google_genai":
+    os.environ["GOOGLE_API_KEY"] = settings.llm_api_key.get_secret_value()
 
 client = Client(api_key=settings.langsmith_api_key.get_secret_value())
 dataset = get_or_create_dataset(client)
@@ -59,11 +62,11 @@ experiment_results = client.evaluate(
     target,
     data=DATASET_NAME,
     evaluators=[
-        correctness_evaluator(model=settings.chat_model),
+        correctness_evaluator(model=settings.llm_model),
         # multiple evaluators can be added here
     ],
     experiment_prefix=EXPERIMENT_PREFIX,
-    max_concurrency=2,
+    max_concurrency=1,
 )
 
 # link will be provided to view the results in langsmith

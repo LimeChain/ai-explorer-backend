@@ -66,11 +66,12 @@ services:
     environment:
       DATABASE_URL: postgresql://ai_explorer:${POSTGRES_PASSWORD:-ai_explorer}@db:5432/ai_explorer
       REDIS_URL: redis://redis:6379/0
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_API_KEY: ${LLM_API_KEY}
       MCP_ENDPOINT: ${MCP_ENDPOINT:-http://mcp-server-mirror-node:8001/mcp}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      CHAT_MODEL: ${CHAT_MODEL:-gpt-4o-mini}
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
       LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}

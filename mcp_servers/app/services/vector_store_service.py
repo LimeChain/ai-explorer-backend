@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 class VectorStoreService:
     """Unified service for managing both SDK method and BigQuery schema vector embeddings in PostgreSQL with pgVector."""
     
-    def __init__(self, connection_string: str, openai_api_key: str, collection_name: str, embedding_model: str):
+    def __init__(self, connection_string: str, llm_api_key: str, collection_name: str, embedding_model: str):
         self.connection_string = connection_string
         self.collection_name = collection_name
-        self.embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key, model=embedding_model)
+        self.embeddings = OpenAIEmbeddings(openai_api_key=llm_api_key, model=embedding_model)
         self.engine = create_engine(connection_string)
         self.vector_store: Optional[PGVector] = None
         
