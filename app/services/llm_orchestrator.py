@@ -52,9 +52,9 @@ class LLMOrchestrator:
         self.llm = init_chat_model(
             model_provider=settings.llm_provider,
             model=settings.llm_model,
-            api_key=settings.llm_api_key,
             temperature=DEFAULT_TEMPERATURE,
             streaming=True,
+            api_key=settings.llm_api_key.get_secret_value(),
         )
         self.chat_service = ChatService()
         self.tool_parser = ToolCallParser()
@@ -166,9 +166,10 @@ class LLMOrchestrator:
                         nonlocal assistant_msg_id
                         assistant_msg_id = msg_id
 
+
                     # Stream final response
                     async for token in self.response_streamer.stream_final_response(
-                        final_state["messages"],
+                        final_state["messages"][-1].content,
                         RESPONSE_FORMATTING_SYSTEM_PROMPT,
                         query,
                         session_id,

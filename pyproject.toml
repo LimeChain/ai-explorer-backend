@@ -18,6 +18,8 @@ dependencies = [
     "psycopg2-binary>=2.9.0",
     "alembic>=1.13.0",
     "openevals>=0.1.0",
+    "langchain-postgres>=0.0.15",
+    "psycopg[binary]>=3.2.9",
 ]
 
 [tool.uv.workspace]

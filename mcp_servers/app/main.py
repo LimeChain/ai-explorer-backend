@@ -1,18 +1,66 @@
+import os
+
 from typing import Any, Dict, List, Union
 from datetime import datetime, timezone
+
 from mcp.server.fastmcp import FastMCP
 
 from .services.sdk_service import HederaSDKService
+from .settings import settings
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Initialize the FastMCP server for Hedera Mirror Node
 mcp = FastMCP("HederaMirrorNode")
 sdk_service = None
+vector_store_service = None
+document_processor = None
 
 def get_sdk_service() -> HederaSDKService:
     global sdk_service
     if sdk_service is None:
         sdk_service = HederaSDKService()
     return sdk_service
+
+def get_vector_services():
+    """Initialize and return vector store services."""
+    global vector_store_service, document_processor
+    
+    if vector_store_service is None or document_processor is None:
+        try:
+            from .services.vector_store_service import VectorStoreService
+            from .services.document_processor import DocumentProcessor
+            
+            # Get configuration from settings
+            vector_store_url = settings.database_url
+            llm_api_key = settings.llm_api_key.get_secret_value()
+            collection_name = settings.collection_name
+            embedding_model = settings.embedding_model
+            
+            # Initialize services
+            vector_store_service = VectorStoreService(
+                connection_string=vector_store_url,
+                llm_api_key=llm_api_key,
+                collection_name=collection_name,
+                embedding_model=embedding_model
+            )
+            
+            document_processor = DocumentProcessor(vector_store_service)
+            
+            # Initialize with documentation file
+            doc_path = settings.sdk_documentation_path
+
+            if os.path.exists(doc_path):
+                document_processor.initialize_from_file(doc_path)
+            else:
+                raise FileNotFoundError(f"SDK documentation file not found: {doc_path}")
+                
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize vector services: {e}") from e
+    
+    return vector_store_service, document_processor
 
 @mcp.tool()
 async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
@@ -37,32 +85,46 @@ async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
     return await get_sdk_service().call_method(method_name, **kwargs)
 
 @mcp.tool()
-async def get_available_methods() -> List[str]:
+def retrieve_sdk_method(query: str) -> Dict[str, Any]:
     """
-    Get a list of all available public methods in the Hedera Mirror Node SDK.
+    Retrieve SDK methods using natural language queries via vector similarity search.
     
-    This tool helps the agent discover what methods are available to call.
-    
-    Returns:
-        List of available method names
-    """
-    return get_sdk_service().get_available_methods()
-
-@mcp.tool()
-async def get_method_signature(method_name: str) -> Dict[str, Any]:
-    """
-    Get the signature information for a specific SDK method.
-    
-    This tool helps the agent understand what parameters a method expects
-    and what types they should be.
+    This tool replaces get_available_methods and get_method_signature by using semantic
+    search to find the most relevant SDK methods based on the user's natural language query.
     
     Args:
-        method_name: The name of the method to inspect
+        query: Natural language description of what you want to do (e.g., "get account balance", "list transactions")
         
     Returns:
-        Dict containing parameter information, types, and defaults
+        Dict containing:
+        - query: The original query
+        - methods: List of matching methods with full details (name, description, parameters, returns, use_cases)
+        - count: Number of methods returned
+        
+    Example usage:
+        - retrieve_sdk_method(query="get account information")
+        - retrieve_sdk_method(query="check token balance")
     """
-    return get_sdk_service().get_method_signature(method_name)
+    try:
+        # Get vector services
+        _, document_processor = get_vector_services()
+
+        # Search for methods
+        search_result = document_processor.search_methods(query=query, k=3)
+
+        return {
+            "query": query,
+            "methods": search_result.get("methods", []),
+            "success": True
+        }
+
+    except Exception as e:
+        return {
+            "query": query,
+            "methods": [],
+            "success": False,
+            "error": str(e)
+        }
 
 @mcp.tool()
 async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[str, int, float]]], timestamp: Union[str, int, float] = None) -> Dict[str, Any]:
@@ -88,15 +150,6 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
     """
     async def calculate_single_hbar_value(hbar_amount, timestamp):
         try:
-            # Get current exchange rate using the SDK
-            exchange_rate_params = {}
-            if timestamp:
-                exchange_rate_params["timestamp"] = str(timestamp)
-                
-            exchange_rate_result = await get_sdk_service().call_method(
-                "get_network_exchange_rate", **exchange_rate_params
-            )
-            
             if not exchange_rate_result.get("success", False):
                 return {
                     "error": f"Failed to fetch exchange rate: {exchange_rate_result.get('error', 'Unknown error')}",
@@ -174,7 +227,15 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
     
     calculations = {}
     all_successful = True
-    
+    exchange_rate_params = {}
+
+    if timestamp:
+        exchange_rate_params["timestamp"] = str(timestamp)
+
+    exchange_rate_result = await get_sdk_service().call_method(
+        "get_network_exchange_rate", **exchange_rate_params
+    )
+
     for hbar_amount in hbar_amount_list:
         result = await calculate_single_hbar_value(hbar_amount, timestamp)
         key = str(hbar_amount)
@@ -187,17 +248,6 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
         "count": len(calculations),
         "success": all_successful
     }
-
-
-@mcp.tool()
-async def health_check() -> Dict[str, str]:
-    """
-    Check the health status of the Hedera Mirror Node MCP Server.
-    
-    Returns:
-        Dict with status information
-    """
-    return {"status": "ok", "service": "HederaMirrorNode"}
 
 @mcp.tool()
 async def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, float]]]) -> Dict[str, Any]:

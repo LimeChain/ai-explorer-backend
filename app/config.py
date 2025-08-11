@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     """
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
     
+    embedding_model: str = Field(default="text-embedding-3-small", description="The model to use for embeddings")
     llm_provider: str = Field(..., description="LLM provider to use (openai, google_genai, anthropic, etc.)")
     llm_model: str = Field(..., description="The LLM model to use (e.g., gpt-4o, gpt-4o-mini for OpenAI; gemini-2.5-pro for Google)")
     llm_api_key: SecretStr = Field(..., description="LLM API key (required)", alias="LLM_API_KEY")
@@ -87,6 +88,8 @@ class Settings(BaseSettings):
     )
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
 
+    # Vector store settings
+    collection_name: str = Field(default="sdk_methods", description="Vector store collection name")
 
 # Global settings instance
 settings = Settings()
