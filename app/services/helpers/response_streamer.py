@@ -71,8 +71,8 @@ class ResponseStreamer:
                     db=db
                 )
 
-                return assistant_msg_id
                 logger.info(f"Conversation saved with session_id: {saved_session_id}")
+                return assistant_msg_id
         except Exception as save_error:
             logger.error(f"Failed to save conversation: {save_error}")
             # Don't raise - shouldn't break streaming response

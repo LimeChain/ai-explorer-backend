@@ -55,9 +55,7 @@ class Settings(BaseSettings):
             os.environ.pop("LANGCHAIN_PROJECT", None)
 
     # Database settings
-    database_url: str = Field( 
-        description="Database connection URL"
-    )
+    database_url: str = Field(..., description="Database connection URL")
     database_pool_size: int = Field(
         default=50, 
         ge=5, 
@@ -90,6 +88,20 @@ class Settings(BaseSettings):
 
     # Vector store settings
     collection_name: str = Field(default="sdk_methods", description="Vector store collection name")
+
+    # Redis settings
+    redis_url: str = Field(..., description="Redis connection URL")
+    redis_max_connections: int = Field(default=20, description="Redis connection pool max connections")
+    redis_retry_on_timeout: bool = Field(default=True, description="Redis retry on timeout")
+    redis_socket_timeout: float = Field(default=5.0, description="Redis socket timeout in seconds")
+    
+    # Rate limiting settings
+    rate_limit_max_requests: int = Field(default=5, ge=1, description="Max requests per window per IP")
+    rate_limit_window_seconds: int = Field(default=60, ge=1, description="Rate limiting window in seconds")
+    
+    # Global rate limiting settings
+    global_rate_limit_max_requests: int = Field(default=100, ge=1, description="Max total requests per window across all IPs")
+    global_rate_limit_window_seconds: int = Field(default=60, ge=1, description="Global rate limiting window in seconds")
 
 # Global settings instance
 settings = Settings()
