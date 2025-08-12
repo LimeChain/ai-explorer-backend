@@ -10,16 +10,31 @@ from app.schemas.chat import ChatRequest
 from app.services.llm_orchestrator import LLMOrchestrator
 from app.db.session import get_db_session
 from app.exceptions import ChatServiceError, ValidationError, LLMServiceError, RateLimitError
-from app.utils.rate_limiter import rate_limit_websocket
+from app.utils.rate_limiter import IPRateLimiter, GlobalRateLimiter, redis_client
+from app.config import settings
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 llm_orchestrator = LLMOrchestrator()
 
+# Create global rate limiter instance
+global_rate_limiter = GlobalRateLimiter(
+    redis_client,
+    max_requests=settings.global_rate_limit_max_requests,
+    window_seconds=settings.global_rate_limit_window_seconds
+)
+
+# Create message-level rate limiter instance with global limiter
+ip_rate_limiter = IPRateLimiter(
+    redis_client, 
+    max_requests=settings.rate_limit_max_requests,
+    window_seconds=settings.rate_limit_window_seconds,
+    global_limiter=global_rate_limiter
+)
+
 
 @router.websocket("/chat/ws/{session_id}")
-@rate_limit_websocket()
 async def websocket_chat(websocket: WebSocket, session_id: str):
     """
     WebSocket endpoint for real-time chat with the AI Explorer.
@@ -45,6 +60,14 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
             logger.info(f"Received WebSocket message for session {session_id}: {data}")
 
             try:
+                # Check rate limit for each message before processing
+                if not ip_rate_limiter.is_allowed(websocket):
+                    logger.warning(f"Rate limit exceeded for message in session {session_id}")
+                    await websocket.send_text(json.dumps({
+                        "error": f"Rate limit exceeded. Limits: {settings.rate_limit_max_requests} per IP per {settings.rate_limit_window_seconds}s, {settings.global_rate_limit_max_requests} global per {settings.global_rate_limit_window_seconds}s."
+                    }))
+                    continue  # Skip processing this message but keep connection alive
+                
                 message_data = json.loads(data)
                 
                 # Validate using ChatRequest schema
@@ -125,11 +148,6 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 logger.error(f"LLM service error for session {session_id}: {e}")
                 await websocket.send_text(json.dumps({
                     "error": "AI service temporarily unavailable. Please try again."
-                }))
-            except RateLimitError as e:
-                logger.error(f"Rate limit exceeded for session {session_id}: {e}")
-                await websocket.send_text(json.dumps({
-                    "error": "Rate limit exceeded. Please try again later."
                 }))
             except Exception as e:
                 logger.error(f"Unexpected error processing message for session {session_id}: {e}")

@@ -7,9 +7,9 @@ Hederion AI Explorer is a next-generation block explorer for the Hedera network 
 - REST API
   - ✅ Chat endpoint for real-time user queries and token-by-token streaming responses over WebSockets.
   - ✅ Suggested queries endpoint for list of pre-defined queries
-  - ✅ Health check endpoint for monitoring
+  - ✅ IP and global rate limiting for protecting the API
+  - [ ] Cost-based limits
   - [ ] Chat history retrieval endpoint for retrieving previous conversations
-  - [ ] IP, fingerprint and cost-based rate limiting for protecting the API
 - AI Agent
   - ✅ LLM agentic reasoning
   - ✅ Multi-turn conversation
@@ -121,8 +121,33 @@ Configure the LangSmith tracing in the `.env` file.
 uv run python -m evals.main
 ```
 
+
+## Testing
+
+### Spamming the WebSocket endpoint
+
+Tests the rate limiting by sending multiple requests to the WebSocket endpoint.
+
+```sh
+python scripts/spam_websocket.py
+python scripts/spam_websocket.py concurrent
+```
+
+Monitors and manages rate limiting data stored in Redis.
+
+```sh
+python scripts/check_redis_counters.py list
+python scripts/check_redis_counters.py list --details --requests
+python scripts/check_redis_counters.py monitor
+python scripts/check_redis_counters.py monitor 3
+python scripts/check_redis_counters.py stats
+python scripts/check_redis_counters.py clear
+```
+
+
 ### API Documentation
 
 Once running, visit:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
+
