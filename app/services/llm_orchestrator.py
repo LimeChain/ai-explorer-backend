@@ -156,7 +156,7 @@ class LLMOrchestrator:
 
                     # Check if session already exists
                     existing_state = await checkpointer.aget_tuple(config)
-
+                    
                     if existing_state and existing_state.checkpoint:
                         # Get the actual workflow state from channel_values
                         channel_values = existing_state.checkpoint.get('channel_values', {})
@@ -165,13 +165,11 @@ class LLMOrchestrator:
                             initial_state = self._create_initial_state(query, account_id, session_id)
                             final_state = await graph.ainvoke(initial_state, config=config)
                         else:
-                            restored_state = channel_values
-                            
-                        # Existing session - just pass the new message
-                        logger.info(f"Resuming existing session: {session_id}")
-                        logger.info(f"Existing state checkpoint ID: {existing_state.checkpoint.get('id', 'unknown')}")
-                        restored_state["messages"].append(HumanMessage(content=query))
-                        final_state = await graph.ainvoke(restored_state, config=config)
+                            restored_state = dict(channel_values)
+                            logger.info(f"Resuming existing session: {session_id}")
+                            logger.info(f"Existing state checkpoint ID: {existing_state.checkpoint.get('id', 'unknown')}")
+                            restored_state["messages"].append(HumanMessage(content=query))
+                            final_state = await graph.ainvoke(restored_state, config=config)
                     else:
                         # New session - create initial state
                         logger.info(f"Starting new session: {session_id}")
