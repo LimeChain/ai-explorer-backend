@@ -8,6 +8,7 @@ from uuid import UUID
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_core.exceptions import LangChainException
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END
 from langchain_mcp_adapters.tools import load_mcp_tools
 from sqlalchemy.orm import Session
@@ -37,11 +38,10 @@ class GraphState(TypedDict):
     """State schema for the agentic workflow graph."""
     messages: List[BaseMessage]
     tool_calls_made: List[dict]
-    current_query: str
-    final_response: Optional[str]
     iteration_count: int
     pending_tool_call: Optional[dict]
     account_id: Optional[str]
+    session_id: Optional[str]
 
 
 class LLMOrchestrator:
@@ -95,35 +95,21 @@ class LLMOrchestrator:
         if len(query) > MAX_QUERY_LENGTH:
             raise ValidationError(f"Query exceeds maximum length of {MAX_QUERY_LENGTH} characters")
     
-    def _build_initial_messages(self, query: str, conversation_history: Optional[List[ChatMessage]]) -> List[BaseMessage]:
-        """Build initial messages from conversation history."""
-        if conversation_history:
-            messages = []
-            for msg in conversation_history:
-                if msg.role == "user":
-                    messages.append(HumanMessage(content=msg.content))
-                elif msg.role == "assistant":
-                    messages.append(AIMessage(content=msg.content))
-            return messages
-        return [HumanMessage(content=query)]
-    
-    def _create_initial_state(self, messages: List[BaseMessage], query: str, account_id: Optional[str]) -> GraphState:
+    def _create_initial_state(self, query: str, account_id: Optional[str], session_id: Optional[str]) -> GraphState:
         """Create initial workflow state."""
         return {
-            "messages": messages,
+            "messages": [HumanMessage(content=query)],
             "tool_calls_made": [],
-            "current_query": query,
-            "final_response": None,
             "iteration_count": 0,
             "pending_tool_call": None,
-            "account_id": account_id
+            "account_id": account_id,
+            "session_id": session_id
         }
 
     async def stream_llm_response(
         self, 
         query: str, 
         account_id: Optional[str] = None,
-        conversation_history: Optional[List[ChatMessage]] = None,
         session_id: Optional[str] = None,
         db: Optional[Session] = None,
         on_complete: Optional[Callable[[UUID], None]] = None
@@ -133,54 +119,70 @@ class LLMOrchestrator:
             logger.info(f"Starting LLM orchestration for query: {query[:100]}...")
             self._validate_query(query)
             
-            async with streamablehttp_client(settings.mcp_endpoint) as (read, write, _):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    logger.info("MCP session initialized")
-                    
-                    # Load tools and create workflow
-                    tools = await load_mcp_tools(session)
-                    logger.info(f"Loaded {len(tools)} tools")
-                    
-                    # Create node executors using helper classes
-                    call_model_node = self.workflow_builder.create_model_node_executor(
-                        self.llm, self._create_context_aware_system_prompt
-                    )
-                    call_tool_node = self.workflow_builder.create_tool_node_executor(tools)
-                    
-                    # Build workflow
-                    graph = self.workflow_builder.build_workflow(
-                        GraphState, call_model_node, call_tool_node, self._continue_with_tool_or_end
-                    )
-                    
-                    # Prepare initial state
-                    initial_messages = self._build_initial_messages(query, conversation_history)
-                    initial_state = self._create_initial_state(initial_messages, query, account_id)
-                    
-                    # Execute workflow
-                    final_state = await graph.ainvoke(initial_state, {"recursion_limit": RECURSION_LIMIT})
+            # Create checkpointer outside of MCP context to avoid connection conflicts
+            async with AsyncPostgresSaver.from_conn_string('postgresql://ai_explorer:ai_explorer@localhost:5432/ai_explorer') as checkpointer:
+                async with streamablehttp_client(settings.mcp_endpoint) as (read, write, _):
+                    async with ClientSession(read, write) as session:
+                        # await checkpointer.setup()
+                        await session.initialize()
+                        logger.info("MCP session initialized")
+                        
+                        # Load tools and create workflow
+                        tools = await load_mcp_tools(session)
+                        logger.info(f"Loaded {len(tools)} tools")
+                        
+                        # Create node executors using helper classes
+                        call_model_node = self.workflow_builder.create_model_node_executor(
+                            self.llm, self._create_context_aware_system_prompt
+                        )
+                        call_tool_node = self.workflow_builder.create_tool_node_executor(tools)
+                        
+                        # Build workflow
+                        graph = self.workflow_builder.build_workflow(
+                            GraphState, call_model_node, call_tool_node, self._continue_with_tool_or_end, checkpointer
+                        )
+                        
+                        # Prepare config for memory persistence
+                        config = {
+                            "configurable": {"thread_id": session_id}
+                        }
+                        
+                        # Check if session already exists
+                        existing_state = await checkpointer.aget_tuple(config)
+                        
+                        if existing_state and existing_state.checkpoint:
+                            # Get the actual workflow state from channel_values
+                            restored_state = existing_state.checkpoint.get('channel_values', {})
+                            # Existing session - just pass the new message
+                            logger.info(f"Resuming existing session: {session_id}")
+                            logger.info(f"Existing state checkpoint ID: {existing_state.checkpoint.get('id', 'unknown')}")
+                            restored_state["messages"].append(HumanMessage(content=query))
+                            final_state = await graph.ainvoke(restored_state, config=config)
+                        else:
+                            # New session - create initial state
+                            logger.info(f"Starting new session: {session_id}")
+                            initial_state = self._create_initial_state(query, account_id, session_id)
+                            final_state = await graph.ainvoke(initial_state, config=config)
 
-                    assistant_msg_id = None
-        
-                    def on_complete_callback(msg_id):
-                        nonlocal assistant_msg_id
-                        assistant_msg_id = msg_id
+                        assistant_msg_id = None
+            
+                        def on_complete_callback(msg_id):
+                            nonlocal assistant_msg_id
+                            assistant_msg_id = msg_id
+
+                        async for token in self.response_streamer.stream_final_response(
+                            final_state["messages"],
+                            RESPONSE_FORMATTING_SYSTEM_PROMPT,
+                            query,
+                            session_id,
+                            account_id,
+                            db
+                        ):
+                            yield token
 
 
-                    # Stream final response
-                    async for token in self.response_streamer.stream_final_response(
-                        final_state["messages"][-1].content,
-                        RESPONSE_FORMATTING_SYSTEM_PROMPT,
-                        query,
-                        session_id,
-                        account_id,
-                        db,
-                        on_complete=on_complete_callback
-                    ):
-                        yield token
-
-                    if on_complete and assistant_msg_id:
-                        on_complete(assistant_msg_id)
+                        if on_complete and assistant_msg_id:
+                            on_complete(assistant_msg_id)
 
         except ValidationError:
             raise

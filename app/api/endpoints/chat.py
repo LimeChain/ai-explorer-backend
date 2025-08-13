@@ -84,15 +84,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 if chat_request.account_id:
                     logger.info(f"Processing request with account_id={chat_request.account_id}")
                 
-                # Extract query from messages (last user message)
-                query = None
-                if chat_request.messages:
-                    for msg in reversed(chat_request.messages):
-                        if msg.role == "user":
-                            query = msg.content
-                            break
-                
-                if not query:
+                if not chat_request.query:
                     logger.warning(f"No user message found in request for session {session_id}")
                     await websocket.send_text(json.dumps({
                         "error": "No user message found in request"
@@ -108,9 +100,8 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         assistant_msg_id = msg_id
 
                     async for token in llm_orchestrator.stream_llm_response(
-                        query=query,
+                        query=chat_request.query,
                         account_id=chat_request.account_id,
-                        conversation_history=chat_request.messages,
                         session_id=chat_request.session_id,
                         db=db,  # Pass database session for conversation persistence
                         on_complete=on_complete
@@ -126,6 +117,8 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         }))
 
                     # Send completion signal
+                # Stream LLM response with account context, session ID, and database session
+
                     await websocket.send_text(json.dumps({
                         "complete": True
                     }))
