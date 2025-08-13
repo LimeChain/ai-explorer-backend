@@ -6,9 +6,8 @@ from typing import AsyncGenerator, Callable, List, Optional, TypedDict
 from uuid import UUID
 
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langchain_core.messages import HumanMessage, BaseMessage
 from langchain_core.exceptions import LangChainException
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END
 from langchain_mcp_adapters.tools import load_mcp_tools
 from sqlalchemy.orm import Session
@@ -22,7 +21,7 @@ from app.services.helpers.tool_call_parser import ToolCallParser
 from app.services.helpers.workflow_builder import WorkflowBuilder
 from app.services.helpers.response_streamer import ResponseStreamer
 from app.services.helpers.constants import (
-    MAX_QUERY_LENGTH, DEFAULT_TEMPERATURE, RECURSION_LIMIT
+    MAX_QUERY_LENGTH, DEFAULT_TEMPERATURE
 )
 
 from mcp import ClientSession
@@ -109,9 +108,11 @@ class LLMOrchestrator:
         """Get checkpointer lazily to avoid circular import."""
         try:
             from app.main import checkpointer
+            if checkpointer is None:
+                raise ImportError("Checkpointer not initialized. Ensure the application has started properly.")
             return checkpointer
-        except ImportError:
-            raise ImportError("Checkpointer not found. Please ensure app.main is imported before using this method.")
+        except ImportError as e :
+            raise ImportError(f"Checkpointer not found: {e}")
 
     async def stream_llm_response(
         self, 

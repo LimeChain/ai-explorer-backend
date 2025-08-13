@@ -4,7 +4,7 @@ Chat endpoint for the AI Explorer backend service.
 import logging
 import json
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Path, WebSocket, WebSocketDisconnect
 
 from app.schemas.chat import ChatRequest
 from app.services.llm_orchestrator import LLMOrchestrator
@@ -35,7 +35,10 @@ ip_rate_limiter = IPRateLimiter(
 
 
 @router.websocket("/chat/ws/{session_id}")
-async def websocket_chat(websocket: WebSocket, session_id: str):
+async def websocket_chat(
+    websocket: WebSocket, 
+    session_id: str = Path(..., description="Session identifier for conversation persistence") # TODO: add regex and example for uuid session_id
+):
     """
     WebSocket endpoint for real-time chat with the AI Explorer.
     
