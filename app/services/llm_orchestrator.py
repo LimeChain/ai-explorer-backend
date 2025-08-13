@@ -123,7 +123,7 @@ class LLMOrchestrator:
             async with AsyncPostgresSaver.from_conn_string('postgresql://ai_explorer:ai_explorer@localhost:5432/ai_explorer') as checkpointer:
                 async with streamablehttp_client(settings.mcp_endpoint) as (read, write, _):
                     async with ClientSession(read, write) as session:
-                        # await checkpointer.setup()
+                        await checkpointer.setup()
                         await session.initialize()
                         logger.info("MCP session initialized")
                         
@@ -152,7 +152,14 @@ class LLMOrchestrator:
                         
                         if existing_state and existing_state.checkpoint:
                             # Get the actual workflow state from channel_values
-                            restored_state = existing_state.checkpoint.get('channel_values', {})
+                            channel_values = existing_state.checkpoint.get('channel_values', {})
+                            if not channel_values or 'messages' not in channel_values:
+                                logger.warning(f"No messages found in existing state for session: {session_id}, starting new session")
+                                initial_state = self._create_initial_state(query, account_id, session_id)
+                                final_state = await graph.ainvoke(initial_state, config=config)
+                            else:
+                                restored_state = channel_values
+                                
                             # Existing session - just pass the new message
                             logger.info(f"Resuming existing session: {session_id}")
                             logger.info(f"Existing state checkpoint ID: {existing_state.checkpoint.get('id', 'unknown')}")
@@ -176,7 +183,8 @@ class LLMOrchestrator:
                             query,
                             session_id,
                             account_id,
-                            db
+                            db,
+                            on_complete=on_complete_callback
                         ):
                             yield token
 

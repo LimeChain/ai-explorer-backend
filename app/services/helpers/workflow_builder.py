@@ -6,10 +6,7 @@ import logging
 from typing import Dict, Any, List, Callable
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.messages.utils import (
-    trim_messages,
-    count_tokens_approximately
-)
+from langchain_core.messages.utils import trim_messages
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph

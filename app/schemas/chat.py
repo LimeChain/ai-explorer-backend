@@ -24,7 +24,6 @@ class ChatRequest(BaseModel):
     Attributes:
         query: The user's natural language query (for backwards compatibility)
         account_id: Optional connected wallet address for personalized context
-        session_id: Optional client-generated session identifier for traceability
     """
     query: Optional[str] = Field(
         None, 
@@ -35,15 +34,11 @@ class ChatRequest(BaseModel):
         None, 
         description="Connected wallet address (e.g., '0.0.12345') for personalized responses"
     )
-    session_id: Optional[str] = Field(
-        None, 
-        description="Client-generated session identifier for request traceability"
-    )
     
     def model_post_init(self, __context: None) -> None:
         """Validate that either messages or query is provided."""
-        if not self.query and not self.account_id:
-            raise ValueError("Either 'query' or 'account_id' must be provided")
+        if not self.query:
+            raise ValueError("'query' must be provided")
 
 
 

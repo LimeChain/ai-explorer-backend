@@ -102,7 +102,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     async for token in llm_orchestrator.stream_llm_response(
                         query=chat_request.query,
                         account_id=chat_request.account_id,
-                        session_id=chat_request.session_id,
+                        session_id=session_id,
                         db=db,  # Pass database session for conversation persistence
                         on_complete=on_complete
                     ):
@@ -140,7 +140,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
             except LLMServiceError as e:
                 logger.error(f"LLM service error for session {session_id}: {e}")
                 await websocket.send_text(json.dumps({
-                    "error": "AI service temporarily unavailable. Please try again."
+                    "error": f"AI service temporarily unavailable. Please try again. Error: {str(e)}"
                 }))
             except Exception as e:
                 logger.error(f"Unexpected error processing message for session {session_id}: {e}")
