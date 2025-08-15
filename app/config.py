@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     llm_provider: str = Field(..., description="LLM provider to use (openai, google_genai, anthropic, etc.)")
     llm_model: str = Field(..., description="The LLM model to use (e.g., gpt-4o, gpt-4o-mini for OpenAI; gemini-2.5-pro for Google)")
     llm_api_key: SecretStr = Field(..., description="LLM API key (required)", alias="LLM_API_KEY")
+    
+    # Token pricing settings
+    llm_input_cost_per_token: float = Field(default=0.0000004, ge=0, description="Cost per input token in USD")
+    llm_output_cost_per_token: float = Field(default=0.0000016, ge=0, description="Cost per output token in USD")
 
     environment: str = Field(default="development", pattern="^(development|production|staging)$")
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
@@ -102,6 +106,13 @@ class Settings(BaseSettings):
     # Global rate limiting settings
     global_rate_limit_max_requests: int = Field(default=100, ge=1, description="Max total requests per window across all IPs")
     global_rate_limit_window_seconds: int = Field(default=60, ge=1, description="Global rate limiting window in seconds")
+    
+    # Cost-based rate limiting settings
+    per_user_cost_limit: float = Field(default=1.0, ge=0, description="Max cost per user per period in USD")
+    per_user_cost_period_seconds: int = Field(default=168, ge=1, description="User cost limit period in hours (168 = 1 week)")
+    
+    global_cost_limit: float = Field(default=10.0, ge=0, description="Max total cost across all users per period in USD")
+    global_cost_period_seconds: int = Field(default=8760, ge=1, description="Global cost limit period in hours (8760 = 1 year)")
 
 # Global settings instance
 settings = Settings()
