@@ -76,7 +76,11 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 if not cost_limiter.is_allowed(websocket):
                     logger.warning(f"Cost limit exceeded for message in session {session_id}")
                     await websocket.send_text(json.dumps({
-                        "error": f"Cost limit exceeded. Limits: ${settings.per_user_cost_limit} per user per {settings.per_user_cost_period_seconds}h, ${settings.global_cost_limit} global per {settings.global_cost_period_seconds}h."
+                        "error": (
+                            f"Cost limit exceeded. Limits: "
+                            f"${settings.per_user_cost_limit} per user per {settings.per_user_cost_period_seconds}s, "
+                            f"${settings.global_cost_limit} global per {settings.global_cost_period_seconds}s."
+                        )
                     }))
                     continue  # Skip processing this message but keep connection alive
                 

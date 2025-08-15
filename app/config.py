@@ -109,10 +109,10 @@ class Settings(BaseSettings):
     
     # Cost-based rate limiting settings
     per_user_cost_limit: float = Field(default=1.0, ge=0, description="Max cost per user per period in USD")
-    per_user_cost_period_seconds: int = Field(default=168, ge=1, description="User cost limit period in hours (168 = 1 week)")
+    per_user_cost_period_seconds: int = Field(default=86400, ge=1, description="User cost limit period in seconds (86400 = 1 day)")
     
     global_cost_limit: float = Field(default=10.0, ge=0, description="Max total cost across all users per period in USD")
-    global_cost_period_seconds: int = Field(default=8760, ge=1, description="Global cost limit period in hours (8760 = 1 year)")
+    global_cost_period_seconds: int = Field(default=31536000, ge=1, description="Global cost limit period in seconds (31536000 = 1 year)")
 
 # Global settings instance
 settings = Settings()

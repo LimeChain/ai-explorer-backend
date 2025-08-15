@@ -35,14 +35,28 @@ class ResponseStreamer:
         on_complete: Optional[callable] = None
     ) -> AsyncGenerator[str, None]:
         """Stream the final response and save to database."""
-        encoding = tiktoken.encoding_for_model(settings.llm_model)
+        try:
+            encoding = tiktoken.encoding_for_model(settings.llm_model)
+        except Exception as e:
+            # Fallback for unknown models/providers
+            base = "o200k_base" if "gpt-4.1-mini" in settings.llm_model else "cl100k_base"
+            logger.error(f"Error getting encoding for model {settings.llm_model}: {e}")
+            encoding = tiktoken.get_encoding(base)
+            logger.warning(
+                f"Unknown model for tiktoken: provider={getattr(settings, 'llm_provider', 'unknown')}, "
+                f"model={settings.llm_model}. Falling back to {base}."
+            )
         
         # Prepare messages for final response
         final_messages = [SystemMessage(content=response_system_prompt)]
         final_messages.append(HumanMessage(content=messages))
 
         # Count input tokens
-        input_tokens = sum(len(encoding.encode(str(msg.content))) for msg in final_messages)
+        try:
+            input_tokens = sum(len(encoding.encode(str(msg.content))) for msg in final_messages)
+        except Exception as e:
+            logger.warning(f"Tokenization failed for input; approximating tokens. error={e}")
+            input_tokens = sum(max(1, len(str(msg.content)) // 4) for msg in final_messages)
 
         accumulated_response = ""
         # Stream the response token by token

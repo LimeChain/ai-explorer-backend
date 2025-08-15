@@ -34,10 +34,10 @@ def get_user_identifier(websocket: WebSocket) -> str:
 class UserCostLimiter:
     """Per-user cost tracking with configurable time periods."""
     
-    def __init__(self, redis_client: redis.Redis, max_cost: float = 1.0, period_hours: int = 168):
+    def __init__(self, redis_client: redis.Redis, max_cost: float = 1.0, period_seconds: int = 168):
         self.redis = redis_client
         self.max_cost = max_cost
-        self.period_hours = period_hours
+        self.period_seconds = period_seconds
     
     def _get_user_key(self, user_identifier: str) -> str:
         """Generate Redis key for user cost tracking."""
@@ -61,7 +61,6 @@ class UserCostLimiter:
             return
             
         key = self._get_user_key(user_identifier)
-        ttl_seconds = self.period_hours * 3600
         
         try:
             # Check if key exists to determine if we need to set TTL
@@ -69,8 +68,8 @@ class UserCostLimiter:
             
             if current_cost is None:
                 # First cost record - set both value and TTL
-                self.redis.set(key, actual_cost, ex=ttl_seconds)
-                logger.debug(f"First cost record for user {user_identifier[:8]}...: ${actual_cost:.6f} (TTL: {self.period_hours}h)")
+                self.redis.set(key, actual_cost, ex=self.period_seconds)
+                logger.debug(f"First cost record for user {user_identifier[:8]}...: ${actual_cost:.6f} (TTL: {self.period_seconds}s)")
             else:
                 # Key exists - just increment (preserves existing TTL)
                 self.redis.incrbyfloat(key, actual_cost)
@@ -92,10 +91,10 @@ class UserCostLimiter:
 class GlobalCostLimiter:
     """Global cost tracking across all users with configurable time periods."""
     
-    def __init__(self, redis_client: redis.Redis, max_cost: float = 10.0, period_hours: int = 8760):
+    def __init__(self, redis_client: redis.Redis, max_cost: float = 10.0, period_seconds: int = 8760):
         self.redis = redis_client
         self.max_cost = max_cost
-        self.period_hours = period_hours
+        self.period_seconds = period_seconds
     
     def _get_global_key(self) -> str:
         """Generate Redis key for global cost tracking."""
@@ -119,7 +118,6 @@ class GlobalCostLimiter:
             return
             
         key = self._get_global_key()
-        ttl_seconds = self.period_hours * 3600
         
         try:
             # Check if key exists to determine if we need to set TTL
@@ -127,8 +125,8 @@ class GlobalCostLimiter:
             
             if current_cost is None:
                 # First global cost record - set both value and TTL
-                self.redis.set(key, actual_cost, ex=ttl_seconds)
-                logger.debug(f"First global cost record: ${actual_cost:.6f} (TTL: {self.period_hours}h)")
+                self.redis.set(key, actual_cost, ex=self.period_seconds)
+                logger.debug(f"First global cost record: ${actual_cost:.6f} (TTL: {self.period_seconds}s)")
             else:
                 # Key exists - just increment (preserves existing TTL)
                 self.redis.incrbyfloat(key, actual_cost)
@@ -155,12 +153,12 @@ class CostLimiter:
         self.user_limiter = UserCostLimiter(
             redis_client,
             max_cost=settings.per_user_cost_limit,
-            period_hours=settings.per_user_cost_period_seconds
+            period_seconds=settings.per_user_cost_period_seconds
         )
         self.global_limiter = GlobalCostLimiter(
             redis_client,
             max_cost=settings.global_cost_limit,
-            period_hours=settings.global_cost_period_seconds
+            period_seconds=settings.global_cost_period_seconds
         )
     
     def is_allowed(self, websocket: WebSocket) -> bool:
