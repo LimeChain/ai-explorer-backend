@@ -67,7 +67,12 @@ class ResponseStreamer:
                     yield chunk.content
         
         # Count output tokens
-        output_tokens = len(encoding.encode(accumulated_response))
+        try:
+            output_tokens = len(encoding.encode(accumulated_response))
+        except Exception as e:
+            logger.warning(f"Tokenization failed for output; approximating tokens. error={e}")
+            output_tokens = sum(max(1, len(accumulated_response) // 4))
+
         total_tokens = input_tokens + output_tokens
         
         logger.info(f"Response streaming tokens: {input_tokens} input + {output_tokens} output = {total_tokens} total")
