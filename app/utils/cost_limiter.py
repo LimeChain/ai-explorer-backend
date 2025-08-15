@@ -17,11 +17,11 @@ def get_user_identifier(websocket: WebSocket) -> str:
     """Get user identifier for cost tracking (reuses IP logic from rate limiter)."""
     # Get real IP, handling proxies and load balancers
     real_ip = (
+        (websocket.client.host if websocket.client else "unknown") or
         websocket.headers.get("x-forwarded-for", "").split(",")[0].strip() or
         websocket.headers.get("x-real-ip", "") or
         websocket.headers.get("cf-connecting-ip", "") or  # Cloudflare
-        websocket.headers.get("x-original-forwarded-for", "") or  # Additional proxy header
-        (websocket.client.host if websocket.client else "unknown")
+        websocket.headers.get("x-original-forwarded-for", "")  # Additional proxy header
     )
     
     # Normalize IP address (handle IPv4 and IPv6)
