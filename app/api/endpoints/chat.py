@@ -4,6 +4,8 @@ Chat endpoint for the AI Explorer backend service.
 import logging
 import json
 
+from uuid import UUID
+
 from fastapi import APIRouter, Path, WebSocket, WebSocketDisconnect
 
 from app.schemas.chat import ChatRequest
@@ -37,7 +39,7 @@ ip_rate_limiter = IPRateLimiter(
 @router.websocket("/chat/ws/{session_id}")
 async def websocket_chat(
     websocket: WebSocket, 
-    session_id: str = Path(..., description="Session identifier for conversation persistence") # TODO: add regex and example for uuid session_id
+    session_id: UUID = Path(..., description="Session identifier for conversation persistence")
 ):
     """
     WebSocket endpoint for real-time chat with the AI Explorer.
@@ -138,12 +140,12 @@ async def websocket_chat(
             except (ValidationError, ChatServiceError) as e:
                 logger.error(f"Service error for session {session_id}: {e}")
                 await websocket.send_text(json.dumps({
-                    "error": f"Service error: {str(e)}"
+                    "error": f"Service error"
                 }))
             except LLMServiceError as e:
                 logger.error(f"LLM service error for session {session_id}: {e}")
                 await websocket.send_text(json.dumps({
-                    "error": f"AI service temporarily unavailable. Please try again. Error: {str(e)}"
+                    "error": "AI service temporarily unavailable. Please try again."
                 }))
             except Exception as e:
                 logger.error(f"Unexpected error processing message for session {session_id}: {e}")
