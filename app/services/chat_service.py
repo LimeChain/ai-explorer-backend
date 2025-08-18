@@ -160,7 +160,7 @@ class ChatService:
             )
             
             logger.info(f"Saved conversation turn (user: {user_msg.id}, assistant: {assistant_msg.id}) for session: {conversation.session_id}")
-            return conversation.session_id
+            return conversation.session_id, assistant_msg.id
             
         except (ValidationError, ChatServiceError, SessionNotFoundError):
             raise

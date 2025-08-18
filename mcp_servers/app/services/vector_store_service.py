@@ -3,6 +3,7 @@ Unified vector store service for both SDK method retrieval and BigQuery schema r
 """
 import json
 import logging
+
 from typing import Dict, List, Any, Optional
 from sqlalchemy import create_engine, text
 from langchain_openai import OpenAIEmbeddings
@@ -10,6 +11,8 @@ from langchain_postgres import PGVector
 from langchain_core.documents import Document
 from google.cloud import bigquery
 from google.oauth2 import service_account
+
+from ..settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -32,16 +35,23 @@ class VectorStoreService:
     def initialize_vector_store(self):
         """Initialize the PostgreSQL pgVector store."""
         try:       
+            
             # Initialize PGVector following langchain-postgres documentation
             self.vector_store = PGVector(
                 embeddings=self.embeddings,
                 collection_name=self.collection_name,
                 connection=self.connection_string,
-                use_jsonb=True
+                use_jsonb=True,
+                engine_args={
+                    "pool_size": settings.database_pool_size,
+                    "max_overflow": settings.database_max_overflow,
+                    "pool_timeout": settings.database_pool_timeout,
+                }
             )
             logger.info(f"Vector store initialized with collection: {self.collection_name}")
         except RuntimeError:
             # Re-raise RuntimeError with pgVector installation message
+            logger.error("RuntimeError during vector store initialization - check pgVector installation")
             raise
         except Exception as e:
             logger.error(f"Failed to initialize vector store: {e}")
@@ -127,38 +137,8 @@ class VectorStoreService:
         return " ".join(parts)
     
     def retrieve_methods(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
-        """Retrieve most relevant methods based on query."""
-        try:
-            if self.vector_store is None:
-                self.initialize_vector_store()
-            
-            # Perform similarity search
-            results = self.vector_store.similarity_search(
-                query=query,
-                k=k
-            )
-            
-            retrieved_methods = []
-            for doc in results:
-                # Parse the full method data from metadata
-                full_method_data = json.loads(doc.metadata["full_data"])
-                
-                method_info = {
-                    "method_name": doc.metadata["method_name"],
-                    "description": doc.metadata["description"],
-                    "parameters": full_method_data.get("parameters", []),
-                    "returns": full_method_data.get("returns", {}),
-                    "use_cases": full_method_data.get("use_cases", []),
-                    "category": doc.metadata["category"],
-                }
-                retrieved_methods.append(method_info)
-            
-            logger.info(f"Retrieved {len(retrieved_methods)} methods for query: '{query}'")
-            return retrieved_methods
-            
-        except Exception as e:
-            logger.error(f"Failed to retrieve methods for query '{query}': {e}")
-            raise
+        """Retrieve most relevant methods based on query - delegates to VectorSearchService."""
+        return self.vector_store.similarity_search(query, k)
     
     def check_index_exists(self) -> bool:
         """Check if the vector store collection exists."""
