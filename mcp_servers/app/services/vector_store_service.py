@@ -137,8 +137,38 @@ class VectorStoreService:
         return " ".join(parts)
     
     def retrieve_methods(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
-        """Retrieve most relevant methods based on query - delegates to VectorSearchService."""
-        return self.vector_store.similarity_search(query, k)
+        """Retrieve most relevant methods based on query."""
+        try:
+            if self.vector_store is None:
+                self.initialize_vector_store()
+            
+            # Perform similarity search
+            results = self.vector_store.similarity_search(
+                query=query,
+                k=k
+            )
+            
+            retrieved_methods = []
+            for doc in results:
+                # Parse the full method data from metadata
+                full_method_data = json.loads(doc.metadata["full_data"])
+                
+                method_info = {
+                    "method_name": doc.metadata["method_name"],
+                    "description": doc.metadata["description"],
+                    "parameters": full_method_data.get("parameters", []),
+                    "returns": full_method_data.get("returns", {}),
+                    "use_cases": full_method_data.get("use_cases", []),
+                    "category": doc.metadata["category"],
+                }
+                retrieved_methods.append(method_info)
+            
+            logger.info(f"Retrieved {len(retrieved_methods)} methods for query: '{query}'")
+            return retrieved_methods
+            
+        except Exception as e:
+            logger.error(f"Failed to retrieve methods for query '{query}': {e}")
+            raise
     
     def check_index_exists(self) -> bool:
         """Check if the vector store collection exists."""
