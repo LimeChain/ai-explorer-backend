@@ -6,7 +6,7 @@ from typing import AsyncGenerator, Callable, List, Optional, TypedDict
 from uuid import UUID
 
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import HumanMessage, BaseMessage
+from langchain_core.messages import HumanMessage, BaseMessage, AIMessage
 from langchain_core.exceptions import LangChainException
 from langgraph.graph import END
 from langchain_mcp_adapters.tools import load_mcp_tools
@@ -118,8 +118,21 @@ class LLMOrchestrator:
             "total_output_tokens": 0,
             "total_input_cost": 0.0,
             "total_output_cost": 0.0,
-            "total_cost": 0.0
+            "total_cost": 0.0,
+            "session_id": session_id
         }
+
+    def _build_initial_messages(self, query: str, conversation_history: Optional[List[ChatMessage]]) -> List[BaseMessage]:
+        """Build initial messages from conversation history."""
+        if conversation_history:
+            messages = []
+            for msg in conversation_history:
+                if msg.role == "user":
+                    messages.append(HumanMessage(content=msg.content))
+                elif msg.role == "assistant":
+                    messages.append(AIMessage(content=msg.content))
+            return messages
+        return [HumanMessage(content=query)]
 
     async def _calculate_and_update_costs(self, state: GraphState) -> GraphState:
         """Calculate token costs and update the state."""
@@ -148,8 +161,6 @@ class LLMOrchestrator:
                 state["total_cost"] = 0.0
         
         return state
-            "session_id": session_id
-        }
 
     def get_checkpointer(self):
         """Get checkpointer lazily to avoid circular import."""
@@ -201,26 +212,6 @@ class LLMOrchestrator:
                         GraphState, call_model_node, call_tool_node, self._continue_with_tool_or_end, checkpointer
                     )
                     
-                    # Prepare initial state
-                    initial_messages = self._build_initial_messages(query, conversation_history)
-                    initial_state = self._create_initial_state(initial_messages, query, account_id)
-                    
-                    # Execute workflow
-                    logger.info("=== STARTING AGENTIC WORKFLOW ===")
-                    final_state = await graph.ainvoke(initial_state, {"recursion_limit": RECURSION_LIMIT})
-                    logger.info("=== AGENTIC WORKFLOW COMPLETED ===")
-                    print('final_state', final_state)
-                    for msg in final_state["messages"]:
-                        if isinstance(msg, AIMessage) and hasattr(msg, 'usage_metadata'):
-                            print('msg', msg.usage_metadata) # This is the correct way to get the usage metadata for Gemini
-                    
-                    # Calculate token costs
-                    final_state = await self._calculate_and_update_costs(final_state)
-                    
-                    # Call cost calculation callback if provided
-                    if on_cost_calculated:
-                        on_cost_calculated(final_state)
-                    
                     if checkpointer:
                         # Prepare config for memory persistence
                         config = {
@@ -253,6 +244,11 @@ class LLMOrchestrator:
                         logger.info(f"Running without persistence for session: {session_id}")
                         initial_state = self._create_initial_state(query, account_id, session_id)
                         final_state = await graph.ainvoke(initial_state)
+
+                    final_state = await self._calculate_and_update_costs(final_state)
+
+                    if on_cost_calculated:
+                        on_cost_calculated(final_state)
 
                     assistant_msg_id = None
                     

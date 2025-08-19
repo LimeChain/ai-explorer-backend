@@ -4,7 +4,7 @@ Response streaming and persistence utilities.
 import logging
 import tiktoken
 
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, List, Optional
 
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessageChunk, BaseMessage
