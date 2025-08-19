@@ -25,7 +25,7 @@ def upgrade() -> None:
     # Create conversations table with account_id (not wallet_address)
     op.create_table('conversations',
         sa.Column('id', sa.UUID(), nullable=False),
-        sa.Column('session_id', sa.String(length=255), nullable=False),
+        sa.Column('session_id', sa.UUID(), nullable=False),
         sa.Column('account_id', sa.String(length=50), nullable=True),  # Final column name
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
         sa.PrimaryKeyConstraint('id')

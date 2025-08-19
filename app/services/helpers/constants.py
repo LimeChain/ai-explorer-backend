@@ -29,7 +29,6 @@ class ToolName(str, Enum):
 # === Chat Service Constants ===
 
 # Length limits
-MAX_SESSION_ID_LENGTH = 255
 MAX_ACCOUNT_ID_LENGTH = 255
 MAX_MESSAGE_CONTENT_LENGTH = 100000  # 100KB
 MAX_CONVERSATION_LIMIT = 1000

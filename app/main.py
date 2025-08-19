@@ -38,9 +38,7 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize checkpointer
     try:
         # Create the checkpointer using the context manager
-        async with AsyncPostgresSaver.from_conn_string(settings.database_url) as saver:
-            # Store the actual saver instance
-            checkpointer = saver
+        async with AsyncPostgresSaver.from_conn_string(settings.database_url) as checkpointer:
             await checkpointer.setup()
             logging.info("Checkpointer initialized successfully")
             
