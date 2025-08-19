@@ -21,24 +21,21 @@ class Settings(BaseSettings):
     """
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
     
-    embedding_model: str = Field(default="text-embedding-3-small", description="The model to use for embeddings")
+    embedding_model: str = Field(..., description="The model to use for embeddings")
     llm_provider: str = Field(..., description="LLM provider to use (openai, google_genai, anthropic, etc.)")
     llm_model: str = Field(..., description="The LLM model to use (e.g., gpt-4o, gpt-4o-mini for OpenAI; gemini-2.5-pro for Google)")
     llm_api_key: SecretStr = Field(..., description="LLM API key (required)", alias="LLM_API_KEY")
 
-    environment: str = Field(default="development", pattern="^(development|production|staging)$")
-    log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
+    environment: str = Field(..., pattern="^(development|production|staging)$")
+    log_level: str = Field(..., pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
 
-    mcp_endpoint: str = Field(default="http://mcp-server:8001/mcp/", description="MCP server endpoint")
-    allowed_origins: List[str] = Field(
-        default=["*"],
-        description="List of allowed CORS origins"
-    )
+    mcp_endpoint: str = Field(..., description="MCP server endpoint")
+    allowed_origins: List[str] = Field(..., description="List of allowed CORS origins")
 
-    langsmith_tracing: bool = Field(default=False, description="Enable LangSmith tracing")
-    langsmith_project: str = Field(default="ai-explorer-backend", description="LangSmith project name")
+    langsmith_tracing: bool = Field(..., description="Enable LangSmith tracing")
+    langsmith_project: str = Field(..., description="LangSmith project name")
     langsmith_api_key: SecretStr = Field(..., description="LangSmith API key (required)")
-    langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", description="LangSmith API endpoint")
+    langsmith_endpoint: str = Field(..., description="LangSmith API endpoint")
 
     def model_post_init(self, __context: None) -> None:
         """Initialize LangSmith environment variables after settings are loaded."""
@@ -87,7 +84,7 @@ class Settings(BaseSettings):
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
 
     # Vector store settings
-    collection_name: str = Field(default="sdk_methods", description="Vector store collection name")
+    collection_name: str = Field(..., description="Vector store collection name")
 
     # Redis settings
     redis_url: str = Field(..., description="Redis connection URL")
@@ -96,12 +93,12 @@ class Settings(BaseSettings):
     redis_socket_timeout: float = Field(default=5.0, description="Redis socket timeout in seconds")
     
     # Rate limiting settings
-    rate_limit_max_requests: int = Field(default=5, ge=1, description="Max requests per window per IP")
-    rate_limit_window_seconds: int = Field(default=60, ge=1, description="Rate limiting window in seconds")
+    rate_limit_max_requests: int = Field(..., ge=1, description="Max requests per window per IP")
+    rate_limit_window_seconds: int = Field(..., ge=1, description="Rate limiting window in seconds")
     
     # Global rate limiting settings
-    global_rate_limit_max_requests: int = Field(default=100, ge=1, description="Max total requests per window across all IPs")
-    global_rate_limit_window_seconds: int = Field(default=60, ge=1, description="Global rate limiting window in seconds")
+    global_rate_limit_max_requests: int = Field(..., ge=1, description="Max total requests per window across all IPs")
+    global_rate_limit_window_seconds: int = Field(..., ge=1, description="Global rate limiting window in seconds")
 
 # Global settings instance
 settings = Settings()

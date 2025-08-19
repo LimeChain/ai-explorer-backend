@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Entry point for the MCP server."""
 
-# from app.main import mcp
 from app.main import mcp
 
 if __name__ == "__main__":
