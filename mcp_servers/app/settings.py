@@ -51,8 +51,11 @@ class MCPSettings(BaseSettings):
     
     collection_name: str = Field(..., description="Vector store collection name")
     
-    embedding_model: str = Field(..., description="The model to use for embeddings")
-    
+    embedding_model: str = Field(
+        default="models/gemini-embedding-001", # TODO: read this from the .env file
+        description="The model to use for embeddings",
+    )
+
     sdk_documentation_path: str = Field(
         default="hiero_mirror_sdk_methods.json",
         description="Path to the SDK documentation file"
