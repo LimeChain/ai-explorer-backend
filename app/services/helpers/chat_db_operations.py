@@ -20,7 +20,7 @@ class ChatDBOperations:
     """Database operations for chat service."""
     
     @staticmethod
-    def find_conversation_by_session(db: Session, session_id: str) -> Optional[Conversation]:
+    def find_conversation_by_session(db: Session, session_id: UUID) -> Optional[Conversation]:
         """Find conversation by session ID."""
         try:
             return db.query(Conversation).filter(
@@ -31,7 +31,7 @@ class ChatDBOperations:
             raise ChatServiceError("Database error occurred while finding conversation", e) from e
     
     @staticmethod
-    def create_conversation(db: Session, session_id: str, account_id: Optional[str]) -> Conversation:
+    def create_conversation(db: Session, session_id: UUID, account_id: Optional[str]) -> Conversation:
         """Create new conversation."""
         try:
             conversation = Conversation(
