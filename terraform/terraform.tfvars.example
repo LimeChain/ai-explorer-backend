@@ -1,0 +1,47 @@
+# Terraform variables file - TEMPLATE
+# Copy this to terraform.tfvars and update with your actual values
+
+project_id = "your-gcp-project-id"
+region     = "us-central1"
+zone       = "us-central1-a"
+
+environment = "development"
+app_name    = "ai-explorer"
+
+# Set if you have a custom domain (optional)
+# domain_name = "yourdomain.com"
+
+# Database configuration - MVP Optimized
+database_instance_tier = "db-custom-1-3840"  # 1 CPU, 3.75GB RAM (~$80/month)
+database_disk_size     = 20                  # 20GB SSD (~$2/month)
+database_name          = "ai_explorer"
+database_user          = "ai_explorer_user"
+
+# Cloud Run configuration - MVP Optimized
+cloud_run_max_instances = 5                  # Max 5 instances (vs 10)
+cloud_run_memory       = "1Gi"               # 1GB RAM (vs 2GB)
+cloud_run_cpu          = "1"                 # 1 CPU (vs 2)
+
+# Rate limiting configuration - MVP Optimized
+rate_limit_max_requests          = 10        # Conservative for MVP
+rate_limit_window_seconds        = 60
+global_rate_limit_max_requests   = 200       # Global limit
+global_rate_limit_window_seconds = 60
+
+# Application configuration - MVP Optimized
+log_level        = "INFO"                    # Production-ready logging
+llm_provider     = "openai"
+llm_model        = "gpt-4o-mini"             # Cost-effective model
+embedding_model  = "text-embedding-3-small" # Cost-effective embeddings
+collection_name  = "sdk_methods"
+
+# LangSmith configuration - MVP Optimized
+langsmith_tracing  = true                    # Keep for debugging
+langsmith_endpoint = "https://api.smith.langchain.com"
+
+# CORS configuration - MVP (should be tightened for production)
+allowed_origins = ["*"]                      # TODO: Restrict for production
+
+# Redis configuration - MVP Optimized
+redis_memory_size_gb = 1                     # 1GB (~$30/month)
+redis_tier           = "BASIC"               # Basic tier (vs STANDARD_HA)

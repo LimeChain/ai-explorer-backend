@@ -1,0 +1,57 @@
+# Firebase project (uses existing GCP project)
+resource "google_firebase_project" "default" {
+  provider = google-beta
+  project  = var.project_id
+}
+
+# Firebase web app
+resource "google_firebase_web_app" "basic" {
+  provider     = google-beta
+  project      = var.project_id
+  display_name = "${var.app_name} Web App"
+
+  depends_on = [google_firebase_project.default]
+}
+
+# Firebase Hosting site
+resource "google_firebase_hosting_site" "default" {
+  provider = google-beta
+  project  = var.project_id
+  site_id  = var.app_name
+
+  depends_on = [google_firebase_project.default]
+}
+
+# Firebase Hosting version (initial deployment)
+resource "google_firebase_hosting_version" "default" {
+  provider = google-beta
+  site_id  = google_firebase_hosting_site.default.site_id
+
+  config {
+    redirects {
+      glob        = "/api/**"
+      status_code = 200
+      location    = "https://${google_compute_global_address.lb_ip.address}/api/{path=**}"
+    }
+
+    redirects {
+      glob        = "/mcp/**"
+      status_code = 200
+      location    = "https://${google_compute_global_address.lb_ip.address}/mcp/{path=**}"
+    }
+
+    # SPA fallback
+    rewrites {
+      glob = "**"
+      path = "/index.html"
+    }
+  }
+}
+
+# Firebase Hosting release
+resource "google_firebase_hosting_release" "default" {
+  provider     = google-beta
+  site_id      = google_firebase_hosting_site.default.site_id
+  version_name = google_firebase_hosting_version.default.name
+  message      = "Initial deployment via Terraform"
+}
