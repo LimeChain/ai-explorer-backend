@@ -5,6 +5,7 @@ This script will send multiple requests rapidly to trigger rate limiting.
 """
 import asyncio
 import os
+import uuid
 import websockets
 import json
 import time
@@ -26,7 +27,7 @@ TEST_MESSAGE = {
 }
 
 
-async def send_single_request(session_id: str, request_num: int) -> Dict[str, Any]:
+async def send_single_request(session_id: uuid.UUID, request_num: int) -> Dict[str, Any]:
     """Send a single WebSocket request and return the result."""
     url = f"{BASE_URL}/api/v1/chat/ws/{session_id}"
     
@@ -106,7 +107,7 @@ async def spam_websocket_sequential():
     print("-" * 60)
     
     results = []
-    session_id = f"spam-test-{int(time.time())}"
+    session_id = uuid.uuid4()
     
     for i in range(MAX_REQUESTS):
         print(f"📤 Sending request {i+1}/{MAX_REQUESTS}...")
@@ -138,16 +139,17 @@ async def spam_websocket_concurrent():
     
     # Create tasks for concurrent execution
     tasks = []
-    base_session_id = f"spam-concurrent-{int(time.time())}"
+    base_session_id = uuid.uuid4()
     
     for i in range(MAX_REQUESTS):
         # Use different session IDs to test IP-based rate limiting
-        session_id = f"{base_session_id}-{i}"
+        session_id = uuid.uuid4()
         task = send_single_request(session_id, i+1)
         tasks.append(task)
     
     # Execute all requests concurrently
     results = await asyncio.gather(*tasks)
+    
     
     # Print results
     for result in results:
