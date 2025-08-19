@@ -202,6 +202,10 @@ class LLMOrchestrator:
                     logger.info("=== STARTING AGENTIC WORKFLOW ===")
                     final_state = await graph.ainvoke(initial_state, {"recursion_limit": RECURSION_LIMIT})
                     logger.info("=== AGENTIC WORKFLOW COMPLETED ===")
+                    print('final_state', final_state)
+                    for msg in final_state["messages"]:
+                        if isinstance(msg, AIMessage) and hasattr(msg, 'usage_metadata'):
+                            print('msg', msg.usage_metadata) # This is the correct way to get the usage metadata for Gemini
                     
                     # Calculate token costs
                     final_state = await self._calculate_and_update_costs(final_state)
