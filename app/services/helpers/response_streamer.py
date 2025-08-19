@@ -6,7 +6,8 @@ import tiktoken
 
 from typing import AsyncGenerator, Optional
 
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessageChunk
+
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessageChunk, BaseMessage
 from langchain_core.language_models.chat_models import BaseChatModel
 from sqlalchemy.orm import Session
 
@@ -26,7 +27,7 @@ class ResponseStreamer:
     
     async def stream_final_response(
         self,
-        messages: str,
+        messages: List[BaseMessage],
         response_system_prompt: str,
         query: str,
         session_id: Optional[str] = None,
@@ -49,7 +50,7 @@ class ResponseStreamer:
         
         # Prepare messages for final response
         final_messages = [SystemMessage(content=response_system_prompt)]
-        final_messages.append(HumanMessage(content=messages))
+        final_messages.append(HumanMessage(content=f"User query: {query} \n\n Agent response: {messages[-1].content}"))
 
         # Count input tokens
         try:
