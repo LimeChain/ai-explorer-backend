@@ -45,8 +45,13 @@ class GraphState(TypedDict):
 class LLMOrchestrator:
     """Agentic workflow orchestrator using LangGraph for stateful AI interactions."""
     
-    def __init__(self):
-        """Initialize the LLM Orchestrator with agentic workflow."""
+    def __init__(self, enable_persistence: bool = True):
+        """Initialize the LLM Orchestrator with agentic workflow.
+        
+        Args:
+            enable_persistence: Whether to use checkpointer for state persistence.
+                               Set to False for evaluations or testing.
+        """
         self.llm = init_chat_model(
             model_provider=settings.llm_provider,
             model=settings.llm_model,
@@ -58,7 +63,8 @@ class LLMOrchestrator:
         self.tool_parser = ToolCallParser()
         self.workflow_builder = WorkflowBuilder(self.tool_parser)
         self.response_streamer = ResponseStreamer(self.llm, self.chat_service)
-        logger.info("LLM Orchestrator initialized with agentic workflow")
+        self.enable_persistence = enable_persistence
+        logger.info(f"LLM Orchestrator initialized with agentic workflow (persistence: {enable_persistence})")
 
     def _create_context_aware_system_prompt(self, account_id: Optional[str]) -> str:
         """Create a context-aware system prompt that includes account information."""
@@ -106,6 +112,9 @@ class LLMOrchestrator:
 
     def get_checkpointer(self):
         """Get checkpointer lazily to avoid circular import."""
+        if not self.enable_persistence:
+            return None
+            
         try:
             from app.main import checkpointer
             if checkpointer is None:
@@ -149,32 +158,39 @@ class LLMOrchestrator:
                     graph = self.workflow_builder.build_workflow(
                         GraphState, call_model_node, call_tool_node, self._continue_with_tool_or_end, checkpointer
                     )
-                    # Prepare config for memory persistence
-                    config = {
-                        "configurable": {"thread_id": str(session_id)}
-                    }
-
-                    # Check if session already exists
-                    existing_state = await checkpointer.aget_tuple(config)
                     
-                    if existing_state and existing_state.checkpoint:
-                        # Get the actual workflow state from channel_values
-                        channel_values = existing_state.checkpoint.get('channel_values', {})
-                        if not channel_values or 'messages' not in channel_values:
-                            logger.warning(f"No messages found in existing state for session: {session_id}, starting new session")
+                    if checkpointer:
+                        # Prepare config for memory persistence
+                        config = {
+                            "configurable": {"thread_id": str(session_id)}
+                        }
+
+                        # Check if session already exists
+                        existing_state = await checkpointer.aget_tuple(config)
+                        
+                        if existing_state and existing_state.checkpoint:
+                            # Get the actual workflow state from channel_values
+                            channel_values = existing_state.checkpoint.get('channel_values', {})
+                            if not channel_values or 'messages' not in channel_values:
+                                logger.warning(f"No messages found in existing state for session: {session_id}, starting new session")
+                                initial_state = self._create_initial_state(query, account_id, session_id)
+                                final_state = await graph.ainvoke(initial_state, config=config)
+                            else:
+                                restored_state = dict(channel_values)
+                                logger.info(f"Resuming existing session: {session_id}")
+                                logger.info(f"Existing state checkpoint ID: {existing_state.checkpoint.get('id', 'unknown')}")
+                                restored_state["messages"].append(HumanMessage(content=query))
+                                final_state = await graph.ainvoke(restored_state, config=config)
+                        else:
+                            # New session - create initial state
+                            logger.info(f"Starting new session: {session_id}")
                             initial_state = self._create_initial_state(query, account_id, session_id)
                             final_state = await graph.ainvoke(initial_state, config=config)
-                        else:
-                            restored_state = dict(channel_values)
-                            logger.info(f"Resuming existing session: {session_id}")
-                            logger.info(f"Existing state checkpoint ID: {existing_state.checkpoint.get('id', 'unknown')}")
-                            restored_state["messages"].append(HumanMessage(content=query))
-                            final_state = await graph.ainvoke(restored_state, config=config)
                     else:
-                        # New session - create initial state
-                        logger.info(f"Starting new session: {session_id}")
+                        # No persistence - just run with initial state
+                        logger.info(f"Running without persistence for session: {session_id}")
                         initial_state = self._create_initial_state(query, account_id, session_id)
-                        final_state = await graph.ainvoke(initial_state, config=config)
+                        final_state = await graph.ainvoke(initial_state)
 
                     assistant_msg_id = None
         

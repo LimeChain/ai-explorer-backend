@@ -25,7 +25,7 @@ os.environ["OPENAI_API_KEY"] = settings.llm_api_key.get_secret_value()
 client = Client(api_key=settings.langsmith_api_key.get_secret_value())
 dataset = get_or_create_dataset(client)
 
-llm_orchestrator = LLMOrchestrator()
+llm_orchestrator = LLMOrchestrator(enable_persistence=False)
 
 async def get_orchestrator_response(
     query: str, 

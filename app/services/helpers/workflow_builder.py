@@ -3,7 +3,7 @@ LangGraph workflow building utilities.
 """
 import json
 import logging
-from typing import Dict, Any, List, Callable
+from typing import Dict, Any, List, Callable, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.messages.utils import trim_messages
@@ -30,7 +30,7 @@ class WorkflowBuilder:
         call_model_func: Callable,
         call_tool_func: Callable,
         continue_condition_func: Callable,
-        checkpointer: Checkpoint
+        checkpointer: Optional[Checkpoint]
     ) -> CompiledStateGraph:
         """Build a complete LangGraph workflow."""     
         workflow = StateGraph(graph_state_class)
@@ -44,7 +44,11 @@ class WorkflowBuilder:
         workflow.add_conditional_edges("call_model", continue_condition_func)
         workflow.add_edge("call_tool", "call_model")
         
-        return workflow.compile(checkpointer=checkpointer)
+        # Compile with or without checkpointer
+        if checkpointer:
+            return workflow.compile(checkpointer=checkpointer)
+        else:
+            return workflow.compile()
     
     def create_model_node_executor(
         self, 
