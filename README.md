@@ -95,7 +95,7 @@ docker compose up
 
 3. Send a sample query over WebSocket:
 ```bash
-docker compose exec api uv run python scripts/ws_send_query.py
+docker compose exec api uv run python scripts/dev/query_websocket_dev.py
 ```
 
 
