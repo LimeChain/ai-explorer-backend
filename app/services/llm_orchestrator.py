@@ -149,10 +149,9 @@ class LLMOrchestrator:
                     graph = self.workflow_builder.build_workflow(
                         GraphState, call_model_node, call_tool_node, self._continue_with_tool_or_end, checkpointer
                     )
-
                     # Prepare config for memory persistence
                     config = {
-                        "configurable": {"thread_id": session_id}
+                        "configurable": {"thread_id": str(session_id)}
                     }
 
                     # Check if session already exists
