@@ -7,7 +7,7 @@ analysis and AI agent improvement while maintaining user privacy.
 import logging
 
 from uuid import UUID
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -130,7 +130,7 @@ class ChatService:
         account_id: Optional[str], 
         user_message: str, 
         assistant_response: str
-    ) -> str:
+    ) -> Tuple[UUID, UUID]:
         """Save a complete conversation turn (user message + assistant response)."""
         try:
             logger.info(f"Saving conversation turn for session: {session_id}")
