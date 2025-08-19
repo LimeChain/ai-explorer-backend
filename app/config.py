@@ -3,7 +3,7 @@ Configuration settings for the AI Explorer backend service.
 """
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import SecretStr, Field
+from pydantic import AliasChoices, SecretStr, Field
 from typing import List
 
 
@@ -20,21 +20,29 @@ class Settings(BaseSettings):
         log_level: Logging level
     """
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    environment: str = Field(default="development", pattern="^(development|production|staging)$")
+    log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
     
+    # Embedding settings
     embedding_model: str = Field(..., description="The model to use for embeddings")
+
+    # Agent settings
     llm_provider: str = Field(..., description="LLM provider to use (openai, google_genai, anthropic, etc.)")
     llm_model: str = Field(..., description="The LLM model to use (e.g., gpt-4o, gpt-4o-mini for OpenAI; gemini-2.5-pro for Google)")
     llm_api_key: SecretStr = Field(..., description="LLM API key (required)", alias="LLM_API_KEY")
-    
+
+    # Evaluation settings
+    judge_llm_provider: str = Field(default="openai", description="LLM provider to use for the judge")
+    judge_llm_model: str = Field(default="gpt-4.1-mini", description="The LLM model to use for the judge")
+    judge_llm_api_key: SecretStr = Field(..., description="LLM API key (required)", validate_alias=AliasChoices("JUDGE_LLM_API_KEY", "judge_llm_api_key"))
+
     # Token pricing settings
     llm_input_cost_per_token: float = Field(..., ge=0, description="Cost per input token in USD")
     llm_output_cost_per_token: float = Field(..., ge=0, description="Cost per output token in USD")
 
-    environment: str = Field(..., pattern="^(development|production|staging)$")
-    log_level: str = Field(..., pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
-
+    # MCP settings
     mcp_endpoint: str = Field(..., description="MCP server endpoint")
-    allowed_origins: List[str] = Field(..., description="List of allowed CORS origins")
 
     langsmith_tracing: bool = Field(..., description="Enable LangSmith tracing")
     langsmith_project: str = Field(..., description="LangSmith project name")
@@ -119,5 +127,7 @@ class Settings(BaseSettings):
     saucerswap_api_key: SecretStr = Field(..., description="SaucerSwap API key")
     hbar_token_id: str = Field(default="0.0.1456986", description="HBAR token ID for SaucerSwap API calls")
 
+    allowed_origins: List[str] = Field(..., description="List of allowed CORS origins")
+    
 # Global settings instance
 settings = Settings()

@@ -62,7 +62,6 @@ class LLMOrchestrator:
             model_provider=settings.llm_provider,
             model=settings.llm_model,
             temperature=DEFAULT_TEMPERATURE,
-            streaming=True,
             api_key=settings.llm_api_key.get_secret_value(),
         )
         self.chat_service = ChatService()
