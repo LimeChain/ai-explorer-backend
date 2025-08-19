@@ -3,6 +3,7 @@ Chat endpoint for the AI Explorer backend service.
 """
 import logging
 import json
+import asyncio
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -52,7 +53,20 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
     """
     await websocket.accept()
     logger.info(f"WebSocket connection established for session: {session_id}")
-    
+
+    active_flow_task = None
+
+    async def cancel_active_flow():
+        nonlocal active_flow_task
+        await llm_orchestrator.cancel_flow(session_id)
+        if active_flow_task and not active_flow_task.done():
+            active_flow_task.cancel()
+            try:
+                await active_flow_task
+            except asyncio.CancelledError:
+                pass
+        active_flow_task = None
+
     try:
         while True:
             # Receive message from client
@@ -99,40 +113,66 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     }))
                     continue
                 
-                # Use context manager for safe database session handling
-                with get_db_session() as db:
-                    # Stream LLM response with account context, session ID, and database session
-                    assistant_msg_id = None
-                    def on_complete(msg_id):
-                        nonlocal assistant_msg_id
-                        assistant_msg_id = msg_id
+                # If a previous flow is running, cancel it before starting a new one
+                if active_flow_task and not active_flow_task.done():
+                    await cancel_active_flow()
 
-                    async for token in llm_orchestrator.stream_llm_response(
-                        query=query,
-                        account_id=chat_request.account_id,
-                        conversation_history=chat_request.messages,
-                        session_id=chat_request.session_id,
-                        db=db,  # Pass database session for conversation persistence
-                        on_complete=on_complete
-                    ):
-                        await websocket.send_text(json.dumps({
-                            "token": token
-                        }))
-                    
-                    # Send assistant message ID to client if available
-                    if assistant_msg_id:
-                        await websocket.send_text(json.dumps({
-                            "assistant_msg_id": str(assistant_msg_id)
-                        }))
+                async def run_flow_and_stream():
+                    with get_db_session() as db:
+                        assistant_msg_id = None
+                        def on_complete(msg_id):
+                            nonlocal assistant_msg_id
+                            assistant_msg_id = msg_id
 
-                    # Send completion signal
-                    await websocket.send_text(json.dumps({
-                        "complete": True
-                    }))
+                        try:
+                            async for token in llm_orchestrator.stream_llm_response(
+                                query=query,
+                                account_id=chat_request.account_id,
+                                conversation_history=chat_request.messages,
+                                session_id=chat_request.session_id,
+                                db=db,  # Pass database session for conversation persistence
+                                on_complete=on_complete
+                            ):
+                                await websocket.send_text(json.dumps({
+                                    "token": token
+                                }))
+                            
+                            # Send assistant message ID to client if available
+                            if assistant_msg_id:
+                                await websocket.send_text(json.dumps({
+                                    "assistant_msg_id": str(assistant_msg_id)
+                                }))
 
-                    logger.info(f"Successfully processed query for session {session_id}")
-                    # Explicit commit for any remaining uncommitted changes
-                    db.commit()
+                            # Send completion signal
+                            await websocket.send_text(json.dumps({
+                                "complete": True
+                            }))
+
+                            logger.info(f"Successfully processed query for session {session_id}")
+                            # Explicit commit for any remaining uncommitted changes
+                            db.commit()
+                            
+                        except asyncio.CancelledError:
+                            logger.info(f"Flow cancelled for session {session_id}")
+                            raise
+                        except (ValidationError, ChatServiceError) as e:
+                            logger.error(f"Service error for session {session_id}: {e}")
+                            await websocket.send_text(json.dumps({
+                                "error": f"Service error: {str(e)}"
+                            }))
+                        except LLMServiceError as e:
+                            logger.error(f"LLM service error for session {session_id}: {e}")
+                            await websocket.send_text(json.dumps({
+                                "error": "AI service temporarily unavailable. Please try again."
+                            }))
+                        except Exception as e:
+                            logger.error(f"Unexpected error processing message for session {session_id}: {e}")
+                            await websocket.send_text(json.dumps({
+                                "error": "Internal server error"
+                            }))
+
+                # Start flow in background to allow cancellation on disconnect
+                active_flow_task = asyncio.create_task(run_flow_and_stream())
                 
             except json.JSONDecodeError as e:
                 logger.warning(f"Invalid JSON received for session {session_id}: {e}")
@@ -157,6 +197,11 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 
     except WebSocketDisconnect:
         logger.info(f"WebSocket client disconnected for session {session_id}")
+        await cancel_active_flow()
     except Exception as e:
         logger.error(f"WebSocket error for session {session_id}: {e}")
-        await websocket.close(code=1011, reason="Internal server error")
+        await cancel_active_flow()
+        try:
+            await websocket.close(code=1011, reason="Internal server error")
+        except Exception:
+            pass

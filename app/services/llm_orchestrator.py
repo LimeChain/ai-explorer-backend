@@ -1,6 +1,7 @@
 """
 LLM Orchestrator service implementing agentic workflow with LangGraph.
 """
+import asyncio
 import logging
 from typing import AsyncGenerator, Callable, List, Optional, TypedDict
 from uuid import UUID
@@ -60,6 +61,7 @@ class LLMOrchestrator:
         self.tool_parser = ToolCallParser()
         self.workflow_builder = WorkflowBuilder(self.tool_parser)
         self.response_streamer = ResponseStreamer(self.llm, self.chat_service)
+        self._graph_tasks = {}
         logger.info("LLM Orchestrator initialized with agentic workflow")
 
     def _create_context_aware_system_prompt(self, account_id: Optional[str]) -> str:
@@ -119,6 +121,18 @@ class LLMOrchestrator:
             "account_id": account_id
         }
 
+    async def cancel_flow(self, session_id: Optional[str]) -> None:
+        """Cancel a running graph flow for a given session_id, if any."""
+        if not session_id:
+            return
+        task = self._graph_tasks.get(session_id)
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
     async def stream_llm_response(
         self, 
         query: str, 
@@ -158,7 +172,16 @@ class LLMOrchestrator:
                     initial_state = self._create_initial_state(initial_messages, query, account_id)
                     
                     # Execute workflow
-                    final_state = await graph.ainvoke(initial_state, {"recursion_limit": RECURSION_LIMIT})
+                    final_state_task = asyncio.create_task(
+                        graph.ainvoke(initial_state, {"recursion_limit": RECURSION_LIMIT})
+                    )
+                    if session_id:
+                        self._graph_tasks[session_id] = final_state_task
+                    try:
+                        final_state = await final_state_task
+                    finally:
+                        if session_id:
+                            self._graph_tasks.pop(session_id, None)
 
                     assistant_msg_id = None
         
