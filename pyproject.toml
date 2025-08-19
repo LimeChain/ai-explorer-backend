@@ -21,6 +21,7 @@ dependencies = [
     "langchain-postgres>=0.0.15",
     "psycopg[binary]>=3.2.9",
     "redis>=5.0.0",
+    "langgraph-checkpoint-postgres>=2.0.23,<3.0.0",
 ]
 
 [tool.uv.workspace]

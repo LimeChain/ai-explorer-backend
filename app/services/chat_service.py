@@ -7,8 +7,7 @@ analysis and AI agent improvement while maintaining user privacy.
 import logging
 
 from uuid import UUID
-from typing import Optional, List
-from uuid import UUID
+from typing import Optional, List, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -30,7 +29,7 @@ class ChatService:
     @staticmethod
     def find_or_create_conversation(
         db: Session,
-        session_id: Optional[str] = None, 
+        session_id: Optional[UUID] = None, 
         account_id: Optional[str] = None
     ) -> Conversation:
         """Find existing conversation or create a new one."""
@@ -91,7 +90,7 @@ class ChatService:
     @staticmethod
     def get_conversation_history(
         db: Session,
-        session_id: str, 
+        session_id: UUID, 
         limit: int = DEFAULT_CONVERSATION_LIMIT
     ) -> List[ChatMessage]:
         """Retrieve conversation history for a session."""
@@ -127,11 +126,11 @@ class ChatService:
     @staticmethod
     def save_conversation_turn(
         db: Session,
-        session_id: Optional[str], 
+        session_id: Optional[UUID], 
         account_id: Optional[str], 
         user_message: str, 
         assistant_response: str
-    ) -> str:
+    ) -> Tuple[UUID, UUID]:
         """Save a complete conversation turn (user message + assistant response)."""
         try:
             logger.info(f"Saving conversation turn for session: {session_id}")
