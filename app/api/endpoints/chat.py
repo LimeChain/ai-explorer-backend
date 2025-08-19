@@ -83,6 +83,15 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     continue  # Skip processing this message but keep connection alive
                 
                 message_data = json.loads(data)
+                print('message_data', message_data)
+                if message_data.get("type") == "close":
+                    print("aasdasdqweqwsdasfzxvzxcqadqwedqweq")
+                    await cancel_active_flow()
+                    await websocket.send_text(json.dumps({
+                        "closed": True
+                    }))
+                    await websocket.close(code=1000, reason="User disconnected")
+                    return
                 
                 # Validate using ChatRequest schema
                 try:
