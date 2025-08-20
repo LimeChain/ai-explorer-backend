@@ -59,9 +59,8 @@ class ResponseStreamer:
             input_tokens = sum(max(1, len(str(state['messages'][-1].content)) // 4))
 
         accumulated_response = ""
-        # print("final message to stream: ", state['messages'][-1].content)
         # Stream the response token by token
-        async for chunk in self.llm.astream(final_messages[-1].content):
+        async for chunk in self.llm.astream(final_messages):
             if isinstance(chunk, AIMessageChunk) and chunk.content:
                 if isinstance(chunk.content, str):
                     accumulated_response += chunk.content
@@ -76,7 +75,6 @@ class ResponseStreamer:
 
         total_tokens = input_tokens + output_tokens
         
-        # messages.append(AIMessage(content=f"Input tokens: {input_tokens}, Output tokens: {output_tokens}"))
         state['total_input_tokens'] = state.get('total_input_tokens', 0) + input_tokens
         state['total_output_tokens'] = state.get('total_output_tokens', 0) + output_tokens
         

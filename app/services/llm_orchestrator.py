@@ -241,8 +241,9 @@ class LLMOrchestrator:
                                 restored_state = dict(channel_values)
                                 logger.info(f"Resuming existing session: {session_id}")
                                 logger.info(f"Existing state checkpoint ID: {existing_state.checkpoint.get('id', 'unknown')}")
+                                reset_cost_state = self._reset_cost_counters(restored_state)
                                 restored_state["messages"].append(HumanMessage(content=query))
-                                final_state = await graph.ainvoke(restored_state, config=config)
+                                final_state = await graph.ainvoke(reset_cost_state, config=config)
                         else:
                             # New session - create initial state
                             logger.info(f"Starting new session: {session_id}")
@@ -276,8 +277,6 @@ class LLMOrchestrator:
                     if on_cost_calculated:
                         on_cost_calculated(final_state)
 
-                    
-                    self._reset_cost_counters(final_state)
                     if on_complete and assistant_msg_id:
                         on_complete(assistant_msg_id)
 
