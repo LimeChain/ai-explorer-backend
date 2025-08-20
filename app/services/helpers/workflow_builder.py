@@ -3,14 +3,16 @@ LangGraph workflow building utilities.
 """
 import json
 import logging
-from typing import Dict, Any, List, Callable
+from typing import Dict, Any, List, Callable, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages.utils import trim_messages
+from langgraph.checkpoint.base import Checkpoint
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.services.helpers.tool_call_parser import ToolCallParser
-from app.services.helpers.constants import MAX_TOOL_CONTEXT_ITEMS, RECURSION_LIMIT, ToolName
+from app.services.helpers.constants import MAX_TOOL_CONTEXT_ITEMS, RECURSION_LIMIT, ToolName, MAX_CHAT_HISTORY_MESSAGES
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -27,9 +29,10 @@ class WorkflowBuilder:
         graph_state_class,
         call_model_func: Callable,
         call_tool_func: Callable,
-        continue_condition_func: Callable
+        continue_condition_func: Callable,
+        checkpointer: Optional[Checkpoint]
     ) -> CompiledStateGraph:
-        """Build a complete LangGraph workflow."""
+        """Build a complete LangGraph workflow."""     
         workflow = StateGraph(graph_state_class)
         
         # Add nodes
@@ -41,7 +44,11 @@ class WorkflowBuilder:
         workflow.add_conditional_edges("call_model", continue_condition_func)
         workflow.add_edge("call_tool", "call_model")
         
-        return workflow.compile()
+        # Compile with or without checkpointer
+        if checkpointer:
+            return workflow.compile(checkpointer=checkpointer)
+        else:
+            return workflow.compile()
     
     def create_model_node_executor(
         self, 
@@ -52,10 +59,19 @@ class WorkflowBuilder:
         """Create a model node execution function with proper context handling."""
         async def call_model_node(state):
             try:
-                # Prepare messages with context-aware system prompt
                 system_prompt = system_prompt_func(state.get("account_id"))
                 messages = [SystemMessage(content=system_prompt)]
                 messages.extend(state["messages"])
+
+                messages = trim_messages(
+                    messages,
+                    strategy="last",
+                    token_counter=len,
+                    max_tokens=MAX_CHAT_HISTORY_MESSAGES,
+                    start_on='human',
+                    end_on=('human', 'tool'),
+                    include_system=True
+                )
                 
                 # Add tool call context if available
                 if state["tool_calls_made"]:
@@ -63,8 +79,7 @@ class WorkflowBuilder:
                         state["tool_calls_made"], 
                         max_tool_context_items
                     )
-                    messages.append(HumanMessage(content=tool_context))
-                
+                    messages.append(HumanMessage(content=tool_context))                   
                 # Call the model
                 response = await llm.ainvoke(messages, {"recursion_limit": RECURSION_LIMIT})
                 
