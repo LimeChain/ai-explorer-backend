@@ -122,6 +122,7 @@ class LLMOrchestrator:
                 await task
             except asyncio.CancelledError:
                 pass
+
     def get_checkpointer(self):
         """Get checkpointer lazily to avoid circular import."""
         if not self.enable_persistence:
@@ -171,11 +172,11 @@ class LLMOrchestrator:
                         GraphState, call_model_node, call_tool_node, self._continue_with_tool_or_end, checkpointer
                     )
 
+                    config = {}
+
                     if checkpointer:
                         # Prepare config for memory persistence
-                        config = {
-                            "configurable": {"thread_id": str(session_id)}
-                        }
+                        config = {"configurable": {"thread_id": str(session_id)}}
 
                         # Check if session already exists
                         existing_state = await checkpointer.aget_tuple(config)
@@ -200,13 +201,11 @@ class LLMOrchestrator:
                         logger.info(f"Running without persistence for session: {session_id}")
                         state = self._create_initial_state(query, account_id, session_id)
 
-                    final_state_task = asyncio.create_task(
-                        graph.ainvoke(state, config=config)
-                    )
-                    
+                    final_state_task = asyncio.create_task(graph.ainvoke(state, config=config))
+                    self._graph_tasks[session_id] = final_state_task
+
                     try:
                         final_state = await final_state_task
-                        self._graph_tasks[session_id] = final_state_task
                     finally:
                         self._graph_tasks.pop(session_id, None)
 

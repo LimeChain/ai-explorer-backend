@@ -122,7 +122,7 @@ async def websocket_chat(
                 if active_flow_task and not active_flow_task.done():
                     await cancel_active_flow()
 
-                async def run_flow_and_stream():
+                async def run_flow_and_stream(local_chat_request: ChatRequest = chat_request):
                     with get_db_session() as db:
                         assistant_msg_id = None
                         def on_complete(msg_id):
@@ -131,9 +131,9 @@ async def websocket_chat(
 
                         try:
                             async for token in llm_orchestrator.stream_llm_response(
-                                query=chat_request.query,
+                                query=local_chat_request.query,
                                 session_id=session_id,
-                                account_id=chat_request.account_id,
+                                account_id=local_chat_request.account_id,
                                 db=db,  # Pass database session for conversation persistence
                                 on_complete=on_complete
                             ):
