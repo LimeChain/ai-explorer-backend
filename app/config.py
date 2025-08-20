@@ -100,19 +100,19 @@ class Settings(BaseSettings):
     redis_socket_timeout: float = Field(default=5.0, description="Redis socket timeout in seconds")
     
     # Rate limiting settings
-    rate_limit_max_requests: int = Field(default=5, ge=1, description="Max requests per window per IP")
-    rate_limit_window_seconds: int = Field(default=60, ge=1, description="Rate limiting window in seconds")
+    rate_limit_max_requests: int = Field(..., ge=1, description="Max requests per window per IP")
+    rate_limit_window_seconds: int = Field(..., ge=1, description="Rate limiting window in seconds")
     
     # Global rate limiting settings
-    global_rate_limit_max_requests: int = Field(default=100, ge=1, description="Max total requests per window across all IPs")
-    global_rate_limit_window_seconds: int = Field(default=60, ge=1, description="Global rate limiting window in seconds")
+    global_rate_limit_max_requests: int = Field(..., ge=1, description="Max total requests per window across all IPs")
+    global_rate_limit_window_seconds: int = Field(..., ge=1, description="Global rate limiting window in seconds")
     
     # Cost-based rate limiting settings
-    per_user_cost_limit: float = Field(default=1.0, ge=0, description="Max cost per user per period in USD")
-    per_user_cost_period_seconds: int = Field(default=86400, ge=1, description="User cost limit period in seconds (86400 = 1 day)")
+    per_user_cost_limit: float = Field(..., ge=0, description="Max cost per user per period in USD")
+    per_user_cost_period_seconds: int = Field(..., ge=1, description="User cost limit period in seconds (86400 = 1 day)")
     
-    global_cost_limit: float = Field(default=10.0, ge=0, description="Max total cost across all users per period in USD")
-    global_cost_period_seconds: int = Field(default=31536000, ge=1, description="Global cost limit period in seconds (31536000 = 1 year)")
+    global_cost_limit: float = Field(..., ge=0, description="Max total cost across all users per period in USD")
+    global_cost_period_seconds: int = Field(..., ge=1, description="Global cost limit period in seconds (31536000 = 1 year)")
 
 # Global settings instance
 settings = Settings()
