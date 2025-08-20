@@ -51,12 +51,13 @@ class ResponseStreamer:
         # Prepare messages for final response
         final_messages = [SystemMessage(content=response_system_prompt)]
         final_messages.append(HumanMessage(content=f"User query: {query} \n\n Agent response: {state['messages'][-1].content}"))
+
         # Count input tokens
         try:
             input_tokens = len(encoding.encode(str(state['messages'][-1].content)))
         except Exception as e:
             logger.warning(f"Tokenization failed for input; approximating tokens. error={e}")
-            input_tokens = sum(max(1, len(str(state['messages'][-1].content)) // 4))
+            input_tokens = max(1, len(str(state['messages'][-1].content)) // 4)
 
         accumulated_response = ""
         # Stream the response token by token
@@ -71,7 +72,7 @@ class ResponseStreamer:
             output_tokens = len(encoding.encode(accumulated_response))
         except Exception as e:
             logger.warning(f"Tokenization failed for output; approximating tokens. error={e}")
-            output_tokens = sum(max(1, len(accumulated_response) // 4))
+            output_tokens = max(1, len(accumulated_response) // 4)
 
         total_tokens = input_tokens + output_tokens
         
