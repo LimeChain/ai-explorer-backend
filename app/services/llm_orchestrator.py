@@ -100,7 +100,7 @@ class LLMOrchestrator:
         if len(query) > MAX_QUERY_LENGTH:
             raise ValidationError(f"Query exceeds maximum length of {MAX_QUERY_LENGTH} characters")
     
-    def _create_initial_state(self, query: str, account_id: Optional[str], session_id: Optional[UUID]) -> GraphState:
+    def _create_initial_state(self, query: str, account_id: Optional[str], session_id: UUID) -> GraphState:
         """Create initial workflow state."""
         return {
             "messages": [HumanMessage(content=query)],
@@ -111,7 +111,7 @@ class LLMOrchestrator:
             "session_id": session_id
         }
 
-    async def cancel_flow(self, session_id: Optional[UUID]) -> None:
+    async def cancel_flow(self, session_id: UUID) -> None:
         """Cancel a running graph flow for a given session_id, if any."""
         if not session_id:
             return
@@ -138,8 +138,8 @@ class LLMOrchestrator:
     async def stream_llm_response(
         self, 
         query: str, 
+        session_id: UUID,
         account_id: Optional[str] = None,
-        session_id: Optional[UUID] = None,
         db: Optional[Session] = None,
         on_complete: Optional[Callable[[UUID], None]] = None
     ) -> AsyncGenerator[str, None]:

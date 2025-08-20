@@ -29,7 +29,7 @@ class ChatService:
     @staticmethod
     def find_or_create_conversation(
         db: Session,
-        session_id: Optional[UUID] = None, 
+        session_id: UUID, 
         account_id: Optional[str] = None
     ) -> Conversation:
         """Find existing conversation or create a new one."""
@@ -126,7 +126,7 @@ class ChatService:
     @staticmethod
     def save_conversation_turn(
         db: Session,
-        session_id: Optional[UUID], 
+        session_id: UUID, 
         account_id: Optional[str], 
         user_message: str, 
         assistant_response: str

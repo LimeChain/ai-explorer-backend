@@ -132,8 +132,8 @@ async def websocket_chat(
                         try:
                             async for token in llm_orchestrator.stream_llm_response(
                                 query=chat_request.query,
-                                account_id=chat_request.account_id,
                                 session_id=session_id,
+                                account_id=chat_request.account_id,
                                 db=db,  # Pass database session for conversation persistence
                                 on_complete=on_complete
                             ):

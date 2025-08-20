@@ -2,6 +2,7 @@
 Response streaming and persistence utilities.
 """
 import logging
+from uuid import UUID
 from typing import AsyncGenerator, List, Optional
 
 
@@ -27,7 +28,7 @@ class ResponseStreamer:
         messages: List[BaseMessage],
         response_system_prompt: str,
         query: str,
-        session_id: Optional[str] = None,
+        session_id: UUID,
         account_id: Optional[str] = None,
         db: Optional[Session] = None,
         on_complete: Optional[callable] = None
@@ -55,7 +56,7 @@ class ResponseStreamer:
     
     async def _save_conversation(
         self, 
-        session_id: Optional[str], 
+        session_id: UUID, 
         account_id: Optional[str], 
         query: str, 
         response: str,
