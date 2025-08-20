@@ -4,10 +4,10 @@ Response streaming and persistence utilities.
 import logging
 import tiktoken
 
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, Optional, TypedDict
 
 
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessageChunk, BaseMessage
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, AIMessageChunk, BaseMessage
 from langchain_core.language_models.chat_models import BaseChatModel
 from sqlalchemy.orm import Session
 
@@ -27,7 +27,7 @@ class ResponseStreamer:
     
     async def stream_final_response(
         self,
-        messages: List[BaseMessage],
+        state: TypedDict,
         response_system_prompt: str,
         query: str,
         session_id: Optional[str] = None,
@@ -50,18 +50,18 @@ class ResponseStreamer:
         
         # Prepare messages for final response
         final_messages = [SystemMessage(content=response_system_prompt)]
-        final_messages.append(HumanMessage(content=f"User query: {query} \n\n Agent response: {messages[-1].content}"))
-
+        final_messages.append(HumanMessage(content=f"User query: {query} \n\n Agent response: {state['messages'][-1].content}"))
         # Count input tokens
         try:
-            input_tokens = sum(len(encoding.encode(str(msg.content))) for msg in final_messages)
+            input_tokens = len(encoding.encode(str(state['messages'][-1].content)))
         except Exception as e:
             logger.warning(f"Tokenization failed for input; approximating tokens. error={e}")
-            input_tokens = sum(max(1, len(str(msg.content)) // 4) for msg in final_messages)
+            input_tokens = sum(max(1, len(str(state['messages'][-1].content)) // 4))
 
         accumulated_response = ""
+        # print("final message to stream: ", state['messages'][-1].content)
         # Stream the response token by token
-        async for chunk in self.llm.astream(final_messages):
+        async for chunk in self.llm.astream(final_messages[-1].content):
             if isinstance(chunk, AIMessageChunk) and chunk.content:
                 if isinstance(chunk.content, str):
                     accumulated_response += chunk.content
@@ -75,6 +75,10 @@ class ResponseStreamer:
             output_tokens = sum(max(1, len(accumulated_response) // 4))
 
         total_tokens = input_tokens + output_tokens
+        
+        # messages.append(AIMessage(content=f"Input tokens: {input_tokens}, Output tokens: {output_tokens}"))
+        state['total_input_tokens'] = state.get('total_input_tokens', 0) + input_tokens
+        state['total_output_tokens'] = state.get('total_output_tokens', 0) + output_tokens
         
         logger.info(f"Response streaming tokens: {input_tokens} input + {output_tokens} output = {total_tokens} total")
         

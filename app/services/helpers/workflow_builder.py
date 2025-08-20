@@ -62,7 +62,7 @@ class WorkflowBuilder:
         """Create a model node execution function with proper context handling."""
         async def call_model_node(state):
             try:
-                # encoding = tiktoken.encoding_for_model(settings.llm_model)
+                encoding = tiktoken.encoding_for_model(settings.llm_model)
                 
                 # Prepare messages with context-aware system prompt
                 system_prompt = system_prompt_func(state.get("account_id"))
@@ -87,18 +87,18 @@ class WorkflowBuilder:
                     )
                     messages.append(HumanMessage(content=tool_context))
                 # Count input tokens
-                # input_tokens = sum(len(encoding.encode(str(msg.content))) for msg in messages)
+                input_tokens = sum(len(encoding.encode(str(msg.content))) for msg in messages)
                 
                 # Call the model
                 response = await llm.ainvoke(messages, {"recursion_limit": RECURSION_LIMIT})
                 
                 # Count output tokens
-                # output_tokens = len(encoding.encode(str(response.content)))
-                # total_tokens = input_tokens + output_tokens
+                output_tokens = len(encoding.encode(str(response.content)))
+                total_tokens = input_tokens + output_tokens
                 
-                # logger.info(f"Model call tokens: {input_tokens} input + {output_tokens} output = {total_tokens} total")
-                # state["total_input_tokens"] = state.get("total_input_tokens", 0) + input_tokens
-                # state["total_output_tokens"] = state.get("total_output_tokens", 0) + output_tokens
+                logger.info(f"Model call tokens: {input_tokens} input + {output_tokens} output = {total_tokens} total")
+                state["total_input_tokens"] = state.get("total_input_tokens", 0) + input_tokens
+                state["total_output_tokens"] = state.get("total_output_tokens", 0) + output_tokens
                 # Update state with new message
                 state["messages"] = state["messages"] + [response]
                 

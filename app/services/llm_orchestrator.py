@@ -45,7 +45,7 @@ class GraphState(TypedDict):
     total_input_cost: Optional[float]
     total_output_cost: Optional[float]
     total_cost: Optional[float]
-    session_id: Optional[str]
+    session_id: Optional[UUID]
 
 
 class LLMOrchestrator:
@@ -106,7 +106,7 @@ class LLMOrchestrator:
         if len(query) > MAX_QUERY_LENGTH:
             raise ValidationError(f"Query exceeds maximum length of {MAX_QUERY_LENGTH} characters")
     
-    def _create_initial_state(self, query: str, account_id: Optional[str], session_id: Optional[str]) -> GraphState:
+    def _create_initial_state(self, query: str, account_id: Optional[str], session_id: Optional[UUID]) -> GraphState:
         """Create initial workflow state."""
         return {
             "messages": [HumanMessage(content=query)],
@@ -133,6 +133,15 @@ class LLMOrchestrator:
                     messages.append(AIMessage(content=msg.content))
             return messages
         return [HumanMessage(content=query)]
+
+    def _reset_cost_counters(self, state: GraphState) -> GraphState:
+        """Reset all cost and token counters to zero."""
+        state["total_input_tokens"] = 0
+        state["total_output_tokens"] = 0
+        state["total_input_cost"] = 0.0
+        state["total_output_cost"] = 0.0
+        state["total_cost"] = 0.0
+        return state
 
     async def _calculate_and_update_costs(self, state: GraphState) -> GraphState:
         """Calculate token costs and update the state."""
@@ -179,7 +188,7 @@ class LLMOrchestrator:
         self, 
         query: str, 
         account_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        session_id: Optional[UUID] = None,
         db: Optional[Session] = None,
         on_complete: Optional[Callable[[UUID], None]] = None,
         on_cost_calculated: Optional[Callable[[GraphState], None]] = None
@@ -245,11 +254,6 @@ class LLMOrchestrator:
                         initial_state = self._create_initial_state(query, account_id, session_id)
                         final_state = await graph.ainvoke(initial_state)
 
-                    final_state = await self._calculate_and_update_costs(final_state)
-
-                    if on_cost_calculated:
-                        on_cost_calculated(final_state)
-
                     assistant_msg_id = None
                     
                     def on_complete_callback(msg_id):
@@ -257,7 +261,7 @@ class LLMOrchestrator:
                         assistant_msg_id = msg_id
 
                     async for token in self.response_streamer.stream_final_response(
-                        final_state["messages"],
+                        final_state,
                         RESPONSE_FORMATTING_SYSTEM_PROMPT,
                         query,
                         session_id,
@@ -267,7 +271,13 @@ class LLMOrchestrator:
                     ):
                         yield token
 
+                    final_state = await self._calculate_and_update_costs(final_state)
+                    
+                    if on_cost_calculated:
+                        on_cost_calculated(final_state)
 
+                    
+                    self._reset_cost_counters(final_state)
                     if on_complete and assistant_msg_id:
                         on_complete(assistant_msg_id)
 
