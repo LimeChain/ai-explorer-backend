@@ -49,7 +49,9 @@ resource "google_project_service" "apis" {
     "redis.googleapis.com",             # Cloud Memorystore Redis
     "cloudbuild.googleapis.com",
     "firebase.googleapis.com",
-    "firebasehosting.googleapis.com"
+    "firebasehosting.googleapis.com",
+    "storage.googleapis.com",           # Cloud Storage
+    "dns.googleapis.com"                # Cloud DNS
   ])
 
   service            = each.value

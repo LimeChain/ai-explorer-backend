@@ -8,10 +8,19 @@ resource "google_compute_managed_ssl_certificate" "ssl_cert" {
   name = "${var.app_name}-ssl-cert"
 
   managed {
-    domains = [var.domain_name]
+    domains = compact([
+      var.domain_name,
+      var.domain_name != "" ? "www.${var.domain_name}" : "",
+      var.domain_name != "" ? "api.${var.domain_name}" : "",
+      var.frontend_domain_name != "" && var.frontend_domain_name != var.domain_name ? var.frontend_domain_name : ""
+    ])
   }
 
   count = var.domain_name != "" ? 1 : 0
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Self-signed SSL certificate for IP-based access (when no domain)
@@ -55,32 +64,102 @@ resource "tls_self_signed_cert" "ssl_cert" {
   count = var.domain_name == "" ? 1 : 0
 }
 
-# URL map for routing
+# URL map for routing (unified for backend API and frontend)
 resource "google_compute_url_map" "url_map" {
   name            = "${var.app_name}-url-map"
-  default_service = google_compute_backend_service.backend_service.id
+  default_service = var.frontend_domain_name != "" ? google_compute_backend_bucket.frontend_backend.id : google_compute_backend_service.backend_service.id
 
+  # Main domain routing
   host_rule {
-    hosts        = var.domain_name != "" ? [var.domain_name] : ["*"]
-    path_matcher = "allpaths"
+    hosts        = var.domain_name != "" ? [var.domain_name, "www.${var.domain_name}"] : ["*"]
+    path_matcher = "main_paths"
   }
 
-  path_matcher {
-    name            = "allpaths"
-    default_service = google_compute_backend_service.backend_service.id
+  # Frontend domain routing (if different from main domain)
+  dynamic "host_rule" {
+    for_each = var.frontend_domain_name != "" && var.frontend_domain_name != var.domain_name ? [1] : []
+    content {
+      hosts        = [var.frontend_domain_name]
+      path_matcher = "frontend_paths"
+    }
+  }
 
+  # API subdomain routing
+  dynamic "host_rule" {
+    for_each = var.domain_name != "" ? [1] : []
+    content {
+      hosts        = ["api.${var.domain_name}"]
+      path_matcher = "api_paths"
+    }
+  }
+
+  # Main domain path matcher
+  path_matcher {
+    name            = "main_paths"
+    default_service = var.frontend_domain_name != "" ? google_compute_backend_bucket.frontend_backend.id : google_compute_backend_service.backend_service.id
+
+    # API routes go to backend service
     path_rule {
       paths   = ["/api/*"]
       service = google_compute_backend_service.backend_service.id
     }
 
+    # Backend-specific routes
     path_rule {
-      paths   = ["/health", "/docs", "/openapi.json", "/"]
+      paths   = ["/health", "/docs", "/openapi.json"]
       service = google_compute_backend_service.backend_service.id
     }
 
-    # MCP service is internal only - not exposed through load balancer
-    # Backend service will communicate with MCP internally
+    # Static assets from frontend bucket (if frontend is configured)
+    dynamic "path_rule" {
+      for_each = var.frontend_domain_name != "" ? [1] : []
+      content {
+        paths   = ["/static/*", "/assets/*", "/_next/static/*", "/favicon.ico", "/robots.txt", "/sitemap.xml"]
+        service = google_compute_backend_bucket.frontend_backend.id
+      }
+    }
+
+    # Default route - frontend if configured, otherwise backend
+    path_rule {
+      paths   = ["/*"]
+      service = var.frontend_domain_name != "" ? google_compute_backend_bucket.frontend_backend.id : google_compute_backend_service.backend_service.id
+    }
+  }
+
+  # Frontend-specific path matcher (when using separate frontend domain)
+  dynamic "path_matcher" {
+    for_each = var.frontend_domain_name != "" && var.frontend_domain_name != var.domain_name ? [1] : []
+    content {
+      name            = "frontend_paths"
+      default_service = google_compute_backend_bucket.frontend_backend.id
+
+      # API requests should still go to backend
+      path_rule {
+        paths   = ["/api/*"]
+        service = google_compute_backend_service.backend_service.id
+      }
+
+      # All other paths serve from frontend bucket
+      path_rule {
+        paths   = ["/*"]
+        service = google_compute_backend_bucket.frontend_backend.id
+      }
+    }
+  }
+
+  # API-specific path matcher
+  dynamic "path_matcher" {
+    for_each = var.domain_name != "" ? [1] : []
+    content {
+      name            = "api_paths"
+      default_service = google_compute_backend_service.backend_service.id
+
+      # All API subdomain traffic goes to backend
+      path_rule {
+        paths   = ["/*"]
+        service = google_compute_backend_service.backend_service.id
+      }
+    }
   }
 }
 

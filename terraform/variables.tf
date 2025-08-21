@@ -208,3 +208,18 @@ variable "langsmith_api_key" {
   sensitive = true
   nullable = false
 }
+
+# Frontend configuration
+variable "frontend_domain_name" {
+  description = "Domain name for the frontend application (e.g., app.example.com)"
+  type        = string
+  default     = ""
+}
+
+variable "frontend_cors_origins" {
+  description = "CORS allowed origins for frontend bucket"
+  type        = list(string)
+  default     = ["*"]
+}
+
+

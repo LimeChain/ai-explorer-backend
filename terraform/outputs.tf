@@ -113,3 +113,35 @@ output "vpc_subnet_name" {
   description = "VPC subnet name"
   value       = google_compute_subnetwork.subnet.name
 }
+
+# Frontend and DNS outputs
+output "frontend_bucket_name" {
+  description = "Frontend Cloud Storage bucket name"
+  value       = google_storage_bucket.frontend_bucket.name
+}
+
+output "frontend_bucket_url" {
+  description = "Frontend Cloud Storage bucket URL"
+  value       = google_storage_bucket.frontend_bucket.url
+}
+
+output "frontend_cdn_url" {
+  description = "Frontend CDN URL"
+  value       = var.frontend_domain_name != "" ? "https://${var.frontend_domain_name}" : "https://${google_compute_global_address.lb_ip.address}"
+}
+
+output "dns_name_servers" {
+  description = "DNS name servers to configure in your domain registrar"
+  value       = var.domain_name != "" ? google_dns_managed_zone.main_zone[0].name_servers : []
+}
+
+output "dns_zone_name" {
+  description = "DNS zone name in Cloud DNS"
+  value       = var.domain_name != "" ? google_dns_managed_zone.main_zone[0].name : ""
+}
+
+# SSL certificate outputs
+output "ssl_certificate_domains" {
+  description = "Domains covered by the SSL certificate"
+  value       = var.domain_name != "" ? google_compute_managed_ssl_certificate.ssl_cert[0].managed[0].domains : []
+}
