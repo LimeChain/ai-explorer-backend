@@ -89,12 +89,18 @@ class ChatDBOperations:
             raise ChatServiceError("Database error occurred while adding message", e) from e
     
     @staticmethod
-    def get_conversation_messages(db: Session, conversation_id: UUID, limit: int) -> List[Message]:
+    def get_conversation_messages(db: Session, conversation_id: UUID, limit: int, continue_from_message_id: Optional[UUID] = None) -> List[Message]:
         """Get messages for a conversation."""
         try:
-            return db.query(Message).filter(
-                Message.conversation_id == conversation_id
-            ).order_by(Message.created_at.asc()).limit(limit).all()
+            filters = [Message.conversation_id == conversation_id]
+            if continue_from_message_id:
+                message = db.query(Message).filter(Message.id == continue_from_message_id).first()
+                if message:
+                    filters.append(Message.created_at <= message.created_at)
+
+            query = db.query(Message).filter(*filters).order_by(Message.created_at.asc())
+            
+            return query.limit(limit).all()
         except SQLAlchemyError as e:
             logger.error(f"Database error retrieving messages: {e}")
             raise ChatServiceError("Database error occurred while retrieving messages", e) from e

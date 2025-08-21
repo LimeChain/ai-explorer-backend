@@ -28,7 +28,7 @@ class ChatRequest(BaseModel):
     query: Optional[str] = Field(
         None, 
         description="User's natural language query (for single queries)", 
-        min_length=1
+        min_length=0  # Allow empty strings for continue_from_message flow
     )
     account_id: Optional[str] = Field(
         None, 
@@ -36,8 +36,9 @@ class ChatRequest(BaseModel):
     )
     
     def model_post_init(self, __context: None) -> None:
-        """Validate that either messages or query is provided."""
-        if not self.query:
+        """Validate that query is provided when not empty string."""
+        # Allow empty string for continue_from_message flow
+        if self.query is None:
             raise ValueError("'query' must be provided")
 
 

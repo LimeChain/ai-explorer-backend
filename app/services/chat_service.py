@@ -91,7 +91,8 @@ class ChatService:
     def get_conversation_history(
         db: Session,
         session_id: UUID, 
-        limit: int = DEFAULT_CONVERSATION_LIMIT
+        limit: int = DEFAULT_CONVERSATION_LIMIT,
+        continue_from_message_id: Optional[UUID] = None
     ) -> List[ChatMessage]:
         """Retrieve conversation history for a session."""
         try:
@@ -109,7 +110,7 @@ class ChatService:
                 raise SessionNotFoundError(f"No conversation found for session: {session_id}")
             
             # Retrieve messages
-            messages = ChatDBOperations.get_conversation_messages(db, conversation.id, validated_limit)
+            messages = ChatDBOperations.get_conversation_messages(db, conversation.id, validated_limit, continue_from_message_id)
             
             # Convert to ChatMessage schema
             chat_messages = ChatDBOperations.messages_to_chat_messages(messages)
@@ -130,7 +131,7 @@ class ChatService:
         account_id: Optional[str], 
         user_message: str, 
         assistant_response: str
-    ) -> Tuple[UUID, UUID]:
+    ) -> Tuple[UUID, UUID, UUID]:
         """Save a complete conversation turn (user message + assistant response)."""
         try:
             logger.info(f"Saving conversation turn for session: {session_id}")
@@ -159,7 +160,7 @@ class ChatService:
             )
             
             logger.info(f"Saved conversation turn (user: {user_msg.id}, assistant: {assistant_msg.id}) for session: {conversation.session_id}")
-            return conversation.session_id, assistant_msg.id
+            return conversation.session_id, assistant_msg.id, user_msg.id
             
         except (ValidationError, ChatServiceError, SessionNotFoundError):
             raise

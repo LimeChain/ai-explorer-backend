@@ -88,8 +88,9 @@ async def websocket_chat(
                     continue  # Skip processing this message but keep connection alive
                 
                 message_data = json.loads(data)
+                message_type = message_data.get("type")
                 
-                if message_data.get("type") == "close":
+                if message_type == "close":
                     await cancel_active_flow()
                     await websocket.send_text(json.dumps({
                         "closed": True
@@ -97,31 +98,52 @@ async def websocket_chat(
                     await websocket.close(code=1000, reason="User disconnected")
                     return
                 
-                if message_data.get("type") == "continue":
-                    # Continue conversation - treat it like a query but with special flag
+                elif message_type == "query":
+                    # Handle regular query messages
+                    content = message_data.get("content")
                     account_id = message_data.get("account_id")
                     
-                    # Create a special continue request
-                    chat_request = ChatRequest(query="__CONTINUE__", account_id=account_id)
+                    if not content:
+                        await websocket.send_text(json.dumps({
+                            "error": "content is required for query type"
+                        }))
+                        await websocket.close(code=1007, reason="Content is required for query type")
+                        return
                     
-                    # Fall through to the normal query processing logic
-                    # The LLM orchestrator will handle the __CONTINUE__ special case
+                    # Create equivalent ChatRequest for existing flow
+                    chat_request = ChatRequest(query=content, account_id=account_id)
+                    continue_from_message_id = None
                 
-                # Validate using ChatRequest schema
-                try:
-                    chat_request = ChatRequest(**message_data)
-                except ValueError as e:
-                    logger.warning(f"Invalid request format: {e}")
+                elif message_type == "continue_from_message":
+                    # Handle continue from message
+                    message_id = message_data.get("message_id")
+                    account_id = message_data.get("account_id")
+                    
+                    if not message_id:
+                        await websocket.send_text(json.dumps({
+                            "error": "message_id is required for continue_from_message type"
+                        }))
+                        await websocket.close(code=1007, reason="message_id is required for continue_from_message type")
+                        return
+                    
+                    # Create empty ChatRequest for continue flow (no query needed)
+                    chat_request = ChatRequest(query="", account_id=account_id)
+                    # We'll pass the message_id separately to the LLM orchestrator
+                    continue_from_message_id = UUID(message_id)
+                
+                else:
                     await websocket.send_text(json.dumps({
-                        "error": f"Invalid request: {str(e)}"
+                        "error": f"Unknown message type: {message_type}"
                     }))
-                    continue
+                    await websocket.close(code=1007, reason="Unknown message type")
+                    return
                 
                 # Log account context for traceability  
                 if chat_request.account_id:
                     logger.info(f"Processing request with account_id={chat_request.account_id}")
                 
-                if not chat_request.query:
+                # For continue_from_message, query can be empty; for regular queries it's required
+                if not chat_request.query and message_type == "query":
                     logger.warning(f"No user message found in request for session {session_id}")
                     await websocket.send_text(json.dumps({
                         "error": "No user message found in request"
@@ -132,21 +154,25 @@ async def websocket_chat(
                 if active_flow_task and not active_flow_task.done():
                     await cancel_active_flow()
 
-                async def run_flow_and_stream(local_chat_request: ChatRequest = chat_request):
+                async def run_flow_and_stream(local_chat_request: ChatRequest = chat_request, local_continue_id = continue_from_message_id):
                     with get_db_session() as db:
+
                         assistant_msg_id = None
-                        # user_msg_id = None
-                        def on_complete(msg_id):
+                        user_msg_id = None
+
+                        def on_complete(_assistant_msg_id, _user_msg_id):
                             nonlocal assistant_msg_id
-                            assistant_msg_id = msg_id
-                            # user_msg_id = new_user_msg_id
+                            nonlocal user_msg_id
+                            assistant_msg_id = _assistant_msg_id
+                            user_msg_id = _user_msg_id
 
                         try:
                             async for token in llm_orchestrator.stream_llm_response(
-                                query=local_chat_request.query,
+                                query=local_chat_request.query if local_chat_request.query else None,
                                 session_id=session_id,
                                 account_id=local_chat_request.account_id,
                                 db=db,  # Pass database session for conversation persistence
+                                continue_from_message_id=local_continue_id,
                                 on_complete=on_complete
                             ):
                                 await websocket.send_text(json.dumps({
@@ -157,6 +183,11 @@ async def websocket_chat(
                             if assistant_msg_id:
                                 await websocket.send_text(json.dumps({
                                     "assistant_msg_id": str(assistant_msg_id)
+                                }))
+                            
+                            if user_msg_id:
+                                await websocket.send_text(json.dumps({
+                                    "user_msg_id": str(user_msg_id)
                                 }))
 
                             # Send completion signal

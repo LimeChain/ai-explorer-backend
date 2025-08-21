@@ -3,7 +3,7 @@ Response streaming and persistence utilities.
 """
 import logging
 from uuid import UUID
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, List, Optional, Tuple
 
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessageChunk, BaseMessage
@@ -27,16 +27,18 @@ class ResponseStreamer:
         self,
         messages: List[BaseMessage],
         response_system_prompt: str,
-        query: str,
+        query: Optional[str],
         session_id: UUID,
         account_id: Optional[str] = None,
         db: Optional[Session] = None,
+        is_continue: bool = False,
         on_complete: Optional[callable] = None
     ) -> AsyncGenerator[str, None]:
         """Stream the final response and save to database."""
         # Prepare messages for final response
         final_messages = [SystemMessage(content=response_system_prompt)]
-        final_messages.append(HumanMessage(content=f"User query: {query} \n\n Agent response: {messages[-1].content}"))
+        query_text = query if query else "Continue conversation"
+        final_messages.append(HumanMessage(content=f"User query: {query_text} \n\n Agent response: {messages[-1].content}"))
 
         accumulated_response = ""
         # Stream the response token by token
@@ -47,25 +49,26 @@ class ResponseStreamer:
                     yield chunk.content
         
         # Save conversation after streaming completes
-        assistant_msg_id = await self._save_conversation(
-            session_id, account_id, query, accumulated_response.strip(), db
+        assistant_msg_id, user_msg_id = await self._save_conversation(
+            session_id, account_id, query, accumulated_response.strip(), db, is_continue
         )
 
         if on_complete and assistant_msg_id:
-            on_complete(assistant_msg_id)
+            on_complete(assistant_msg_id, user_msg_id)
     
     async def _save_conversation(
         self, 
         session_id: UUID, 
         account_id: Optional[str], 
-        query: str, 
+        query: Optional[str], 
         response: str,
-        db: Optional[Session] = None
-    ) -> None:
+        db: Optional[Session] = None,
+        is_continue: bool = False
+    ) -> Tuple[UUID, Optional[UUID]]:
         """Save conversation to database with error handling."""
         try:
             if response:
-                if query == "__CONTINUE__":
+                if is_continue:
                     # For continue signals, only save the assistant response (no user message)
                     assistant_msg = self.chat_service.add_message(
                         db=db,
@@ -76,10 +79,14 @@ class ResponseStreamer:
                         content=response
                     )
                     logger.info(f"Continue response saved (assistant only) for session: {session_id}")
-                    return assistant_msg.id
+                    return assistant_msg.id, None
                 else:
                     # Normal flow - save both user message and assistant response
-                    saved_session_id, assistant_msg_id = self.chat_service.save_conversation_turn(
+                    if not query:
+                        logger.warning(f"No query provided for normal conversation flow")
+                        return None, None
+                    
+                    saved_session_id, assistant_msg_id, user_msg_id = self.chat_service.save_conversation_turn(
                         session_id=session_id,
                         account_id=account_id,
                         user_message=query,
@@ -87,7 +94,7 @@ class ResponseStreamer:
                         db=db
                     )
                     logger.info(f"Conversation saved with session_id: {saved_session_id}")
-                    return assistant_msg_id
+                    return assistant_msg_id, user_msg_id
         except Exception as save_error:
             logger.error(f"Failed to save conversation: {save_error}")
             # Don't raise - shouldn't break streaming response
