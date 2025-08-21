@@ -89,6 +89,8 @@ class Settings(BaseSettings):
     # Vector store settings
     collection_name: str = Field(default="sdk_methods", description="Vector store collection name")
 
+    cost_threshold: float = Field(default=0.01, description="Cost threshold for BigQuery queries")
+
     # Redis settings
     redis_url: str = Field(..., description="Redis connection URL")
     redis_max_connections: int = Field(default=20, description="Redis connection pool max connections")

@@ -14,6 +14,7 @@ from .vector_store_service import VectorStoreService
 
 logger = logging.getLogger(__name__)
 
+COST_PER_TB_IN_USD = 6.25
 
 class BigQueryService:
     """Service wrapper for BigQuery text-to-SQL operations."""
@@ -153,36 +154,72 @@ class BigQueryService:
             logger.error(f"Failed to initialize schema vector store: {e}")
             raise
     
-    
-    def _create_sql_prompt_template(self) -> ChatPromptTemplate:
-        """Create the prompt template for SQL generation."""
-        template = """
-            Based on the BigQuery schema below, write a SQL query that answers the user's question. Limit your responses to 10 results.
-
-            Partitioned tables and required filters:
-            {partitioned_fields_str}
-
-            Schema:
-            {schema}
-
-            Question: {question}
-
-            CRITICAL: Write a valid BigQuery SQL query, use aliases, and use the correct table names.
-            CRITICAL: Always use `{dataset_id}` in FROM and JOIN statements as a prefix before table names.
-            CRITICAL: Only return clean SQL that can be executed directly, e.g. remove ```sql <query> ```
-            CRITICAL: You have context about partitioned tables, so you SHOULD use partition filters when appropriate.
-
-            SQL Query:
+    def _create_sql_prompt_template(self, include_error_context: bool = False) -> ChatPromptTemplate:
         """
+        Create the prompt template for SQL generation with optional error context.
+        
+        Args:
+            include_error_context: Whether to include error context for retry attempts
+        """
+        if include_error_context:
+            template = """
+                Based on the BigQuery schema below, write a SQL query that answers the user's question. Limit your responses to 10 results.
+
+                Partitioned tables and required filters:
+                {partitioned_fields_str}
+
+                Schema:
+                {schema}
+
+                Question: {question}
+
+                PREVIOUS ATTEMPT FAILED:
+                Previous SQL Query: {previous_sql}
+                Error Message: {error_message}
+                Attempt: {attempt_number} of 3
+
+                CRITICAL: Write a valid BigQuery SQL query that fixes the above error.
+                CRITICAL: Always use `{dataset_id}` in FROM and JOIN statements as a prefix before table names.
+                CRITICAL: Only return clean SQL that can be executed directly, e.g. remove ```sql <query> ```
+                CRITICAL: You have context about partitioned tables, so you SHOULD use partition filters when appropriate.
+                CRITICAL: Analyze the previous error and fix the specific issue mentioned.
+                CRITICAL: If the error mentions missing columns, check the schema carefully for correct column names.
+                CRITICAL: If the error mentions table not found, ensure you're using the correct table name with dataset prefix.
+                CRITICAL: If the error mentions syntax issues, fix the SQL syntax according to BigQuery standards.
+
+                Corrected SQL Query:
+            """
+        else:
+            template = """
+                Based on the BigQuery schema below, write a SQL query that answers the user's question. Limit your responses to 10 results.
+
+                Partitioned tables and required filters:
+                {partitioned_fields_str}
+
+                Schema:
+                {schema}
+
+                Question: {question}
+
+                CRITICAL: Write a valid BigQuery SQL query, use aliases, and use the correct table names.
+                CRITICAL: Always use `{dataset_id}` in FROM and JOIN statements as a prefix before table names.
+                CRITICAL: Only return clean SQL that can be executed directly, e.g. remove ```sql <query> ```
+                CRITICAL: You have context about partitioned tables, so you SHOULD use partition filters when appropriate.
+
+                SQL Query:
+            """
         
         return ChatPromptTemplate.from_template(template)
     
-    async def generate_sql(self, question: str) -> Dict[str, Any]:
+    async def generate_sql(self, question: str, previous_sql: str = None, error_message: str = None, attempt_number: int = 1) -> Dict[str, Any]:
         """
-        Generate SQL query from natural language question.
+        Generate SQL query from natural language question with optional error context for retries.
         
         Args:
             question: Natural language question
+            previous_sql: Previous SQL query that failed (for retry attempts)
+            error_message: Error message from previous attempt (for retry attempts)
+            attempt_number: Current attempt number (for retry context)
             
         Returns:
             Dict containing the generated SQL query or error information
@@ -197,23 +234,35 @@ class BigQueryService:
             schema, relevant_schema_data = self._get_relevant_schemas(question)
             partitioned_fields_str = self._get_partition_info_from_schemas(relevant_schema_data)
             
-            # Create SQL generation chain
-            prompt_template = self._create_sql_prompt_template()
+            # Create SQL generation chain with error context if this is a retry
+            is_retry = previous_sql is not None and error_message is not None
+            prompt_template = self._create_sql_prompt_template(include_error_context=is_retry)
             
             sql_chain = (
                 RunnablePassthrough()
                 | prompt_template
-                | self.llm.bind(stop=["\nSQLResult:"])
+                | self.llm.bind(stop=["\nSQLResult:", "\nCorrected SQL Query:"])
                 | StrOutputParser()
             )
             
-            # Generate SQL
-            sql_query = await sql_chain.ainvoke({
+            # Prepare prompt parameters
+            prompt_params = {
                 "question": question,
                 "schema": schema,
                 "partitioned_fields_str": partitioned_fields_str,
                 "dataset_id": self.dataset_id
-            })
+            }
+            
+            # Add error context for retry attempts
+            if is_retry:
+                prompt_params.update({
+                    "previous_sql": previous_sql,
+                    "error_message": error_message,
+                    "attempt_number": attempt_number
+                })
+            
+            # Generate SQL
+            sql_query = await sql_chain.ainvoke(prompt_params)
             
             # Clean up SQL query
             sql_query = sql_query.strip()
@@ -223,29 +272,82 @@ class BigQueryService:
                 sql_query = sql_query[:-3]
             sql_query = sql_query.strip()
             
-            logger.info(f"Generated SQL query for question: {question[:100]}...")
+            attempt_log = f" (attempt {attempt_number})" if attempt_number > 1 else ""
+            logger.info(f"Generated SQL query for question: {question[:100]}...{attempt_log}")
             logger.debug(f"Generated SQL: {sql_query}")
-            print('query is: ', sql_query)
             
             return {
                 "success": True,
                 "sql_query": sql_query,
                 "question": question,
+                "attempt_number": attempt_number
             }
             
         except Exception as e:
-            logger.error(f"Failed to generate SQL: {e}")
+            logger.error(f"Failed to generate SQL (attempt {attempt_number}): {e}")
             return {
+                "success": False,
                 "error": f"Failed to generate SQL query: {str(e)}",
                 "question": question,
+                "attempt_number": attempt_number
+            }
+
+    def validate_and_estimate_cost(self, sql_query: str) -> Dict[str, Any]:
+        """
+        Validate SQL syntax and calculate query cost in a single dry run.
+        
+        Args:
+            sql_query: SQL query to validate and estimate cost for
+            
+        Returns:
+            Dict containing validation status, cost, and detailed error information
+        """
+        try:
+            # Perform single dry run for both validation and cost estimation
+            job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
+            query_job = self.client.query(sql_query, job_config=job_config)
+            
+            # If we reach here, query syntax is valid
+            bytes_to_process = query_job.total_bytes_processed
+            cost = (bytes_to_process / (10**12)) * COST_PER_TB_IN_USD
+            
+            logger.info(f"Query validation successful. Estimated cost: ${cost:.4f}, Bytes: {bytes_to_process}")
+            
+            return {
+                "success": True,
+                "valid": True,
+                "cost": cost,
+                "bytes_to_process": bytes_to_process,
+                "sql_query": sql_query,
+                "job_id": query_job.job_id
+            }
+            
+        except Exception as e:
+            logger.error(f"Query validation/cost estimation failed: {e}")
+            
+            # Provide detailed error information for retry logic
+            error_message = str(e)
+            is_syntax_error = any(keyword in error_message.lower() for keyword in [
+                'syntax error', 'invalid', 'parse error', 'unexpected', 
+                'expected', 'missing', 'table not found', 'column not found'
+            ])
+            
+            return {
+                "success": False,
+                "valid": False,
+                "error": error_message,
+                "is_syntax_error": is_syntax_error,
+                "sql_query": sql_query,
+                "cost": None,
+                "bytes_to_process": None
             }
     
     async def execute_query(self, sql_query: str) -> Dict[str, Any]:
         """
-        Execute a BigQuery SQL query.
+        Execute a BigQuery SQL query and return actual results.
         
         Args:
-            sql_query: SQL query to execute
+            sql_query: SQL query to execute (should be pre-validated)
             
         Returns:
             Dict containing query results or error information
@@ -254,18 +356,22 @@ class BigQueryService:
             logger.info("Executing BigQuery SQL query")
             logger.debug(f"SQL Query: {sql_query}")
             
-            # Execute query
-            job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
-
+            # Execute query (not dry run - actual execution)
+            job_config = bigquery.QueryJobConfig(use_query_cache=True)
             query_job = self.client.query(sql_query, job_config=job_config)
-
-            # results = query_job.result()
+            
+            # Wait for query to complete and get results
+            results = query_job.result()
             
             # Convert results to list of dictionaries
             data = []
-            # for row in results:
-            #     row_dict = dict(row)
-            #     data.append(row_dict)
+            for row in results:
+                row_dict = dict(row)
+                # Convert any nested/complex types to strings for JSON serialization
+                for key, value in row_dict.items():
+                    if value is not None and not isinstance(value, (str, int, float, bool)):
+                        row_dict[key] = str(value)
+                data.append(row_dict)
             
             logger.info(f"Query executed successfully, returned {len(data)} rows")
             
@@ -274,54 +380,157 @@ class BigQueryService:
                 "data": data,
                 "row_count": len(data),
                 "sql_query": sql_query,
+                "job_id": query_job.job_id,
+                "total_bytes_processed": query_job.total_bytes_processed,
+                "total_bytes_billed": query_job.total_bytes_billed
             }
             
         except Exception as e:
             logger.error(f"Failed to execute BigQuery query: {e}")
             return {
+                "success": False,
                 "error": f"Failed to execute query: {str(e)}",
                 "sql_query": sql_query
             }
     
-    async def text_to_sql_query(self, question: str) -> Dict[str, Any]:
+    async def text_to_sql_query(self, question: str, cost_threshold, max_retries: int = 3) -> Dict[str, Any]:
         """
-        Complete text-to-SQL pipeline: generate SQL from question and execute it.
+        Complete text-to-SQL pipeline with retry logic: generate SQL, validate, estimate cost, and execute.
         
         Args:
             question: Natural language question
+            max_retries: Maximum number of retry attempts for SQL generation
+            cost_threshold: Maximum allowed cost in USD for query execution
             
         Returns:
             Dict containing query results or error information
         """
-        try:
-            # Generate SQL
-            sql_result = await self.generate_sql(question)
-            
-            if not sql_result.get("success"):
-                logger.error(f"SQL generation failed: {sql_result.get('error', 'Unknown error')}")
+        last_error = None
+        previous_sql = None
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"Starting text-to-SQL pipeline attempt {attempt} for question: {question[:100]}...")
+                
+                # Generate SQL with error context if this is a retry
+                sql_result = await self.generate_sql(
+                    question=question,
+                    previous_sql=previous_sql,
+                    error_message=last_error,
+                    attempt_number=attempt
+                )
+                
+                if not sql_result.get("success"):
+                    last_error = sql_result.get("error", "Unknown SQL generation error")
+                    logger.warning(f"SQL generation failed on attempt {attempt}: {last_error}")
+                    
+                    # Continue to next attempt if we haven't reached max retries
+                    if attempt < max_retries:
+                        continue
+                    else:
+                        return {
+                            "success": False,
+                            "error": f"Failed to generate SQL after {max_retries} attempts. Last error: {last_error}",
+                            "question": question,
+                            "total_attempts": attempt
+                        }
+                
+                sql_query = sql_result["sql_query"]
+                previous_sql = sql_query  # Store for potential retry
+                
+                # Validate syntax and estimate cost in single operation
+                validation_result = self.validate_and_estimate_cost(sql_query)
+                
+                if not validation_result.get("success") or not validation_result.get("valid"):
+                    last_error = validation_result.get("error", "Query validation failed")
+                    logger.warning(f"Query validation failed on attempt {attempt}: {last_error}")
+                    
+                    # Continue to next attempt if we haven't reached max retries
+                    if attempt < max_retries:
+                        continue
+                    else:
+                        return {
+                            "success": False,
+                            "error": f"Query validation failed after {max_retries} attempts. Last error: {last_error}",
+                            "question": question,
+                            "sql_query": sql_query,
+                            "total_attempts": attempt
+                        }
+                
+                # Check cost threshold
+                cost = validation_result["cost"]
+                logger.info(f"Query validated successfully. Estimated cost: ${cost:.4f}")
+                
+                if cost > cost_threshold:
+                    cost_error = f"Query cost ${cost:.4f} exceeds threshold ${cost_threshold}. Please simplify the query, add more filters, or limit the time range."
+                    logger.warning(f"Cost threshold exceeded.")
+                    
+                    return {
+                        "success": False,
+                        "error": cost_error,
+                        "question": question,
+                        "sql_query": sql_query,
+                        "cost": cost,
+                        "bytes_to_process": validation_result.get("bytes_to_process", 0),
+                        "total_attempts": attempt
+                    }
+                
+                # Execute validated query
+                execution_result = await self.execute_query(sql_query)
+                
+                if not execution_result.get("success"):
+                    execution_error = execution_result.get("error", "Query execution failed")
+                    logger.error(f"Query execution failed on attempt {attempt}: {execution_error}")
+                    
+                    # For execution failures, we can retry with the execution error
+                    if attempt < max_retries:
+                        last_error = f"Query execution failed: {execution_error}"
+                        continue
+                    else:
+                        return {
+                            "success": False,
+                            "error": f"Query execution failed after {max_retries} attempts. Last error: {execution_error}",
+                            "question": question,
+                            "sql_query": sql_query,
+                            "cost": cost,
+                            "bytes_to_process": validation_result.get("bytes_to_process", 0),
+                            "total_attempts": attempt
+                        }
+                
+                # Success! Return combined results
+                logger.info(f"Text-to-SQL pipeline successful on attempt {attempt}")
                 return {
-                    "error": sql_result.get("error", "Failed to generate SQL query"),
+                    "success": True,
                     "question": question,
+                    "sql_query": sql_query,
+                    "data": execution_result.get("data", []),
+                    "row_count": execution_result.get("row_count", 0),
+                    "cost": cost,
+                    "bytes_to_process": validation_result.get("bytes_to_process", 0),
+                    "bytes_billed": execution_result.get("total_bytes_billed", 0),
+                    "job_id": execution_result.get("job_id"),
+                    "total_attempts": attempt
                 }
-            
-            sql_query = sql_result["sql_query"]
-            
-            # Execute query
-            execution_result = await self.execute_query(sql_query)
-            
-            # Combine results
-            return {
-                "success": execution_result.get("success", False),
-                "question": question,
-                "sql_query": sql_query,
-                "data": execution_result.get("data", []),
-                "row_count": execution_result.get("row_count", 0),
-                "error": execution_result.get("error", ""),
-            }
-            
-        except Exception as e:
-            logger.error(f"Text-to-SQL pipeline failed: {e}")
-            return {
-                "error": f"Text-to-SQL pipeline failed: {str(e)}",
-                "question": question,
-            }
+                
+            except Exception as e:
+                last_error = f"Pipeline error: {str(e)}"
+                logger.error(f"Text-to-SQL pipeline error on attempt {attempt}: {e}")
+                
+                # Continue to next attempt if we haven't reached max retries
+                if attempt < max_retries:
+                    continue
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Text-to-SQL pipeline failed after {max_retries} attempts. Last error: {last_error}",
+                        "question": question,
+                        "total_attempts": attempt
+                    }
+        
+        # This should not be reached, but just in case
+        return {
+            "success": False,
+            "error": f"Text-to-SQL pipeline failed after {max_retries} attempts",
+            "question": question,
+            "total_attempts": max_retries
+        }
