@@ -20,6 +20,7 @@ from app.services.chat_service import ChatService
 from app.services.helpers.tool_call_parser import ToolCallParser
 from app.services.helpers.workflow_builder import WorkflowBuilder
 from app.services.helpers.response_streamer import ResponseStreamer
+from app.services.helpers.message_converter import MessageConverter
 from app.services.helpers.constants import (
     MAX_QUERY_LENGTH, DEFAULT_TEMPERATURE
 )
@@ -100,10 +101,30 @@ class LLMOrchestrator:
         if len(query) > MAX_QUERY_LENGTH:
             raise ValidationError(f"Query exceeds maximum length of {MAX_QUERY_LENGTH} characters")
     
-    def _create_initial_state(self, query: str, account_id: Optional[str], session_id: UUID) -> GraphState:
-        """Create initial workflow state."""
+    def _create_initial_state(self, query: str, account_id: Optional[str], session_id: UUID, db: Session) -> GraphState:
+        """Create initial workflow state, loading conversation history from database."""
+        messages = []
+        
+        # Load existing conversation history from database
+        try:
+            chat_history = self.chat_service.get_conversation_history(db, session_id)
+            if chat_history:
+                # Convert ChatMessage objects to LangGraph BaseMessage objects
+                historical_messages = MessageConverter.chat_messages_to_langgraph_messages(chat_history)
+                messages.extend(historical_messages)
+                logger.info(f"Loaded {len(historical_messages)} messages from database for session {session_id}")
+        except Exception as e:
+            # Don't fail if we can't load history, just log and continue
+            logger.warning(f"Could not load conversation history for session {session_id}: {e}")
+        
+        # Add the new query as the latest message (unless it's a continue signal)
+        if query != "__CONTINUE__":
+            messages.append(HumanMessage(content=query))
+        else:
+            logger.info(f"Continue signal received - not adding new query message for session {session_id}")
+        
         return {
-            "messages": [HumanMessage(content=query)],
+            "messages": messages,
             "tool_calls_made": [],
             "iteration_count": 0,
             "pending_tool_call": None,
@@ -186,20 +207,20 @@ class LLMOrchestrator:
                             channel_values = existing_state.checkpoint.get('channel_values', {})
                             if not channel_values or 'messages' not in channel_values:
                                 logger.warning(f"No messages found in existing state for session: {session_id}, starting new session")
-                                state = self._create_initial_state(query, account_id, session_id)
+                                state = self._create_initial_state(query, account_id, session_id, db)
                             else:
                                 state = dict(channel_values)
                                 logger.info(f"Resuming existing session: {session_id}")
                                 logger.info(f"Existing state checkpoint ID: {existing_state.checkpoint.get('id', 'unknown')}")
                                 state["messages"].append(HumanMessage(content=query))
                         else:
-                            # New session - create initial state
+                            # New session - create initial state with database history
                             logger.info(f"Starting new session: {session_id}")
-                            state = self._create_initial_state(query, account_id, session_id)
+                            state = self._create_initial_state(query, account_id, session_id, db)
                     else:
-                        # No persistence - just run with initial state
+                        # No persistence - just run with initial state, still load database history
                         logger.info(f"Running without persistence for session: {session_id}")
-                        state = self._create_initial_state(query, account_id, session_id)
+                        state = self._create_initial_state(query, account_id, session_id, db)
 
                     final_state_task = asyncio.create_task(graph.ainvoke(state, config=config))
                     self._graph_tasks[session_id] = final_state_task

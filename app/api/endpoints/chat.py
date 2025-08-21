@@ -97,6 +97,16 @@ async def websocket_chat(
                     await websocket.close(code=1000, reason="User disconnected")
                     return
                 
+                if message_data.get("type") == "continue":
+                    # Continue conversation - treat it like a query but with special flag
+                    account_id = message_data.get("account_id")
+                    
+                    # Create a special continue request
+                    chat_request = ChatRequest(query="__CONTINUE__", account_id=account_id)
+                    
+                    # Fall through to the normal query processing logic
+                    # The LLM orchestrator will handle the __CONTINUE__ special case
+                
                 # Validate using ChatRequest schema
                 try:
                     chat_request = ChatRequest(**message_data)
@@ -125,9 +135,11 @@ async def websocket_chat(
                 async def run_flow_and_stream(local_chat_request: ChatRequest = chat_request):
                     with get_db_session() as db:
                         assistant_msg_id = None
+                        # user_msg_id = None
                         def on_complete(msg_id):
                             nonlocal assistant_msg_id
                             assistant_msg_id = msg_id
+                            # user_msg_id = new_user_msg_id
 
                         try:
                             async for token in llm_orchestrator.stream_llm_response(
@@ -140,7 +152,7 @@ async def websocket_chat(
                                 await websocket.send_text(json.dumps({
                                     "token": token
                                 }))
-                            
+
                             # Send assistant message ID to client if available
                             if assistant_msg_id:
                                 await websocket.send_text(json.dumps({

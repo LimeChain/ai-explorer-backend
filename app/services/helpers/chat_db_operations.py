@@ -5,6 +5,7 @@ import logging
 from typing import List, Optional
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
@@ -114,3 +115,47 @@ class ChatDBOperations:
             ChatMessage(role=msg.role, content=msg.content)
             for msg in messages
         ]
+    
+    @staticmethod
+    def update_message_content(db: Session, message_id: UUID, new_content: str) -> Message:
+        """Update message content and set edited_at timestamp."""
+        try:
+            message = db.query(Message).filter(Message.id == message_id).first()
+            if not message:
+                raise ChatServiceError(f"Message with ID {message_id} not found")
+            
+            message.content = new_content
+            message.edited_at = func.now()
+            db.commit()
+            db.refresh(message)
+            logger.info(f"Updated message {message_id} content")
+            return message
+        except SQLAlchemyError as e:
+            logger.error(f"Database error updating message: {e}")
+            db.rollback()
+            raise ChatServiceError("Database error occurred while updating message", e) from e
+    
+    @staticmethod
+    def delete_messages_after_timestamp(db: Session, conversation_id: UUID, after_timestamp) -> int:
+        """Delete all messages in conversation created after given timestamp."""
+        try:
+            deleted_count = db.query(Message).filter(
+                Message.conversation_id == conversation_id,
+                Message.created_at > after_timestamp
+            ).delete()
+            db.commit()
+            logger.info(f"Deleted {deleted_count} messages after timestamp for conversation {conversation_id}")
+            return deleted_count
+        except SQLAlchemyError as e:
+            logger.error(f"Database error deleting messages: {e}")
+            db.rollback()
+            raise ChatServiceError("Database error occurred while deleting messages", e) from e
+    
+    @staticmethod
+    def get_message_by_id(db: Session, message_id: UUID) -> Optional[Message]:
+        """Get a specific message by ID."""
+        try:
+            return db.query(Message).filter(Message.id == message_id).first()
+        except SQLAlchemyError as e:
+            logger.error(f"Database error retrieving message: {e}")
+            raise ChatServiceError("Database error occurred while retrieving message", e) from e

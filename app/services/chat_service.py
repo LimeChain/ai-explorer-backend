@@ -167,3 +167,65 @@ class ChatService:
             logger.error(f"Unexpected error saving conversation turn: {e}")
             db.rollback()
             raise ChatServiceError("Unexpected error occurred while saving conversation turn", e) from e
+    
+    @staticmethod
+    def edit_message(
+        db: Session,
+        message_id: UUID,
+        new_content: str
+    ) -> Message:
+        """Edit a user message and delete all subsequent messages."""
+        try:
+            logger.info(f"Editing message: {message_id}")
+            
+            # Get the message to edit
+            message = ChatDBOperations.get_message_by_id(db, message_id)
+            if not message:
+                raise ValidationError(f"Message with ID {message_id} not found")
+            
+            # Validate it's a user message
+            if message.role != "user":
+                raise ValidationError("Only user messages can be edited")
+            
+            # Validate content
+            validated_content = ChatValidators.validate_message_content(new_content, "user")
+            
+            # Delete all messages created after this message's timestamp
+            deleted_count = ChatDBOperations.delete_messages_after_timestamp(
+                db, message.conversation_id, message.created_at
+            )
+            
+            # Update the message content
+            updated_message = ChatDBOperations.update_message_content(
+                db, message_id, validated_content
+            )
+            
+            logger.info(f"Edited message {message_id} and deleted {deleted_count} subsequent messages")
+            return updated_message
+            
+        except ValidationError:
+            raise
+        except ChatServiceError:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error editing message: {e}")
+            db.rollback()
+            raise ChatServiceError("Unexpected error occurred while editing message", e) from e
+    
+    @staticmethod 
+    async def clear_session_checkpoint(session_id: UUID) -> None:
+        """Clear checkpoint state for a session after message editing."""
+        try:
+            # Import checkpointer to avoid circular imports
+            from app.main import checkpointer
+            if checkpointer is None:
+                logger.warning("Checkpointer not available, skipping checkpoint clear")
+                return
+            
+            await checkpointer.adelete_thread(str(session_id))
+            logger.info(f"Cleared checkpoint state for session {session_id}")
+            
+        except Exception as e:
+            # Don't fail the edit operation if checkpoint clearing fails
+            logger.error(f"Failed to clear checkpoint for session {session_id}: {e}")
+            # Don't raise - this is a best-effort operation

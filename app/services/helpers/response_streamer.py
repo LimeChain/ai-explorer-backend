@@ -65,16 +65,29 @@ class ResponseStreamer:
         """Save conversation to database with error handling."""
         try:
             if response:
-                saved_session_id, assistant_msg_id = self.chat_service.save_conversation_turn(
-                    session_id=session_id,
-                    account_id=account_id,
-                    user_message=query,
-                    assistant_response=response,
-                    db=db
-                )
-
-                logger.info(f"Conversation saved with session_id: {saved_session_id}")
-                return assistant_msg_id
+                if query == "__CONTINUE__":
+                    # For continue signals, only save the assistant response (no user message)
+                    assistant_msg = self.chat_service.add_message(
+                        db=db,
+                        conversation_id=self.chat_service.find_or_create_conversation(
+                            db, session_id, account_id
+                        ).id,
+                        role="assistant",
+                        content=response
+                    )
+                    logger.info(f"Continue response saved (assistant only) for session: {session_id}")
+                    return assistant_msg.id
+                else:
+                    # Normal flow - save both user message and assistant response
+                    saved_session_id, assistant_msg_id = self.chat_service.save_conversation_turn(
+                        session_id=session_id,
+                        account_id=account_id,
+                        user_message=query,
+                        assistant_response=response,
+                        db=db
+                    )
+                    logger.info(f"Conversation saved with session_id: {saved_session_id}")
+                    return assistant_msg_id
         except Exception as save_error:
             logger.error(f"Failed to save conversation: {save_error}")
             # Don't raise - shouldn't break streaming response
