@@ -1,0 +1,147 @@
+name: Build and Push to GCP Artifact Registry
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+
+env:
+  GCP_REGION: us-central1
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  ARTIFACT_REGISTRY_REPO: ai-explorer-docker-repo
+  CLOUD_RUN_SERVICE_API: ai-explorer-api
+  CLOUD_RUN_SERVICE_MCP: ai-explorer-mcp-server
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker to use gcloud as a credential helper
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Determine full image tag
+        id: determine_tag
+        run: |
+          REGISTRY="${{ env.GCP_REGION }}-docker.pkg.dev"
+          PROJECT_ID="${{ env.GCP_PROJECT_ID }}"
+          REPO_NAME="${{ env.ARTIFACT_REGISTRY_REPO }}"
+          
+          API_IMAGE_URI="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/api:${{ github.sha }}"
+          API_LATEST_IMAGE_URI="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/api:latest"
+          MCP_IMAGE_URI="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/mcp-server:${{ github.sha }}"
+          MCP_LATEST_IMAGE_URI="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/mcp-server:latest"
+
+          echo "API Image URI: $API_IMAGE_URI"
+          echo "API Latest Image URI: $API_LATEST_IMAGE_URI"
+          echo "MCP Image URI: $MCP_IMAGE_URI"
+          echo "MCP Latest Image URI: $MCP_LATEST_IMAGE_URI"
+
+          # Set output variables for use in subsequent steps
+          echo "API_IMAGE_URI=$API_IMAGE_URI" >> "$GITHUB_OUTPUT"
+          echo "API_LATEST_IMAGE_URI=$API_LATEST_IMAGE_URI" >> "$GITHUB_OUTPUT"
+          echo "MCP_IMAGE_URI=$MCP_IMAGE_URI" >> "$GITHUB_OUTPUT"
+          echo "MCP_LATEST_IMAGE_URI=$MCP_LATEST_IMAGE_URI" >> "$GITHUB_OUTPUT"
+          echo "CURRENT_TAG=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push API Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.determine_tag.outputs.API_IMAGE_URI }}
+            ${{ steps.determine_tag.outputs.API_LATEST_IMAGE_URI }}
+          build-args: |
+            COMMIT_SHA=${{ steps.determine_tag.outputs.CURRENT_TAG }}
+            COMMIT_MESSAGE=${{ github.event.head_commit.message }}
+            SLACK_WEBHOOK_URL=${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Build and push MCP Server Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./mcp_servers
+          file: ./mcp_servers/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.determine_tag.outputs.MCP_IMAGE_URI }}
+            ${{ steps.determine_tag.outputs.MCP_LATEST_IMAGE_URI }}
+          build-args: |
+            COMMIT_SHA=${{ steps.determine_tag.outputs.CURRENT_TAG }}
+            COMMIT_MESSAGE=${{ github.event.head_commit.message }}
+
+      - name: Output image URIs
+        run: |
+          echo "Images pushed successfully!"
+          echo "API Image URI: ${{ steps.determine_tag.outputs.API_IMAGE_URI }}"
+          echo "API Latest Image URI: ${{ steps.determine_tag.outputs.API_LATEST_IMAGE_URI }}"
+          echo "MCP Image URI: ${{ steps.determine_tag.outputs.MCP_IMAGE_URI }}"
+          echo "MCP Latest Image URI: ${{ steps.determine_tag.outputs.MCP_LATEST_IMAGE_URI }}"
+          echo "Built using: Dockerfile and mcp_servers/Dockerfile"
+
+      - name: Deploy to Cloud Run
+        run: |
+          echo "Starting Cloud Run deployment..."
+
+          # Deploy API service
+          gcloud run deploy ${{ env.CLOUD_RUN_SERVICE_API }} \
+            --image ${{ steps.determine_tag.outputs.API_LATEST_IMAGE_URI }} \
+            --region ${{ env.GCP_REGION }} \
+            --platform managed \
+            --quiet
+
+          # Deploy MCP Server service
+          gcloud run deploy ${{ env.CLOUD_RUN_SERVICE_MCP }} \
+            --image ${{ steps.determine_tag.outputs.MCP_LATEST_IMAGE_URI }} \
+            --region ${{ env.GCP_REGION }} \
+            --platform managed \
+            --quiet
+
+          echo "Cloud Run deployment initiated successfully"
+
+      # deployment continues asynchronously
+      - name: Get Cloud Run service status
+        run: |
+          echo "Getting current Cloud Run service status..."
+
+          # Get API service details
+          echo "=== API Service Status ==="
+          gcloud run services describe ${{ env.CLOUD_RUN_SERVICE_API }} \
+            --region ${{ env.GCP_REGION }} \
+            --format="table(
+              metadata.name,
+              status.conditions[0].type,
+              status.conditions[0].status,
+              status.url,
+              spec.template.spec.containers[0].image
+            )"
+
+          # Get MCP Server service details  
+          echo "=== MCP Server Service Status ==="
+          gcloud run services describe ${{ env.CLOUD_RUN_SERVICE_MCP }} \
+            --region ${{ env.GCP_REGION }} \
+            --format="table(
+              metadata.name,
+              status.conditions[0].type,
+              status.conditions[0].status,
+              status.url,
+              spec.template.spec.containers[0].image
+            )"
+
+          echo "Deployment triggered - container update will continue in background"
