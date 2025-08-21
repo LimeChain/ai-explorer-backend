@@ -3,6 +3,7 @@ Unified vector store service for both SDK method retrieval and BigQuery schema r
 """
 import json
 import logging
+
 from typing import Dict, List, Any, Optional
 from sqlalchemy import create_engine, text
 from langchain_openai import OpenAIEmbeddings
@@ -10,6 +11,8 @@ from langchain_postgres import PGVector
 from langchain_core.documents import Document
 from google.cloud import bigquery
 from google.oauth2 import service_account
+
+from ..settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -32,16 +35,23 @@ class VectorStoreService:
     def initialize_vector_store(self):
         """Initialize the PostgreSQL pgVector store."""
         try:       
+            
             # Initialize PGVector following langchain-postgres documentation
             self.vector_store = PGVector(
                 embeddings=self.embeddings,
                 collection_name=self.collection_name,
                 connection=self.connection_string,
-                use_jsonb=True
+                use_jsonb=True,
+                engine_args={
+                    "pool_size": settings.database_pool_size,
+                    "max_overflow": settings.database_max_overflow,
+                    "pool_timeout": settings.database_pool_timeout,
+                }
             )
             logger.info(f"Vector store initialized with collection: {self.collection_name}")
         except RuntimeError:
             # Re-raise RuntimeError with pgVector installation message
+            logger.error("RuntimeError during vector store initialization - check pgVector installation")
             raise
         except Exception as e:
             logger.error(f"Failed to initialize vector store: {e}")

@@ -21,6 +21,7 @@ dependencies = [
     "langchain-postgres>=0.0.15",
     "psycopg[binary]>=3.2.9",
     "google-cloud-bigquery>=3.25.0",
+    "redis>=5.0.0",
 ]
 
 [tool.uv.workspace]
@@ -41,9 +42,7 @@ script_location = "%(here)s/alembic"
 # file_template = "%%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s"
 
 # additional paths to be prepended to sys.path. defaults to the current working directory.
-prepend_sys_path = [
-    "."
-]
+prepend_sys_path = ["."]
 
 
 # [[tool.alembic.post_write_hooks]]

@@ -8,13 +8,30 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.schemas.chat import ChatRequest
 from app.services.llm_orchestrator import LLMOrchestrator
-from app.db.session import get_session_local
-from app.exceptions import ChatServiceError, ValidationError, LLMServiceError
+from app.db.session import get_db_session
+from app.exceptions import ChatServiceError, ValidationError, LLMServiceError, RateLimitError
+from app.utils.rate_limiter import IPRateLimiter, GlobalRateLimiter, redis_client
+from app.config import settings
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 llm_orchestrator = LLMOrchestrator()
+
+# Create global rate limiter instance
+global_rate_limiter = GlobalRateLimiter(
+    redis_client,
+    max_requests=settings.global_rate_limit_max_requests,
+    window_seconds=settings.global_rate_limit_window_seconds
+)
+
+# Create message-level rate limiter instance with global limiter
+ip_rate_limiter = IPRateLimiter(
+    redis_client, 
+    max_requests=settings.rate_limit_max_requests,
+    window_seconds=settings.rate_limit_window_seconds,
+    global_limiter=global_rate_limiter
+)
 
 
 @router.websocket("/chat/ws/{session_id}")
@@ -42,12 +59,15 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
             data = await websocket.receive_text()
             logger.info(f"Received WebSocket message for session {session_id}: {data}")
 
-            db = None
-
             try:
-                SessionLocal = get_session_local()
-                db = SessionLocal()  
-
+                # Check rate limit for each message before processing
+                if not ip_rate_limiter.is_allowed(websocket):
+                    logger.warning(f"Rate limit exceeded for message in session {session_id}")
+                    await websocket.send_text(json.dumps({
+                        "error": f"Rate limit exceeded. Limits: {settings.rate_limit_max_requests} per IP per {settings.rate_limit_window_seconds}s, {settings.global_rate_limit_max_requests} global per {settings.global_rate_limit_window_seconds}s."
+                    }))
+                    continue  # Skip processing this message but keep connection alive
+                
                 message_data = json.loads(data)
                 
                 # Validate using ChatRequest schema
@@ -79,24 +99,40 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     }))
                     continue
                 
-                # Stream LLM response with account context, session ID, and database session
-                async for token in llm_orchestrator.stream_llm_response(
-                    query=query,
-                    account_id=chat_request.account_id,
-                    conversation_history=chat_request.messages,
-                    session_id=chat_request.session_id,
-                    db=db  # Pass database session for conversation persistence
-                ):
+                # Use context manager for safe database session handling
+                with get_db_session() as db:
+                    # Stream LLM response with account context, session ID, and database session
+                    assistant_msg_id = None
+                    def on_complete(msg_id):
+                        nonlocal assistant_msg_id
+                        assistant_msg_id = msg_id
+
+                    async for token in llm_orchestrator.stream_llm_response(
+                        query=query,
+                        account_id=chat_request.account_id,
+                        conversation_history=chat_request.messages,
+                        session_id=chat_request.session_id,
+                        db=db,  # Pass database session for conversation persistence
+                        on_complete=on_complete
+                    ):
+                        await websocket.send_text(json.dumps({
+                            "token": token
+                        }))
+                    
+                    # Send assistant message ID to client if available
+                    if assistant_msg_id:
+                        await websocket.send_text(json.dumps({
+                            "assistant_msg_id": str(assistant_msg_id)
+                        }))
+
+                    # Send completion signal
                     await websocket.send_text(json.dumps({
-                        "token": token
+                        "complete": True
                     }))
-                
-                # Send completion signal
-                await websocket.send_text(json.dumps({
-                    "complete": True
-                }))
-                
-                logger.info(f"Successfully processed query for session {session_id}")
+
+                    logger.info(f"Successfully processed query for session {session_id}")
+                    # Explicit commit for any remaining uncommitted changes
+                    db.commit()
                 
             except json.JSONDecodeError as e:
                 logger.warning(f"Invalid JSON received for session {session_id}: {e}")
@@ -118,9 +154,6 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 await websocket.send_text(json.dumps({
                     "error": "Internal server error"
                 }))
-            finally:
-                if db is not None:
-                    db.close()
                 
     except WebSocketDisconnect:
         logger.info(f"WebSocket client disconnected for session {session_id}")

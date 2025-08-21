@@ -37,6 +37,10 @@ class MCPSettings(BaseSettings):
         default="openai",
         description="LLM provider to use (openai, google_genai, anthropic, etc.)"
     )
+    database_pool_size: int = Field(default=20, description="Database connection pool size")
+    database_max_overflow: int = Field(default=5, description="Database connection pool max overflow")
+    database_pool_timeout: int = Field(default=30, description="Database connection pool timeout in seconds")
+    database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
     
     database_url: str = Field(
         description="Vector store connection URL"
