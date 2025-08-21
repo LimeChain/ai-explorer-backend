@@ -13,6 +13,7 @@ from app.services.llm_orchestrator import LLMOrchestrator
 from app.db.session import get_db_session
 from app.exceptions import ChatServiceError, ValidationError, LLMServiceError, RateLimitError
 from app.utils.rate_limiter import IPRateLimiter, GlobalRateLimiter, redis_client
+from app.utils.cost_limiter import CostLimiter
 from app.config import settings
 
 
@@ -26,6 +27,9 @@ global_rate_limiter = GlobalRateLimiter(
     max_requests=settings.global_rate_limit_max_requests,
     window_seconds=settings.global_rate_limit_window_seconds
 )
+
+# Create cost limiter (separate from rate limiter)
+cost_limiter = CostLimiter(redis_client)
 
 # Create message-level rate limiter instance with global limiter
 ip_rate_limiter = IPRateLimiter(
@@ -73,6 +77,18 @@ async def websocket_chat(
                     }))
                     continue  # Skip processing this message but keep connection alive
                 
+                # Check cost limits separately
+                if not cost_limiter.is_allowed(websocket):
+                    logger.warning(f"Cost limit exceeded for message in session {session_id}")
+                    await websocket.send_text(json.dumps({
+                        "error": (
+                            f"Cost limit exceeded. Limits: "
+                            f"${settings.per_user_cost_limit} per user per {settings.per_user_cost_period_seconds}s, "
+                            f"${settings.global_cost_limit} global per {settings.global_cost_period_seconds}s."
+                        )
+                    }))
+                    continue  # Skip processing this message but keep connection alive
+                
                 message_data = json.loads(data)
                 
                 # Validate using ChatRequest schema
@@ -104,12 +120,21 @@ async def websocket_chat(
                         nonlocal assistant_msg_id
                         assistant_msg_id = msg_id
 
+                    def on_cost_calculated(final_state):
+                        """Record actual costs after LLM completion."""
+                        actual_cost = final_state.get("total_cost", 0.0)
+                        if actual_cost > 0:
+                            # Record cost using separate cost limiter
+                            cost_limiter.record_cost(websocket, actual_cost)
+                            logger.info(f"Recorded actual cost for session {session_id}: ${actual_cost:.6f}")
+
                     async for token in llm_orchestrator.stream_llm_response(
                         query=chat_request.query,
                         account_id=chat_request.account_id,
                         session_id=session_id,
                         db=db,  # Pass database session for conversation persistence
-                        on_complete=on_complete
+                        on_complete=on_complete,
+                        on_cost_calculated=on_cost_calculated
                     ):
                         await websocket.send_text(json.dumps({
                             "token": token

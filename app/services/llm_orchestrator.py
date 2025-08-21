@@ -6,7 +6,7 @@ from typing import AsyncGenerator, Callable, List, Optional, TypedDict
 from uuid import UUID
 
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import HumanMessage, BaseMessage
+from langchain_core.messages import HumanMessage, BaseMessage, AIMessage
 from langchain_core.exceptions import LangChainException
 from langgraph.graph import END
 from langchain_mcp_adapters.tools import load_mcp_tools
@@ -20,6 +20,7 @@ from app.services.chat_service import ChatService
 from app.services.helpers.tool_call_parser import ToolCallParser
 from app.services.helpers.workflow_builder import WorkflowBuilder
 from app.services.helpers.response_streamer import ResponseStreamer
+from app.services.helpers.cost_calculator import CostCalculator
 from app.services.helpers.constants import (
     MAX_QUERY_LENGTH, DEFAULT_TEMPERATURE
 )
@@ -39,7 +40,12 @@ class GraphState(TypedDict):
     iteration_count: int
     pending_tool_call: Optional[dict]
     account_id: Optional[str]
-    session_id: Optional[str]
+    total_input_tokens: Optional[int]
+    total_output_tokens: Optional[int]
+    total_input_cost: Optional[float]
+    total_output_cost: Optional[float]
+    total_cost: Optional[float]
+    session_id: Optional[UUID]
 
 
 class LLMOrchestrator:
@@ -63,6 +69,7 @@ class LLMOrchestrator:
         self.tool_parser = ToolCallParser()
         self.workflow_builder = WorkflowBuilder(self.tool_parser)
         self.response_streamer = ResponseStreamer(self.llm, self.chat_service)
+        self.cost_calculator = CostCalculator()
         self.enable_persistence = enable_persistence
         logger.info(f"LLM Orchestrator initialized with agentic workflow (persistence: {enable_persistence})")
 
@@ -99,7 +106,7 @@ class LLMOrchestrator:
         if len(query) > MAX_QUERY_LENGTH:
             raise ValidationError(f"Query exceeds maximum length of {MAX_QUERY_LENGTH} characters")
     
-    def _create_initial_state(self, query: str, account_id: Optional[str], session_id: Optional[str]) -> GraphState:
+    def _create_initial_state(self, query: str, account_id: Optional[str], session_id: Optional[UUID]) -> GraphState:
         """Create initial workflow state."""
         return {
             "messages": [HumanMessage(content=query)],
@@ -107,8 +114,62 @@ class LLMOrchestrator:
             "iteration_count": 0,
             "pending_tool_call": None,
             "account_id": account_id,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_input_cost": 0.0,
+            "total_output_cost": 0.0,
+            "total_cost": 0.0,
             "session_id": session_id
         }
+
+    def _build_initial_messages(self, query: str, conversation_history: Optional[List[ChatMessage]]) -> List[BaseMessage]:
+        """Build initial messages from conversation history."""
+        if conversation_history:
+            messages = []
+            for msg in conversation_history:
+                if msg.role == "user":
+                    messages.append(HumanMessage(content=msg.content))
+                elif msg.role == "assistant":
+                    messages.append(AIMessage(content=msg.content))
+            return messages
+        return [HumanMessage(content=query)]
+
+    def _reset_cost_counters(self, state: GraphState) -> GraphState:
+        """Reset all cost and token counters to zero."""
+        state["total_input_tokens"] = 0
+        state["total_output_tokens"] = 0
+        state["total_input_cost"] = 0.0
+        state["total_output_cost"] = 0.0
+        state["total_cost"] = 0.0
+        return state
+
+    async def _calculate_and_update_costs(self, state: GraphState) -> GraphState:
+        """Calculate token costs and update the state."""
+        input_tokens = state.get("total_input_tokens", 0) or 0
+        output_tokens = state.get("total_output_tokens", 0) or 0
+        
+        if input_tokens > 0 or output_tokens > 0:
+            try:
+                input_cost, output_cost, total_cost = self.cost_calculator.calculate_token_costs(
+                    input_tokens, output_tokens
+                )
+                
+                state["total_input_cost"] = input_cost
+                state["total_output_cost"] = output_cost
+                state["total_cost"] = total_cost
+                
+                logger.info(f"Cost calculation - Input: {input_tokens} tokens (${input_cost:.6f}), "
+                           f"Output: {output_tokens} tokens (${output_cost:.6f}), "
+                           f"Total: ${total_cost:.6f}")
+                
+            except Exception as e:
+                logger.error(f"Error calculating token costs: {e}")
+                # Set costs to 0 if calculation fails
+                state["total_input_cost"] = 0.0
+                state["total_output_cost"] = 0.0
+                state["total_cost"] = 0.0
+        
+        return state
 
     def get_checkpointer(self):
         """Get checkpointer lazily to avoid circular import."""
@@ -127,9 +188,10 @@ class LLMOrchestrator:
         self, 
         query: str, 
         account_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        session_id: Optional[UUID] = None,
         db: Optional[Session] = None,
-        on_complete: Optional[Callable[[UUID], None]] = None
+        on_complete: Optional[Callable[[UUID], None]] = None,
+        on_cost_calculated: Optional[Callable[[GraphState], None]] = None
     ) -> AsyncGenerator[str, None]:
         """Stream LLM response using agentic workflow with real token streaming."""
         try:
@@ -179,8 +241,9 @@ class LLMOrchestrator:
                                 restored_state = dict(channel_values)
                                 logger.info(f"Resuming existing session: {session_id}")
                                 logger.info(f"Existing state checkpoint ID: {existing_state.checkpoint.get('id', 'unknown')}")
+                                reset_cost_state = self._reset_cost_counters(restored_state)
                                 restored_state["messages"].append(HumanMessage(content=query))
-                                final_state = await graph.ainvoke(restored_state, config=config)
+                                final_state = await graph.ainvoke(reset_cost_state, config=config)
                         else:
                             # New session - create initial state
                             logger.info(f"Starting new session: {session_id}")
@@ -193,13 +256,13 @@ class LLMOrchestrator:
                         final_state = await graph.ainvoke(initial_state)
 
                     assistant_msg_id = None
-        
+                    
                     def on_complete_callback(msg_id):
                         nonlocal assistant_msg_id
                         assistant_msg_id = msg_id
 
                     async for token in self.response_streamer.stream_final_response(
-                        final_state["messages"],
+                        final_state,
                         RESPONSE_FORMATTING_SYSTEM_PROMPT,
                         query,
                         session_id,
@@ -209,6 +272,10 @@ class LLMOrchestrator:
                     ):
                         yield token
 
+                    final_state = await self._calculate_and_update_costs(final_state)
+                    
+                    if on_cost_calculated:
+                        on_cost_calculated(final_state)
 
                     if on_complete and assistant_msg_id:
                         on_complete(assistant_msg_id)

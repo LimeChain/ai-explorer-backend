@@ -3,6 +3,8 @@ LangGraph workflow building utilities.
 """
 import json
 import logging
+import tiktoken
+
 from typing import Dict, Any, List, Callable, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -11,6 +13,7 @@ from langgraph.checkpoint.base import Checkpoint
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from app.config import settings
 from app.services.helpers.tool_call_parser import ToolCallParser
 from app.services.helpers.constants import MAX_TOOL_CONTEXT_ITEMS, RECURSION_LIMIT, ToolName, MAX_CHAT_HISTORY_MESSAGES
 
@@ -59,6 +62,9 @@ class WorkflowBuilder:
         """Create a model node execution function with proper context handling."""
         async def call_model_node(state):
             try:
+                encoding = tiktoken.encoding_for_model(settings.llm_model)
+                
+                # Prepare messages with context-aware system prompt
                 system_prompt = system_prompt_func(state.get("account_id"))
                 messages = [SystemMessage(content=system_prompt)]
                 messages.extend(state["messages"])
@@ -79,10 +85,20 @@ class WorkflowBuilder:
                         state["tool_calls_made"], 
                         max_tool_context_items
                     )
-                    messages.append(HumanMessage(content=tool_context))                   
+                    messages.append(HumanMessage(content=tool_context))
+                # Count input tokens
+                input_tokens = sum(len(encoding.encode(str(msg.content))) for msg in messages)
+                
                 # Call the model
                 response = await llm.ainvoke(messages, {"recursion_limit": RECURSION_LIMIT})
                 
+                # Count output tokens
+                output_tokens = len(encoding.encode(str(response.content)))
+                total_tokens = input_tokens + output_tokens
+                
+                logger.info(f"Model call tokens: {input_tokens} input + {output_tokens} output = {total_tokens} total")
+                state["total_input_tokens"] = state.get("total_input_tokens", 0) + input_tokens
+                state["total_output_tokens"] = state.get("total_output_tokens", 0) + output_tokens
                 # Update state with new message
                 state["messages"] = state["messages"] + [response]
                 

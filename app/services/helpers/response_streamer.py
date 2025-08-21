@@ -2,13 +2,16 @@
 Response streaming and persistence utilities.
 """
 import logging
-from typing import AsyncGenerator, List, Optional
+import tiktoken
+
+from typing import AsyncGenerator, Optional, TypedDict
 
 
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessageChunk, BaseMessage
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, AIMessageChunk, BaseMessage
 from langchain_core.language_models.chat_models import BaseChatModel
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.services.chat_service import ChatService
 
 logger = logging.getLogger(__name__)
@@ -24,7 +27,7 @@ class ResponseStreamer:
     
     async def stream_final_response(
         self,
-        messages: List[BaseMessage],
+        state: TypedDict,
         response_system_prompt: str,
         query: str,
         session_id: Optional[str] = None,
@@ -33,9 +36,28 @@ class ResponseStreamer:
         on_complete: Optional[callable] = None
     ) -> AsyncGenerator[str, None]:
         """Stream the final response and save to database."""
+        try:
+            encoding = tiktoken.encoding_for_model(settings.llm_model)
+        except Exception as e:
+            # Fallback for unknown models/providers
+            base = "o200k_base" if "gpt-4.1-mini" in settings.llm_model else "cl100k_base"
+            logger.error(f"Error getting encoding for model {settings.llm_model}: {e}")
+            encoding = tiktoken.get_encoding(base)
+            logger.warning(
+                f"Unknown model for tiktoken: provider={getattr(settings, 'llm_provider', 'unknown')}, "
+                f"model={settings.llm_model}. Falling back to {base}."
+            )
+        
         # Prepare messages for final response
         final_messages = [SystemMessage(content=response_system_prompt)]
-        final_messages.append(HumanMessage(content=f"User query: {query} \n\n Agent response: {messages[-1].content}"))
+        final_messages.append(HumanMessage(content=f"User query: {query} \n\n Agent response: {state['messages'][-1].content}"))
+
+        # Count input tokens
+        try:
+            input_tokens = len(encoding.encode(str(state['messages'][-1].content)))
+        except Exception as e:
+            logger.warning(f"Tokenization failed for input; approximating tokens. error={e}")
+            input_tokens = max(1, len(str(state['messages'][-1].content)) // 4)
 
         accumulated_response = ""
         # Stream the response token by token
@@ -44,6 +66,20 @@ class ResponseStreamer:
                 if isinstance(chunk.content, str):
                     accumulated_response += chunk.content
                     yield chunk.content
+        
+        # Count output tokens
+        try:
+            output_tokens = len(encoding.encode(accumulated_response))
+        except Exception as e:
+            logger.warning(f"Tokenization failed for output; approximating tokens. error={e}")
+            output_tokens = max(1, len(accumulated_response) // 4)
+
+        total_tokens = input_tokens + output_tokens
+        
+        state['total_input_tokens'] = state.get('total_input_tokens', 0) + input_tokens
+        state['total_output_tokens'] = state.get('total_output_tokens', 0) + output_tokens
+        
+        logger.info(f"Response streaming tokens: {input_tokens} input + {output_tokens} output = {total_tokens} total")
         
         # Save conversation after streaming completes
         assistant_msg_id = await self._save_conversation(
