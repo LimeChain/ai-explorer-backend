@@ -13,8 +13,8 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
-def get_user_identifier(websocket: WebSocket) -> str:
-    """Get user identifier for cost tracking (reuses IP logic from rate limiter)."""
+def get_ip_identifier(websocket: WebSocket) -> str:
+    """Get IP identifier for cost tracking (reuses IP logic from rate limiter)."""
     # Get real IP, handling proxies and load balancers
     real_ip = (
         (websocket.client.host if websocket.client else "unknown") or
@@ -31,21 +31,21 @@ def get_user_identifier(websocket: WebSocket) -> str:
     return hashlib.sha256(normalized_ip.encode()).hexdigest()[:32]
 
 
-class UserCostLimiter:
-    """Per-user cost tracking with configurable time periods."""
+class IPCostLimiter:
+    """Per-IP cost tracking with configurable time periods."""
     
     def __init__(self, redis_client: redis.Redis, max_cost: float = 1.0, period_seconds: int = 168):
         self.redis = redis_client
         self.max_cost = max_cost
         self.period_seconds = period_seconds
     
-    def _get_user_key(self, user_identifier: str) -> str:
-        """Generate Redis key for user cost tracking."""
-        return f"cost_limit:user:{user_identifier}"
+    def _get_ip_key(self, ip_identifier: str) -> str:
+        """Generate Redis key for IP cost tracking."""
+        return f"cost_limit:ip:{ip_identifier}"
     
-    def is_within_limits(self, user_identifier: str) -> bool:
-        """Check if user is within their cost limit for current period."""
-        key = self._get_user_key(user_identifier)
+    def is_within_limits(self, ip_identifier: str) -> bool:
+        """Check if IP is within their cost limit for current period."""
+        key = self._get_ip_key(ip_identifier)
         
         try:
             current_cost = float(self.redis.get(key) or 0)
@@ -55,12 +55,12 @@ class UserCostLimiter:
             # Fail open for cost limits - allow request if Redis fails
             return True
     
-    def record_cost(self, user_identifier: str, actual_cost: float):
-        """Record actual cost for user with TTL management."""
+    def record_cost(self, ip_identifier: str, actual_cost: float):
+        """Record actual cost for IP with TTL management."""
         if actual_cost <= 0:
             return
             
-        key = self._get_user_key(user_identifier)
+        key = self._get_ip_key(ip_identifier)
         
         try:
             # Check if key exists to determine if we need to set TTL
@@ -69,22 +69,22 @@ class UserCostLimiter:
             if current_cost is None:
                 # First cost record - set both value and TTL
                 self.redis.set(key, actual_cost, ex=self.period_seconds)
-                logger.debug(f"First cost record for user {user_identifier[:8]}...: ${actual_cost:.6f} (TTL: {self.period_seconds}s)")
+                logger.debug(f"First cost record for IP {ip_identifier[:8]}...: ${actual_cost:.6f} (TTL: {self.period_seconds}s)")
             else:
                 # Key exists - just increment (preserves existing TTL)
                 self.redis.incrbyfloat(key, actual_cost)
-                logger.debug(f"Added cost for user {user_identifier[:8]}...: ${actual_cost:.6f}")
+                logger.debug(f"Added cost for IP {ip_identifier[:8]}...: ${actual_cost:.6f}")
                 
         except Exception as e:
-            logger.error(f"Error recording user cost: {e}")
+            logger.error(f"Error recording IP cost: {e}")
     
-    def get_current_usage(self, user_identifier: str) -> float:
-        """Get current cost usage for user in current period."""
-        key = self._get_user_key(user_identifier)
+    def get_current_usage(self, ip_identifier: str) -> float:
+        """Get current cost usage for IP in current period."""
+        key = self._get_ip_key(ip_identifier)
         try:
             return float(self.redis.get(key) or 0)
         except Exception as e:
-            logger.error(f"Error getting user cost usage: {e}")
+            logger.error(f"Error getting IP cost usage: {e}")
             return 0.0
 
 
@@ -146,11 +146,11 @@ class GlobalCostLimiter:
 
 
 class CostLimiter:
-    """Main cost limiter combining user and global cost tracking."""
+    """Main cost limiter combining IP and global cost tracking."""
     
     def __init__(self, redis_client: redis.Redis):
         """Initialize with settings from config."""
-        self.user_limiter = UserCostLimiter(
+        self.ip_limiter = IPCostLimiter(
             redis_client,
             max_cost=settings.per_user_cost_limit,
             period_seconds=settings.per_user_cost_period_seconds
@@ -162,29 +162,29 @@ class CostLimiter:
         )
     
     def is_allowed(self, websocket: WebSocket) -> bool:
-        """Check if request is allowed based on both user and global cost limits."""
-        user_identifier = get_user_identifier(websocket)
+        """Check if request is allowed based on both IP and global cost limits."""
+        ip_identifier = get_ip_identifier(websocket)
         
         # Check global limit first (most restrictive)
         if not self.global_limiter.is_within_limits():
             logger.warning(f"Global cost limit exceeded: {self.global_limiter.get_current_usage():.6f} >= {self.global_limiter.max_cost}")
             return False
         
-        # Check user limit
-        if not self.user_limiter.is_within_limits(user_identifier):
-            logger.warning(f"User cost limit exceeded for {user_identifier[:8]}...: {self.user_limiter.get_current_usage(user_identifier):.6f} >= {self.user_limiter.max_cost}")
+        # Check IP limit
+        if not self.ip_limiter.is_within_limits(ip_identifier):
+            logger.warning(f"IP cost limit exceeded for {ip_identifier[:8]}...: {self.ip_limiter.get_current_usage(ip_identifier):.6f} >= {self.ip_limiter.max_cost}")
             return False
         
         return True
     
     def record_cost(self, websocket: WebSocket, actual_cost: float):
-        """Record actual cost for both user and global tracking."""
+        """Record actual cost for both IP and global tracking."""
         if actual_cost <= 0:
             return
             
-        user_identifier = get_user_identifier(websocket)
+        ip_identifier = get_ip_identifier(websocket)
         
-        self.user_limiter.record_cost(user_identifier, actual_cost)
+        self.ip_limiter.record_cost(ip_identifier, actual_cost)
         self.global_limiter.record_cost(actual_cost)
         
-        logger.info(f"Recorded cost ${actual_cost:.6f} for user {user_identifier[:8]}...")
+        logger.info(f"Recorded cost ${actual_cost:.6f} for IP {ip_identifier[:8]}...")

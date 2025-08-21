@@ -129,16 +129,13 @@ uv run python -m evals.main
 Tests the rate and cost limiting by sending multiple requests to the WebSocket endpoint.
 
 ```sh
-uv run python scripts/spam.py rate       
-uv run python scripts/spam.py cost       
-uv run python scripts/spam.py both       
-uv run python scripts/spam.py integration
+uv run python scripts/spam.py
+uv run python scripts/spam.py concurrent
 
 uv run python scripts/check_limits.py list --details   
-uv run python scripts/check_limits.py stats             
-uv run python scripts/check_limits.py clear             
-uv run python scripts/check_limits.py monitor           
-
+uv run python scripts/check_limits.py stats
+uv run python scripts/check_limits.py clear
+uv run python scripts/check_limits.py monitor
 ```
 
 

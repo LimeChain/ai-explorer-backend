@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 # Redis configuration (should match your app settings)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 RATE_LIMIT_PREFIX = "rate_limit:ip:"
-USER_COST_PREFIX = "cost_limit:user:"
+IP_COST_PREFIX = "cost_limit:ip:"
 GLOBAL_COST_KEY = "cost_limit:global"
 
 
@@ -43,9 +43,9 @@ def get_all_rate_limit_keys(redis_client: redis.Redis) -> List[str]:
     return [key.decode() if isinstance(key, bytes) else key for key in keys]
 
 
-def get_all_user_cost_keys(redis_client: redis.Redis) -> List[str]:
-    """Get all user cost tracking keys from Redis."""
-    pattern = f"{USER_COST_PREFIX}*"
+def get_all_ip_cost_keys(redis_client: redis.Redis) -> List[str]:
+    """Get all IP cost tracking keys from Redis."""
+    pattern = f"{IP_COST_PREFIX}*"
     keys = redis_client.keys(pattern)
     return [key.decode() if isinstance(key, bytes) else key for key in keys]
 
@@ -69,15 +69,15 @@ def get_global_cost_info(redis_client: redis.Redis) -> Dict[str, Any]:
         }
 
 
-def get_user_cost_info(redis_client: redis.Redis, key: str) -> Dict[str, Any]:
-    """Get detailed information about a user cost tracking key."""
+def get_ip_cost_info(redis_client: redis.Redis, key: str) -> Dict[str, Any]:
+    """Get detailed information about an IP cost tracking key."""
     try:
         current_cost = redis_client.get(key)
         ttl = redis_client.ttl(key)
         
         return {
             "key": key,
-            "user_hash": key.replace(USER_COST_PREFIX, ""),
+            "ip_hash": key.replace(IP_COST_PREFIX, ""),
             "current_cost": float(current_cost) if current_cost else 0.0,
             "ttl_seconds": ttl,
             "exists": current_cost is not None
@@ -146,19 +146,19 @@ def print_key_details(key_info: Dict[str, Any], show_requests: bool = False):
             print(f"  {i}. {req['datetime']} ({req['age_seconds']}s ago)")
 
 
-def print_user_cost_details(cost_info: Dict[str, Any]):
-    """Print detailed information about a user cost tracking key."""
+def print_ip_cost_details(cost_info: Dict[str, Any]):
+    """Print detailed information about an IP cost tracking key."""
     if "error" in cost_info:
         print(f"❌ Error for key {cost_info['key']}: {cost_info['error']}")
         return
     
-    user_hash = cost_info["user_hash"][:16] + "..." if len(cost_info["user_hash"]) > 16 else cost_info["user_hash"]
+    ip_hash = cost_info["ip_hash"][:16] + "..." if len(cost_info["ip_hash"]) > 16 else cost_info["ip_hash"]
     
-    print(f"\n🔑 User Hash: {user_hash}")
+    print(f"\n🔑 IP Hash: {ip_hash}")
     print(f"💰 Current cost: ${cost_info['current_cost']:.6f}")
     print(f"⏰ TTL: {cost_info['ttl_seconds']} seconds")
     if not cost_info["exists"]:
-        print("ℹ️  No cost data recorded for this user yet")
+        print("ℹ️  No cost data recorded for this IP yet")
 
 
 def print_global_cost_details(cost_info: Dict[str, Any]):
@@ -189,7 +189,7 @@ def monitor_mode(redis_client: redis.Redis, refresh_seconds: int = 5):
             
             # Rate limiting data
             rate_keys = get_all_rate_limit_keys(redis_client)
-            cost_keys = get_all_user_cost_keys(redis_client)
+            cost_keys = get_all_ip_cost_keys(redis_client)
             global_cost = get_global_cost_info(redis_client)
             
             # Rate limits section
@@ -213,20 +213,20 @@ def monitor_mode(redis_client: redis.Redis, refresh_seconds: int = 5):
             # Global cost
             print_global_cost_details(global_cost)
             
-            # User costs
+            # IP costs
             if not cost_keys:
-                print("\n📭 No active user cost tracking keys found")
+                print("\n📭 No active IP cost tracking keys found")
             else:
-                print(f"\n🔍 Found {len(cost_keys)} active user cost keys:")
+                print(f"\n🔍 Found {len(cost_keys)} active IP cost keys:")
                 
-                total_user_costs = 0
+                total_ip_costs = 0
                 for key in cost_keys:
-                    cost_info = get_user_cost_info(redis_client, key)
+                    cost_info = get_ip_cost_info(redis_client, key)
                     if "error" not in cost_info:
-                        total_user_costs += cost_info["current_cost"]
-                        print_user_cost_details(cost_info)
+                        total_ip_costs += cost_info["current_cost"]
+                        print_ip_cost_details(cost_info)
                 
-                print(f"\n💰 Total user costs: ${total_user_costs:.6f}")
+                print(f"\n💰 Total IP costs: ${total_ip_costs:.6f}")
             
             print(f"\n⏳ Next refresh in {refresh_seconds}s...")
             time.sleep(refresh_seconds)
@@ -257,17 +257,17 @@ def clear_all_rate_limits(redis_client: redis.Redis):
 
 def clear_all_costs(redis_client: redis.Redis):
     """Clear all cost tracking data (useful for testing)."""
-    user_keys = get_all_user_cost_keys(redis_client)
+    ip_keys = get_all_ip_cost_keys(redis_client)
     global_key_exists = redis_client.exists(GLOBAL_COST_KEY)
     
-    total_keys = len(user_keys) + (1 if global_key_exists else 0)
+    total_keys = len(ip_keys) + (1 if global_key_exists else 0)
     
     if total_keys == 0:
         print("📭 No cost tracking keys to clear")
         return
     
     print(f"🧹 Found {total_keys} cost tracking keys to clear:")
-    print(f"  - {len(user_keys)} user cost keys")
+    print(f"  - {len(ip_keys)} IP cost keys")
     print(f"  - {'1 global cost key' if global_key_exists else '0 global cost keys'}")
     
     # Ask for confirmation
@@ -278,9 +278,9 @@ def clear_all_costs(redis_client: redis.Redis):
     
     deleted_count = 0
     
-    # Clear user cost keys
-    if user_keys:
-        deleted_count += redis_client.delete(*user_keys)
+    # Clear IP cost keys
+    if ip_keys:
+        deleted_count += redis_client.delete(*ip_keys)
     
     # Clear global cost key
     if global_key_exists:
@@ -300,7 +300,7 @@ def main():
     
     if command == "list":
         rate_keys = get_all_rate_limit_keys(redis_client)
-        cost_keys = get_all_user_cost_keys(redis_client)
+        cost_keys = get_all_ip_cost_keys(redis_client)
         global_cost = get_global_cost_info(redis_client)
         
         show_details = "--details" in sys.argv
@@ -330,21 +330,21 @@ def main():
             # Global cost
             print_global_cost_details(global_cost)
             
-            # User costs
+            # IP costs
             if not cost_keys:
-                print("\n📭 No active user cost tracking keys found")
+                print("\n📭 No active IP cost tracking keys found")
             else:
-                print(f"\n🔍 Found {len(cost_keys)} active user cost keys:")
+                print(f"\n🔍 Found {len(cost_keys)} active IP cost keys:")
                 
                 for key in cost_keys:
-                    cost_info = get_user_cost_info(redis_client, key)
+                    cost_info = get_ip_cost_info(redis_client, key)
                     if show_details:
-                        print_user_cost_details(cost_info)
+                        print_ip_cost_details(cost_info)
                     else:
-                        user_hash = cost_info.get("user_hash", "unknown")[:16]
+                        ip_hash = cost_info.get("ip_hash", "unknown")[:16]
                         cost = cost_info.get("current_cost", 0)
                         ttl = cost_info.get("ttl_seconds", 0)
-                        print(f"  🔑 {user_hash}... (${cost:.6f}, {ttl}s TTL)")
+                        print(f"  🔑 {ip_hash}... (${cost:.6f}, {ttl}s TTL)")
     
     elif command == "monitor":
         refresh_seconds = 5
@@ -370,7 +370,7 @@ def main():
             print("Valid options: rates, costs, all")
     
     elif command == "costs":
-        cost_keys = get_all_user_cost_keys(redis_client)
+        cost_keys = get_all_ip_cost_keys(redis_client)
         global_cost = get_global_cost_info(redis_client)
         
         print("💰 Cost Tracking Details:")
@@ -379,24 +379,24 @@ def main():
         # Global cost
         print_global_cost_details(global_cost)
         
-        # User costs
+        # IP costs
         if not cost_keys:
-            print("\n📭 No active user cost tracking keys found")
+            print("\n📭 No active IP cost tracking keys found")
         else:
-            print(f"\n🔍 Found {len(cost_keys)} active user cost keys:")
+            print(f"\n🔍 Found {len(cost_keys)} active IP cost keys:")
             
-            total_user_costs = 0
+            total_ip_costs = 0
             for key in cost_keys:
-                cost_info = get_user_cost_info(redis_client, key)
+                cost_info = get_ip_cost_info(redis_client, key)
                 if "error" not in cost_info:
-                    total_user_costs += cost_info["current_cost"]
-                    print_user_cost_details(cost_info)
+                    total_ip_costs += cost_info["current_cost"]
+                    print_ip_cost_details(cost_info)
             
-            print(f"\n💰 Total user costs: ${total_user_costs:.6f}")
+            print(f"\n💰 Total IP costs: ${total_ip_costs:.6f}")
     
     elif command == "stats":
         rate_keys = get_all_rate_limit_keys(redis_client)
-        cost_keys = get_all_user_cost_keys(redis_client)
+        cost_keys = get_all_ip_cost_keys(redis_client)
         global_cost = get_global_cost_info(redis_client)
         
         print("📊 Rate Limiting & Cost Tracking Statistics:")
@@ -431,24 +431,24 @@ def main():
         else:
             print("🌍 Global cost: No data")
         
-        # User costs
+        # IP costs
         if not cost_keys:
-            print("👥 User costs: No data")
+            print("👥 IP costs: No data")
         else:
-            total_user_costs = 0
+            total_ip_costs = 0
             active_cost_keys = 0
             
             for key in cost_keys:
-                cost_info = get_user_cost_info(redis_client, key)
+                cost_info = get_ip_cost_info(redis_client, key)
                 if "error" not in cost_info and cost_info.get("exists", False):
-                    total_user_costs += cost_info["current_cost"]
+                    total_ip_costs += cost_info["current_cost"]
                     active_cost_keys += 1
             
-            print(f"👥 Active users with costs: {active_cost_keys}")
-            print(f"💰 Total user costs: ${total_user_costs:.6f}")
+            print(f"👥 Active IPs with costs: {active_cost_keys}")
+            print(f"💰 Total IP costs: ${total_ip_costs:.6f}")
             if active_cost_keys > 0:
-                avg_cost = total_user_costs / active_cost_keys
-                print(f"📊 Average cost per user: ${avg_cost:.6f}")
+                avg_cost = total_ip_costs / active_cost_keys
+                print(f"📊 Average cost per IP: ${avg_cost:.6f}")
     
     else:
         print(f"❌ Unknown command: {command}")
