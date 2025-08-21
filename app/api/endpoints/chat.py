@@ -4,13 +4,16 @@ Chat endpoint for the AI Explorer backend service.
 import logging
 import json
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from uuid import UUID
+
+from fastapi import APIRouter, Path, WebSocket, WebSocketDisconnect
 
 from app.schemas.chat import ChatRequest
 from app.services.llm_orchestrator import LLMOrchestrator
 from app.db.session import get_db_session
 from app.exceptions import ChatServiceError, ValidationError, LLMServiceError, RateLimitError
 from app.utils.rate_limiter import IPRateLimiter, GlobalRateLimiter, redis_client
+from app.utils.cost_limiter import CostLimiter
 from app.config import settings
 
 
@@ -25,6 +28,9 @@ global_rate_limiter = GlobalRateLimiter(
     window_seconds=settings.global_rate_limit_window_seconds
 )
 
+# Create cost limiter (separate from rate limiter)
+cost_limiter = CostLimiter(redis_client)
+
 # Create message-level rate limiter instance with global limiter
 ip_rate_limiter = IPRateLimiter(
     redis_client, 
@@ -35,7 +41,10 @@ ip_rate_limiter = IPRateLimiter(
 
 
 @router.websocket("/chat/ws/{session_id}")
-async def websocket_chat(websocket: WebSocket, session_id: str):
+async def websocket_chat(
+    websocket: WebSocket, 
+    session_id: UUID = Path(..., description="Session identifier for conversation persistence")
+):
     """
     WebSocket endpoint for real-time chat with the AI Explorer.
     
@@ -68,6 +77,18 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     }))
                     continue  # Skip processing this message but keep connection alive
                 
+                # Check cost limits separately
+                if not cost_limiter.is_allowed(websocket):
+                    logger.warning(f"Cost limit exceeded for message in session {session_id}")
+                    await websocket.send_text(json.dumps({
+                        "error": (
+                            f"Cost limit exceeded. Limits: "
+                            f"${settings.per_user_cost_limit} per user per {settings.per_user_cost_period_seconds}s, "
+                            f"${settings.global_cost_limit} global per {settings.global_cost_period_seconds}s."
+                        )
+                    }))
+                    continue  # Skip processing this message but keep connection alive
+                
                 message_data = json.loads(data)
                 
                 # Validate using ChatRequest schema
@@ -84,15 +105,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 if chat_request.account_id:
                     logger.info(f"Processing request with account_id={chat_request.account_id}")
                 
-                # Extract query from messages (last user message)
-                query = None
-                if chat_request.messages:
-                    for msg in reversed(chat_request.messages):
-                        if msg.role == "user":
-                            query = msg.content
-                            break
-                
-                if not query:
+                if not chat_request.query:
                     logger.warning(f"No user message found in request for session {session_id}")
                     await websocket.send_text(json.dumps({
                         "error": "No user message found in request"
@@ -107,13 +120,21 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         nonlocal assistant_msg_id
                         assistant_msg_id = msg_id
 
+                    def on_cost_calculated(final_state):
+                        """Record actual costs after LLM completion."""
+                        actual_cost = final_state.get("total_cost", 0.0)
+                        if actual_cost > 0:
+                            # Record cost using separate cost limiter
+                            cost_limiter.record_cost(websocket, actual_cost)
+                            logger.info(f"Recorded actual cost for session {session_id}: ${actual_cost:.6f}")
+
                     async for token in llm_orchestrator.stream_llm_response(
-                        query=query,
+                        query=chat_request.query,
                         account_id=chat_request.account_id,
-                        conversation_history=chat_request.messages,
-                        session_id=chat_request.session_id,
+                        session_id=session_id,
                         db=db,  # Pass database session for conversation persistence
-                        on_complete=on_complete
+                        on_complete=on_complete,
+                        on_cost_calculated=on_cost_calculated
                     ):
                         await websocket.send_text(json.dumps({
                             "token": token
@@ -126,6 +147,8 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         }))
 
                     # Send completion signal
+                # Stream LLM response with account context, session ID, and database session
+
                     await websocket.send_text(json.dumps({
                         "complete": True
                     }))
@@ -142,7 +165,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
             except (ValidationError, ChatServiceError) as e:
                 logger.error(f"Service error for session {session_id}: {e}")
                 await websocket.send_text(json.dumps({
-                    "error": f"Service error: {str(e)}"
+                    "error": f"Service error"
                 }))
             except LLMServiceError as e:
                 logger.error(f"LLM service error for session {session_id}: {e}")
