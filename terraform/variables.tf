@@ -222,15 +222,4 @@ variable "frontend_cors_origins" {
   default     = ["*"]
 }
 
-# DNS configuration
-variable "enable_mx_records" {
-  description = "Enable MX records for email"
-  type        = bool
-  default     = false
-}
 
-variable "google_site_verification" {
-  description = "Google site verification token for domain verification"
-  type        = string
-  default     = ""
-}

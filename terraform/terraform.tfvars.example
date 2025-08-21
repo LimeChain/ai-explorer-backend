@@ -50,9 +50,6 @@ redis_tier           = "BASIC"               # Basic tier (vs STANDARD_HA)
 # frontend_domain_name = "app.yourdomain.com"  # Subdomain for frontend, or use same as domain_name
 # frontend_cors_origins = ["https://yourdomain.com", "https://app.yourdomain.com"]
 
-# DNS configuration (optional)
-# google_site_verification = "your-google-verification-token"  # For Google Search Console
-
 # API Keys (set these as environment variables or via secure method)
 # llm_api_key = "your-openai-api-key"
 # langsmith_api_key = "your-langsmith-api-key"
