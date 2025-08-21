@@ -100,6 +100,31 @@ variable "global_rate_limit_window_seconds" {
   default     = 60
 }
 
+#Cost control configuration
+variable "per_user_cost_limit" {
+  description = "Per user cost limit in USD"
+  type = number
+  default = 1
+}
+
+variable "per_user_cost_period_seconds" {
+  description = "Per user cost period in seconds"
+  type = number
+  default = 86400
+}
+
+variable "global_cost_limit" {
+  description = "USD cost limit"
+  type = number
+  default = 10
+}
+
+variable "global_cost_period_seconds" {
+  description = "Global cost period in secods"
+  type = number
+  default = 31536000
+}
+
 # Application configuration
 variable "log_level" {
   description = "Application log level"

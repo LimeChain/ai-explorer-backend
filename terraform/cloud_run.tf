@@ -123,6 +123,26 @@ resource "google_cloud_run_v2_service" "backend_api" {
       }
 
       env {
+        name = "PER_USER_COST_LIMIT"
+        value = tostring(var.per_user_cost_limit)
+      }
+
+      env {
+        name = "PER_USER_COST_PERIOD_SECONDS"
+        value = tostring(var.per_user_cost_period_seconds)
+      }
+
+      env {
+        name = "GLOBAL_COST_LIMIT"
+        value = tostring(var.global_cost_limit)
+      }
+
+      env {
+        name = "GLOBAL_COST_PERIOD_SECONDS"
+        value = tostring(var.global_cost_period_seconds)
+      }
+
+      env {
         name = "LLM_API_KEY"
         value_source {
           secret_key_ref {
