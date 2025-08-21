@@ -193,14 +193,14 @@ async def main():
     
     print_summary(results)
     
-    print(f"\n💡 To check Redis counters, run: python scripts/check_redis_counters.py")
+    print(f"\n💡 To check Redis counters, run: python scripts/check_limits.py stats")
 
 
 if __name__ == "__main__":
     print("🔥 WebSocket Rate Limit Spam Test")
     print("Usage:")
-    print("  python scripts/spam_websocket.py          # Sequential requests")
-    print("  python scripts/spam_websocket.py concurrent # Concurrent requests")
+    print("  python scripts/spam.py          # Sequential requests")
+    print("  python scripts/spam.py concurrent # Concurrent requests")
     print()
     
     try:
