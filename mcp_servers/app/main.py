@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Union
 from datetime import datetime, timezone
 
 from mcp.server.fastmcp import FastMCP
-from fastapi import FastAPI
 
 from .services.sdk_service import HederaSDKService
 from .settings import settings
@@ -327,15 +326,4 @@ async def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, i
         "success": all_successful
     }
 
-
-# Initialize services at startup to catch errors early
-print("=== MCP SERVER STARTUP ===")
-try:
-    print("Initializing vector services...")
-    get_vector_services()
-    print("✅ Vector services initialized successfully")
-except Exception as e:
-    print(f"❌ Vector services initialization failed: {e}")
-    import traceback
-    traceback.print_exc()
 

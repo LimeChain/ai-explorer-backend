@@ -2,7 +2,7 @@ import asyncio
 import json
 import websockets
 
-SESSION_ID = "123456789"
+SESSION_ID = "86d7f295-2ec9-41cb-9d56-18c456cd268b"
 URI = f"ws://localhost:8000/api/v1/chat/ws/{SESSION_ID}"
 
 async def send_query(query: str):
