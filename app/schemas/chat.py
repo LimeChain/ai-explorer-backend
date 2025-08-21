@@ -22,15 +22,9 @@ class ChatRequest(BaseModel):
     Request model for chat endpoint.
     
     Attributes:
-        messages: List of conversation messages (supports multi-turn conversations)
         query: The user's natural language query (for backwards compatibility)
         account_id: Optional connected wallet address for personalized context
-        session_id: Optional client-generated session identifier for traceability
     """
-    messages: Optional[List[ChatMessage]] = Field(
-        None, 
-        description="List of conversation messages for multi-turn chat"
-    )
     query: Optional[str] = Field(
         None, 
         description="User's natural language query (for single queries)", 
@@ -40,19 +34,12 @@ class ChatRequest(BaseModel):
         None, 
         description="Connected wallet address (e.g., '0.0.12345') for personalized responses"
     )
-    session_id: Optional[str] = Field(
-        None, 
-        description="Client-generated session identifier for request traceability"
-    )
     
     def model_post_init(self, __context: None) -> None:
         """Validate that either messages or query is provided."""
-        if not self.messages and not self.query:
-            raise ValueError("Either 'messages' or 'query' must be provided")
-        
-        # Convert single query to messages format for internal processing
-        if self.query and not self.messages:
-            self.messages = [ChatMessage(role="user", content=self.query)]
+        if not self.query:
+            raise ValueError("'query' must be provided")
+
 
 
 class ChatResponse(BaseModel):
