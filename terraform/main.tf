@@ -3,11 +3,11 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 5.0"
+      version = "~> 6.0"
     }
     google-beta = {
       source  = "hashicorp/google-beta"
-      version = "~> 5.0"
+      version = "~> 6.0"
     }
     random = {
       source  = "hashicorp/random"
@@ -47,6 +47,9 @@ resource "google_project_service" "apis" {
     "vpcaccess.googleapis.com",         # VPC Access Connector
     "servicenetworking.googleapis.com", # Service Networking
     "redis.googleapis.com",             # Cloud Memorystore Redis
+    "cloudbuild.googleapis.com",
+    "firebase.googleapis.com",
+    "firebasehosting.googleapis.com"
   ])
 
   service            = each.value

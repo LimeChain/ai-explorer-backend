@@ -11,13 +11,13 @@ resource "google_artifact_registry_repository" "docker_repo" {
   }
 }
 
-# IAM binding for Cloud Build to push to Artifact Registry
-resource "google_artifact_registry_repository_iam_binding" "docker_repo_push" {
-  location   = google_artifact_registry_repository.docker_repo.location
-  repository = google_artifact_registry_repository.docker_repo.name
-  role       = "roles/artifactregistry.writer"
+# # IAM binding for Cloud Build to push to Artifact Registry
+# resource "google_artifact_registry_repository_iam_binding" "docker_repo_push" {
+#   location   = google_artifact_registry_repository.docker_repo.location
+#   repository = google_artifact_registry_repository.docker_repo.name
+#   role       = "roles/artifactregistry.writer"
 
-  members = [
-    "serviceAccount:${data.google_project.project.number}@cloudbuild.gserviceaccount.com",
-  ]
-}
+#   members = [
+#     "serviceAccount:${data.google_project.project.number}@cloudbuild.gserviceaccount.com",
+#   ]
+# }

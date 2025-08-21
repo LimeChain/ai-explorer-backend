@@ -70,29 +70,29 @@ output "docker_repository_url" {
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker_repo.repository_id}"
 }
 
-# Firebase outputs (disabled)
-# output "firebase_hosting_url" {
-#   description = "Firebase Hosting URL"
-#   value       = "https://${google_firebase_hosting_site.default.site_id}.web.app"
+# # Firebase outputs (disabled)
+# # output "firebase_hosting_url" {
+# #   description = "Firebase Hosting URL"
+# #   value       = "https://${google_firebase_hosting_site.default.site_id}.web.app"
+# # }
+
+# # output "firebase_project_id" {
+# #   description = "Firebase project ID"
+# #   value       = google_firebase_project.default.project
+# # }
+
+# # Secret Manager outputs
+# output "secret_names" {
+#   description = "Names of secrets created in Secret Manager"
+#   value = {
+#     database_password = google_secret_manager_secret.db_password.secret_id
+
+#     llm_api_key              = google_secret_manager_secret.llm_api_key.secret_id
+#     langsmith_api_key        = google_secret_manager_secret.langsmith_api_key.secret_id
+#     bigquery_service_account = google_secret_manager_secret.bigquery_service_account.secret_id
+#     redis_url                = google_secret_manager_secret.redis_url.secret_id
+#   }
 # }
-
-# output "firebase_project_id" {
-#   description = "Firebase project ID"
-#   value       = google_firebase_project.default.project
-# }
-
-# Secret Manager outputs
-output "secret_names" {
-  description = "Names of secrets created in Secret Manager"
-  value = {
-    database_password = google_secret_manager_secret.db_password.secret_id
-
-    llm_api_key              = google_secret_manager_secret.llm_api_key.secret_id
-    langsmith_api_key        = google_secret_manager_secret.langsmith_api_key.secret_id
-    bigquery_service_account = google_secret_manager_secret.bigquery_service_account.secret_id
-    redis_url                = google_secret_manager_secret.redis_url.secret_id
-  }
-}
 
 # Service Account outputs
 output "service_accounts" {

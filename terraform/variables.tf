@@ -169,3 +169,17 @@ variable "redis_tier" {
     error_message = "Redis tier must be either BASIC or STANDARD_HA."
   }
 }
+
+variable "llm_api_key" {
+  description = "LLM API key"
+  type = string
+  sensitive = true
+  nullable = false
+}
+
+variable "langsmith_api_key" {
+  description = "Langsmith API key"
+  type = string
+  sensitive = true
+  nullable = false
+}

@@ -3,6 +3,7 @@ resource "google_redis_instance" "redis" {
   name           = "${var.app_name}-redis"
   memory_size_gb = var.redis_memory_size_gb
   region         = var.region
+  location_id    = var.zone
 
   # Use configured tier
   tier = var.redis_tier
@@ -30,6 +31,7 @@ resource "google_redis_instance" "redis" {
     google_service_networking_connection.private_vpc_connection
   ]
 }
+
 
 # Store Redis URL with authentication in Secret Manager
 resource "google_secret_manager_secret_version" "redis_url" {

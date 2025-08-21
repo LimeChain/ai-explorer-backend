@@ -1,9 +1,15 @@
 # VPC Connector for Cloud Run to access VPC resources
 resource "google_vpc_access_connector" "connector" {
   name          = "${var.app_name}-vpc-conn"
-  ip_cidr_range = "10.8.0.0/28"
-  network       = google_compute_network.vpc.name
+  # ip_cidr_range = "10.8.0.0/28"
+  # network       = google_compute_network.vpc.name
   region        = var.region
+
+  subnet {
+    name = google_compute_subnetwork.serverless_connector.name
+  }
+  min_instances = 2
+  max_instances = 3
 
   depends_on = [google_project_service.apis]
 }
@@ -13,6 +19,8 @@ resource "google_cloud_run_v2_service" "backend_api" {
   name     = "${var.app_name}-api"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  invoker_iam_disabled = true
+
 
   template {
     service_account = google_service_account.backend_sa.email
@@ -37,6 +45,15 @@ resource "google_cloud_run_v2_service" "backend_api" {
         limits = {
           cpu    = var.cloud_run_cpu
           memory = var.cloud_run_memory
+        }
+      }
+
+      startup_probe {
+        initial_delay_seconds = 60
+        timeout_seconds = 240
+        period_seconds = 240 
+        tcp_socket {
+          port = 8000
         }
       }
 
@@ -127,12 +144,13 @@ resource "google_cloud_run_v2_service" "backend_api" {
 
       env {
         name = "LANGSMITH_API_KEY"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.langsmith_api_key.secret_id
-            version = "latest"
-          }
-        }
+        value = ""
+        # value_source {
+        #   secret_key_ref {
+        #     secret  = google_secret_manager_secret.langsmith_api_key.secret_id
+        #     version = "latest"
+        #   }
+        # }
       }
 
       env {
@@ -159,7 +177,8 @@ resource "google_cloud_run_v2_service" "backend_api" {
 
   depends_on = [
     google_project_service.apis,
-    google_sql_database_instance.postgres
+    google_sql_database_instance.postgres,
+    google_compute_router_nat.nat
   ]
 }
 
@@ -168,6 +187,7 @@ resource "google_cloud_run_v2_service" "mcp_servers" {
   name     = "${var.app_name}-mcp-server"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  invoker_iam_disabled = true
 
   template {
     service_account = google_service_account.mcp_sa.email
@@ -232,85 +252,18 @@ resource "google_cloud_run_v2_service" "mcp_servers" {
 
 
 
-      env {
-        name = "BIGQUERY_SERVICE_ACCOUNT"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.bigquery_service_account.secret_id
-            version = "latest"
-          }
-        }
-      }
+      # env {
+      #   name = "BIGQUERY_SERVICE_ACCOUNT"
+      #   value_source {
+      #     secret_key_ref {
+      #       secret  = google_secret_manager_secret.bigquery_service_account.secret_id
+      #       version = "latest"
+      #     }
+      #   }
+      # }
     }
   }
 
-  depends_on = [google_project_service.apis]
+  depends_on = [google_project_service.apis, google_compute_router_nat.nat]
 }
-
-# Service Accounts
-resource "google_service_account" "backend_sa" {
-  account_id   = "${var.app_name}-backend-sa"
-  display_name = "Backend Service Account"
-  description  = "Service account for backend Cloud Run service"
-}
-
-resource "google_service_account" "mcp_sa" {
-  account_id   = "${var.app_name}-mcp-sa"
-  display_name = "MCP Servers Service Account"
-  description  = "Service account for MCP servers Cloud Run service"
-}
-
-# IAM bindings for service accounts
-resource "google_project_iam_binding" "backend_sql_client" {
-  project = var.project_id
-  role    = "roles/cloudsql.client"
-
-  members = [
-    "serviceAccount:${google_service_account.backend_sa.email}",
-  ]
-}
-
-resource "google_secret_manager_secret_iam_binding" "backend_secret_access" {
-  secret_id = google_secret_manager_secret.db_password.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-
-  members = [
-    "serviceAccount:${google_service_account.backend_sa.email}",
-  ]
-}
-
-resource "google_project_iam_binding" "mcp_bigquery_user" {
-  project = var.project_id
-  role    = "roles/bigquery.user"
-
-  members = [
-    "serviceAccount:${google_service_account.mcp_sa.email}",
-  ]
-}
-
-# IAM for Load Balancer access to Cloud Run services
-# Only the Load Balancer and internal services can invoke Cloud Run
-resource "google_cloud_run_service_iam_binding" "backend_lb_access" {
-  location = google_cloud_run_v2_service.backend_api.location
-  service  = google_cloud_run_v2_service.backend_api.name
-  role     = "roles/run.invoker"
-
-  members = [
-    "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com", # Load Balancer
-    "serviceAccount:${google_service_account.backend_sa.email}",                                  # Backend service
-  ]
-}
-
-resource "google_cloud_run_service_iam_binding" "mcp_lb_access" {
-  location = google_cloud_run_v2_service.mcp_servers.location
-  service  = google_cloud_run_v2_service.mcp_servers.name
-  role     = "roles/run.invoker"
-
-  members = [
-    "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com", # Load Balancer
-    "serviceAccount:${google_service_account.backend_sa.email}",                                  # Backend can call MCP
-  ]
-}
-
-
 

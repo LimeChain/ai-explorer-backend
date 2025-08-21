@@ -14,12 +14,15 @@ resource "google_secret_manager_secret" "llm_api_key" {
   }
 }
 
+resource "google_secret_manager_secret_version" "llm_api_key" {
+  secret      = google_secret_manager_secret.llm_api_key.id
+  secret_data = var.llm_api_key
+}
 
 
-
-
-resource "google_secret_manager_secret" "langsmith_api_key" {
-  secret_id = "${var.app_name}-langsmith-api-key"
+# Store database password in Secret Manager
+resource "google_secret_manager_secret" "db_password" {
+  secret_id = "${var.app_name}-database-password"
 
   replication {
     auto {}
@@ -31,23 +34,6 @@ resource "google_secret_manager_secret" "langsmith_api_key" {
   }
 }
 
-
-
-# BigQuery service account key (if needed)
-resource "google_secret_manager_secret" "bigquery_service_account" {
-  secret_id = "${var.app_name}-bigquery-sa-key"
-
-  replication {
-    auto {}
-  }
-
-  labels = {
-    environment = var.environment
-    app         = var.app_name
-  }
-}
-
-# Database connection string
 resource "google_secret_manager_secret" "database_url" {
   secret_id = "${var.app_name}-database-url"
 
@@ -75,55 +61,37 @@ resource "google_secret_manager_secret" "redis_url" {
   }
 }
 
-# IAM bindings for secret access
-resource "google_secret_manager_secret_iam_binding" "llm_api_key_access" {
-  secret_id = google_secret_manager_secret.llm_api_key.secret_id
-  role      = "roles/secretmanager.secretAccessor"
+resource "google_secret_manager_secret" "langsmith_api_key" {
+  secret_id = "${var.app_name}-langsmith-api-key"
 
-  members = [
-    "serviceAccount:${google_service_account.backend_sa.email}",
-    "serviceAccount:${google_service_account.mcp_sa.email}",
-  ]
+  replication {
+    auto {}
+  }
+
+  labels = {
+    environment = var.environment
+    app         = var.app_name
+  }
 }
 
+# resource "google_secret_manager_secret_version" "langsmith_api_key" {
+#   secret      = google_secret_manager_secret.langsmith_api_key.id
+#   secret_data = var.langsmith_api_key
+# }
 
 
 
+# BigQuery service account key (if needed)
+resource "google_secret_manager_secret" "bigquery_service_account" {
+  secret_id = "${var.app_name}-bigquery-sa-key"
 
-resource "google_secret_manager_secret_iam_binding" "bigquery_access" {
-  secret_id = google_secret_manager_secret.bigquery_service_account.secret_id
-  role      = "roles/secretmanager.secretAccessor"
+  replication {
+    auto {}
+  }
 
-  members = [
-    "serviceAccount:${google_service_account.mcp_sa.email}",
-  ]
+  labels = {
+    environment = var.environment
+    app         = var.app_name
+  }
 }
 
-resource "google_secret_manager_secret_iam_binding" "redis_access" {
-  secret_id = google_secret_manager_secret.redis_url.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-
-  members = [
-    "serviceAccount:${google_service_account.backend_sa.email}",
-  ]
-}
-
-resource "google_secret_manager_secret_iam_binding" "langsmith_access" {
-  secret_id = google_secret_manager_secret.langsmith_api_key.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-
-  members = [
-    "serviceAccount:${google_service_account.backend_sa.email}",
-    "serviceAccount:${google_service_account.mcp_sa.email}",
-  ]
-}
-
-resource "google_secret_manager_secret_iam_binding" "database_url_access" {
-  secret_id = google_secret_manager_secret.database_url.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-
-  members = [
-    "serviceAccount:${google_service_account.backend_sa.email}",
-    "serviceAccount:${google_service_account.mcp_sa.email}",
-  ]
-}

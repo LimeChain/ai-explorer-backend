@@ -60,19 +60,6 @@ resource "google_sql_user" "database_user" {
   password = random_password.db_password.result
 }
 
-# Store database password in Secret Manager
-resource "google_secret_manager_secret" "db_password" {
-  secret_id = "${var.app_name}-database-password"
-
-  replication {
-    auto {}
-  }
-
-  labels = {
-    environment = var.environment
-    app         = var.app_name
-  }
-}
 
 resource "google_secret_manager_secret_version" "db_password" {
   secret      = google_secret_manager_secret.db_password.id
@@ -82,32 +69,4 @@ resource "google_secret_manager_secret_version" "db_password" {
 resource "google_secret_manager_secret_version" "database_url" {
   secret      = google_secret_manager_secret.database_url.id
   secret_data = "postgresql+psycopg://${google_sql_user.database_user.name}:${random_password.db_password.result}@${google_sql_database_instance.postgres.private_ip_address}:5432/${google_sql_database.database.name}"
-}
-
-# VPC for private connectivity
-resource "google_compute_network" "vpc" {
-  name                    = "${var.app_name}-vpc"
-  auto_create_subnetworks = false
-}
-
-resource "google_compute_subnetwork" "subnet" {
-  name          = "${var.app_name}-subnet"
-  ip_cidr_range = "10.0.0.0/24"
-  region        = var.region
-  network       = google_compute_network.vpc.id
-}
-
-# Private VPC connection for Cloud SQL
-resource "google_compute_global_address" "private_ip_address" {
-  name          = "${var.app_name}-private-ip"
-  purpose       = "VPC_PEERING"
-  address_type  = "INTERNAL"
-  prefix_length = 16
-  network       = google_compute_network.vpc.id
-}
-
-resource "google_service_networking_connection" "private_vpc_connection" {
-  network                 = google_compute_network.vpc.id
-  service                 = "servicenetworking.googleapis.com"
-  reserved_peering_ranges = [google_compute_global_address.private_ip_address.name]
 }
