@@ -4,7 +4,7 @@ on:
   workflow_dispatch: {}
   push:
     branches:
-      - main
+      - dev
 
 env:
   GCP_REGION: us-central1
@@ -65,6 +65,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          platforms: linux/amd64
           tags: |
             ${{ steps.determine_tag.outputs.API_IMAGE_URI }}
             ${{ steps.determine_tag.outputs.API_LATEST_IMAGE_URI }}
@@ -76,9 +77,10 @@ jobs:
       - name: Build and push MCP Server Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./mcp_servers
+          context: .
           file: ./mcp_servers/Dockerfile
           push: true
+          platforms: linux/amd64
           tags: |
             ${{ steps.determine_tag.outputs.MCP_IMAGE_URI }}
             ${{ steps.determine_tag.outputs.MCP_LATEST_IMAGE_URI }}
