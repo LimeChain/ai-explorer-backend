@@ -58,6 +58,7 @@ def get_vector_services():
                 raise FileNotFoundError(f"SDK documentation file not found: {doc_path}")
                 
         except Exception as e:
+            print('================== the error is', e)
             raise RuntimeError(f"Failed to initialize vector services: {e}") from e
     
     return vector_store_service, document_processor
