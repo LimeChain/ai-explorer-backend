@@ -50,8 +50,9 @@ resource "google_project_service" "apis" {
     "cloudbuild.googleapis.com",
     "firebase.googleapis.com",
     "firebasehosting.googleapis.com",
-    "storage.googleapis.com",           # Cloud Storage
-    "dns.googleapis.com"                # Cloud DNS
+    "storage.googleapis.com", # Cloud Storage
+    "dns.googleapis.com",     # Cloud DNS
+    "certificatemanager.googleapis.com"
   ])
 
   service            = each.value

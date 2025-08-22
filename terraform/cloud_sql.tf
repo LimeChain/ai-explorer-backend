@@ -68,5 +68,5 @@ resource "google_secret_manager_secret_version" "db_password" {
 
 resource "google_secret_manager_secret_version" "database_url" {
   secret      = google_secret_manager_secret.database_url.id
-  secret_data = "postgresql+psycopg://${google_sql_user.database_user.name}:${random_password.db_password.result}@${google_sql_database_instance.postgres.private_ip_address}:5432/${google_sql_database.database.name}"
+  secret_data = "postgresql://${google_sql_user.database_user.name}:${random_password.db_password.result}@${google_sql_database_instance.postgres.private_ip_address}:5432/${google_sql_database.database.name}"
 }

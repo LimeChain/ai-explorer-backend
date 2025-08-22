@@ -1,9 +1,7 @@
 # VPC Connector for Cloud Run to access VPC resources
 resource "google_vpc_access_connector" "connector" {
-  name          = "${var.app_name}-vpc-conn"
-  # ip_cidr_range = "10.8.0.0/28"
-  # network       = google_compute_network.vpc.name
-  region        = var.region
+  name   = "${var.app_name}-vpc-conn"
+  region = var.region
 
   subnet {
     name = google_compute_subnetwork.serverless_connector.name
@@ -16,9 +14,9 @@ resource "google_vpc_access_connector" "connector" {
 
 # Backend API Cloud Run Service
 resource "google_cloud_run_v2_service" "backend_api" {
-  name     = "${var.app_name}-api"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  name                 = "${var.app_name}-api"
+  location             = var.region
+  ingress              = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   invoker_iam_disabled = true
 
 
@@ -50,8 +48,8 @@ resource "google_cloud_run_v2_service" "backend_api" {
 
       startup_probe {
         initial_delay_seconds = 60
-        timeout_seconds = 240
-        period_seconds = 240 
+        timeout_seconds       = 240
+        period_seconds        = 240
         tcp_socket {
           port = 8000
         }
@@ -123,22 +121,22 @@ resource "google_cloud_run_v2_service" "backend_api" {
       }
 
       env {
-        name = "PER_USER_COST_LIMIT"
+        name  = "PER_USER_COST_LIMIT"
         value = tostring(var.per_user_cost_limit)
       }
 
       env {
-        name = "PER_USER_COST_PERIOD_SECONDS"
+        name  = "PER_USER_COST_PERIOD_SECONDS"
         value = tostring(var.per_user_cost_period_seconds)
       }
 
       env {
-        name = "GLOBAL_COST_LIMIT"
+        name  = "GLOBAL_COST_LIMIT"
         value = tostring(var.global_cost_limit)
       }
 
       env {
-        name = "GLOBAL_COST_PERIOD_SECONDS"
+        name  = "GLOBAL_COST_PERIOD_SECONDS"
         value = tostring(var.global_cost_period_seconds)
       }
 
@@ -163,7 +161,7 @@ resource "google_cloud_run_v2_service" "backend_api" {
       }
 
       env {
-        name = "LANGSMITH_API_KEY"
+        name  = "LANGSMITH_API_KEY"
         value = ""
         # value_source {
         #   secret_key_ref {
@@ -185,7 +183,7 @@ resource "google_cloud_run_v2_service" "backend_api" {
 
       env {
         name  = "MCP_ENDPOINT"
-        value = google_cloud_run_v2_service.mcp_servers.uri
+        value = "${google_cloud_run_v2_service.mcp_servers.uri}/mcp"
       }
 
       env {
@@ -204,9 +202,9 @@ resource "google_cloud_run_v2_service" "backend_api" {
 
 # MCP Servers Cloud Run Service
 resource "google_cloud_run_v2_service" "mcp_servers" {
-  name     = "${var.app_name}-mcp-server"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  name                 = "${var.app_name}-mcp-server"
+  location             = var.region
+  ingress              = "INGRESS_TRAFFIC_INTERNAL_ONLY"
   invoker_iam_disabled = true
 
   template {
@@ -286,4 +284,3 @@ resource "google_cloud_run_v2_service" "mcp_servers" {
 
   depends_on = [google_project_service.apis, google_compute_router_nat.nat]
 }
-

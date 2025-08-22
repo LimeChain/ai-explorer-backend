@@ -130,16 +130,6 @@ output "frontend_cdn_url" {
   value       = var.frontend_domain_name != "" ? "https://${var.frontend_domain_name}" : "https://${google_compute_global_address.lb_ip.address}"
 }
 
-output "dns_name_servers" {
-  description = "DNS name servers to configure in your domain registrar"
-  value       = var.domain_name != "" ? google_dns_managed_zone.main_zone[0].name_servers : []
-}
-
-output "dns_zone_name" {
-  description = "DNS zone name in Cloud DNS"
-  value       = var.domain_name != "" ? google_dns_managed_zone.main_zone[0].name : ""
-}
-
 # SSL certificate outputs
 output "ssl_certificate_domains" {
   description = "Domains covered by the SSL certificate"

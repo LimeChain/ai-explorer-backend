@@ -103,26 +103,26 @@ variable "global_rate_limit_window_seconds" {
 #Cost control configuration
 variable "per_user_cost_limit" {
   description = "Per user cost limit in USD"
-  type = number
-  default = 1
+  type        = number
+  default     = 1
 }
 
 variable "per_user_cost_period_seconds" {
   description = "Per user cost period in seconds"
-  type = number
-  default = 86400
+  type        = number
+  default     = 86400
 }
 
 variable "global_cost_limit" {
   description = "USD cost limit"
-  type = number
-  default = 10
+  type        = number
+  default     = 10
 }
 
 variable "global_cost_period_seconds" {
   description = "Global cost period in secods"
-  type = number
-  default = 31536000
+  type        = number
+  default     = 31536000
 }
 
 # Application configuration
@@ -163,7 +163,7 @@ variable "collection_name" {
 variable "langsmith_tracing" {
   description = "Enable LangSmith tracing"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "langsmith_endpoint" {
@@ -197,16 +197,16 @@ variable "redis_tier" {
 
 variable "llm_api_key" {
   description = "LLM API key"
-  type = string
-  sensitive = true
-  nullable = false
+  type        = string
+  sensitive   = true
+  nullable    = false
 }
 
 variable "langsmith_api_key" {
   description = "Langsmith API key"
-  type = string
-  sensitive = true
-  nullable = false
+  type        = string
+  sensitive   = true
+  nullable    = false
 }
 
 # Frontend configuration
@@ -221,5 +221,3 @@ variable "frontend_cors_origins" {
   type        = list(string)
   default     = ["*"]
 }
-
-

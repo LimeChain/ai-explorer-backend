@@ -39,19 +39,6 @@ resource "google_project_iam_binding" "mcp_bigquery_user" {
   ]
 }
 
-# # IAM for Load Balancer access to Cloud Run services
-# # Only the Load Balancer and internal services can invoke Cloud Run
-# resource "google_cloud_run_service_iam_binding" "backend_lb_access" {
-#   location = google_cloud_run_v2_service.backend_api.location
-#   service  = google_cloud_run_v2_service.backend_api.name
-#   role     = "roles/run.invoker"
-
-#   members = [
-#     "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com", # Load Balancer
-#     "serviceAccount:${google_service_account.backend_sa.email}",                                  # Backend service
-#   ]
-# }
-
 resource "google_cloud_run_service_iam_binding" "mcp_lb_access" {
   location = google_cloud_run_v2_service.mcp_servers.location
   service  = google_cloud_run_v2_service.mcp_servers.name
@@ -59,7 +46,7 @@ resource "google_cloud_run_service_iam_binding" "mcp_lb_access" {
 
   members = [
     # "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com", # Load Balancer
-    "serviceAccount:${google_service_account.backend_sa.email}",                                  # Backend can call MCP
+    "serviceAccount:${google_service_account.backend_sa.email}", # Backend can call MCP
   ]
 }
 
