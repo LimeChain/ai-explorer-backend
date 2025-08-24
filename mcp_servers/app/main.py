@@ -7,10 +7,22 @@ from mcp.server.fastmcp import FastMCP
 
 from .services.sdk_service import HederaSDKService
 from .settings import settings
+from .logging_config import setup_logging, get_logger, set_correlation_id
+from .exceptions import (
+    ServiceInitializationError, 
+    DocumentProcessingError, 
+    SDKError,
+    ValidationError,
+    handle_exception
+)
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Setup logging
+setup_logging(level="INFO", use_json=False)
+logger = get_logger(__name__)
 
 # Initialize the FastMCP server for Hedera Mirror Node
 mcp = FastMCP("HederaMirrorNode")
@@ -21,7 +33,12 @@ document_processor = None
 def get_sdk_service() -> HederaSDKService:
     global sdk_service
     if sdk_service is None:
-        sdk_service = HederaSDKService()
+        try:
+            sdk_service = HederaSDKService()
+            logger.info("SDK service initialized successfully")
+        except Exception as e:
+            logger.error("Failed to initialize SDK service", exc_info=True)
+            raise ServiceInitializationError("HederaSDKService", str(e), e)
     return sdk_service
 
 def get_vector_services():
@@ -54,12 +71,18 @@ def get_vector_services():
 
             if os.path.exists(doc_path):
                 document_processor.initialize_from_file(doc_path)
+                logger.info(f"Vector services initialized with documentation from {doc_path}")
             else:
                 raise FileNotFoundError(f"SDK documentation file not found: {doc_path}")
                 
         except Exception as e:
-            print('================== the error is', e)
-            raise RuntimeError(f"Failed to initialize vector services: {e}") from e
+            logger.error("Failed to initialize vector services", exc_info=True, extra={
+                "doc_path": doc_path,
+                "vector_store_url": vector_store_url,
+                "collection_name": collection_name,
+                "embedding_model": embedding_model
+            })
+            raise ServiceInitializationError("VectorServices", str(e), e)
     
     return vector_store_service, document_processor
 
@@ -83,7 +106,46 @@ async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
         - call_sdk_method(method_name="get_transaction", transaction_id="0.0.123@1234567890")
         - call_sdk_method(method_name="get_account", account_id="0.0.123")
     """
-    return await get_sdk_service().call_method(method_name, **kwargs)
+    # Set correlation ID for request tracking
+    correlation_id = set_correlation_id()
+    
+    # Input validation
+    if not method_name or not isinstance(method_name, str):
+        error_response = handle_exception(
+            ValidationError("Method name is required and must be a string", "method_name", method_name),
+            {"correlation_id": correlation_id}
+        )
+        logger.warning("Invalid method_name provided", extra={"method_name": method_name, "correlation_id": correlation_id})
+        return error_response
+    
+    try:
+        logger.info(f"Calling SDK method: {method_name}", extra={
+            "method_name": method_name,
+            "parameters_count": len(kwargs),
+            "correlation_id": correlation_id
+        })
+        
+        result = await get_sdk_service().call_method(method_name, **kwargs)
+        
+        # Add correlation ID to successful results
+        if isinstance(result, dict):
+            result["correlation_id"] = correlation_id
+        
+        return result
+        
+    except SDKError as e:
+        logger.error(f"SDK error calling {method_name}", exc_info=True, extra={
+            "method_name": method_name,
+            "correlation_id": correlation_id
+        })
+        return handle_exception(e, {"correlation_id": correlation_id})
+    
+    except Exception as e:
+        logger.error(f"Unexpected error calling {method_name}", exc_info=True, extra={
+            "method_name": method_name,
+            "correlation_id": correlation_id
+        })
+        return handle_exception(e, {"correlation_id": correlation_id})
 
 @mcp.tool()
 def retrieve_sdk_method(query: str) -> Dict[str, Any]:
@@ -106,26 +168,58 @@ def retrieve_sdk_method(query: str) -> Dict[str, Any]:
         - retrieve_sdk_method(query="get account information")
         - retrieve_sdk_method(query="check token balance")
     """
+    # Set correlation ID for request tracking
+    correlation_id = set_correlation_id()
+    
+    # Input validation
+    if not query or not isinstance(query, str) or len(query.strip()) == 0:
+        error_response = handle_exception(
+            ValidationError("Query is required and must be a non-empty string", "query", query),
+            {"correlation_id": correlation_id}
+        )
+        logger.warning("Invalid query provided", extra={"query": query, "correlation_id": correlation_id})
+        return error_response
+    
     try:
+        logger.info(f"Retrieving SDK methods for query: {query}", extra={
+            "query": query,
+            "correlation_id": correlation_id
+        })
+        
         # Get vector services
         _, document_processor = get_vector_services()
 
         # Search for methods
         search_result = document_processor.search_methods(query=query, k=3)
-
-        return {
+        
+        result = {
             "query": query,
             "methods": search_result.get("methods", []),
-            "success": True
+            "success": True,
+            "correlation_id": correlation_id
         }
-
-    except Exception as e:
-        return {
+        
+        logger.info(f"Retrieved {len(result['methods'])} methods for query", extra={
             "query": query,
-            "methods": [],
-            "success": False,
-            "error": str(e)
-        }
+            "methods_count": len(result['methods']),
+            "correlation_id": correlation_id
+        })
+        
+        return result
+
+    except DocumentProcessingError as e:
+        logger.error("Document processing error during method retrieval", exc_info=True, extra={
+            "query": query,
+            "correlation_id": correlation_id
+        })
+        return handle_exception(e, {"correlation_id": correlation_id})
+    
+    except Exception as e:
+        logger.error("Unexpected error during method retrieval", exc_info=True, extra={
+            "query": query,
+            "correlation_id": correlation_id
+        })
+        return handle_exception(e, {"correlation_id": correlation_id})
 
 @mcp.tool()
 async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[str, int, float]]], timestamp: Union[str, int, float] = None) -> Dict[str, Any]:

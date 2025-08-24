@@ -1,14 +1,21 @@
 """Hedera Mirror Node SDK service wrapper for dynamic method calling."""
 
 import json
-import logging
 import inspect
 
 from typing import Any, Dict
 
 from hiero_mirror import MirrorNodeClient
+from ..logging_config import get_service_logger
+from ..exceptions import (
+    SDKError, 
+    SDKMethodNotFoundError, 
+    SDKParameterError, 
+    SDKExecutionError,
+    ConfigurationError
+)
 
-logger = logging.getLogger(__name__)
+logger = get_service_logger("sdk_service")
 
 
 class HederaSDKService:
@@ -20,8 +27,10 @@ class HederaSDKService:
             self.client = MirrorNodeClient.for_testnet() # TODO: Make this configurable to support mainnet or other networks
             logger.info("Successfully initialized Hedera SDK service for testnet")
         except Exception as e:
-            logger.error(f"Failed to initialize Hedera SDK service: {e}", exc_info=True)
-            raise RuntimeError(f"Failed to initialize Hedera SDK service: {e}") from e
+            logger.error("Failed to initialize Hedera SDK service", exc_info=True, extra={
+                "network": "testnet"
+            })
+            raise ConfigurationError(f"Failed to initialize Hedera SDK service: {e}", "hedera_network") from e
     
     async def call_method(self, method_name: str, **kwargs) -> Dict[str, Any]:
         """
@@ -40,27 +49,22 @@ class HederaSDKService:
         try:
             # Validate method exists
             if not hasattr(self.client, method_name):
-                error_msg = f"Method '{method_name}' not found in SDK"
-                logger.warning(error_msg)
                 available_methods = self.get_available_methods()
-                return {
-                    "error": error_msg,
-                    "available_methods": available_methods,
-                    "method_called": method_name,
-                    "parameters_used": kwargs
-                }
+                logger.warning("SDK method not found", extra={
+                    "method_name": method_name,
+                    "available_methods": available_methods
+                })
+                raise SDKMethodNotFoundError(method_name, available_methods)
             
             method = getattr(self.client, method_name)
             
             # Validate method is callable
             if not callable(method):
-                error_msg = f"'{method_name}' is not a callable method"
-                logger.warning(error_msg)
-                return {
-                    "error": error_msg,
-                    "method_called": method_name,
-                    "parameters_used": kwargs
-                }
+                logger.warning("SDK attribute is not callable", extra={
+                    "method_name": method_name,
+                    "attribute_type": type(method).__name__
+                })
+                raise SDKMethodNotFoundError(method_name)
             
             # Process and filter parameters
             filtered_kwargs = self._process_parameters(kwargs)
@@ -83,36 +87,27 @@ class HederaSDKService:
                 "parameters_used": filtered_kwargs
             }
             
+        except SDKMethodNotFoundError:
+            # Re-raise custom exceptions
+            raise
         except TypeError as e:
-            error_msg = str(e)
-            logger.error(f"Parameter error calling {method_name}: {error_msg}")
-            logger.debug(f"Parameters that caused error: {locals().get('filtered_kwargs', kwargs)}")
-            return {
-                "error": error_msg,
-                "method_called": method_name,
-                "parameters_used": locals().get('filtered_kwargs', kwargs),
-                "error_type": "TypeError",
-                "hint": "Check method signature and ensure all required parameters are provided"
-            }
+            logger.error("Parameter type error calling SDK method", exc_info=True, extra={
+                "method_name": method_name,
+                "parameters": locals().get('filtered_kwargs', kwargs)
+            })
+            raise SDKParameterError(method_name, str(e), locals().get('filtered_kwargs', kwargs)) from e
         except json.JSONDecodeError as e:
-            error_msg = f"Invalid JSON in kwargs parameter: {e}"
-            logger.error(f"JSON parsing error for {method_name}: {error_msg}")
-            return {
-                "error": error_msg,
-                "method_called": method_name,
-                "parameters_used": kwargs,
-                "error_type": "JSONDecodeError"
-            }
+            logger.error("JSON parsing error in SDK parameters", exc_info=True, extra={
+                "method_name": method_name,
+                "raw_kwargs": kwargs
+            })
+            raise SDKParameterError(method_name, f"Invalid JSON in kwargs parameter: {e}", kwargs) from e
         except Exception as e:
-            error_msg = str(e)
-            error_type = type(e).__name__
-            logger.error(f"Unexpected error calling {method_name}: {error_msg}", exc_info=True)
-            return {
-                "error": error_msg,
-                "method_called": method_name,
-                "parameters_used": locals().get('filtered_kwargs', kwargs),
-                "error_type": error_type
-            }
+            logger.error("Unexpected error calling SDK method", exc_info=True, extra={
+                "method_name": method_name,
+                "parameters": locals().get('filtered_kwargs', kwargs)
+            })
+            raise SDKExecutionError(method_name, str(e), locals().get('filtered_kwargs', kwargs), e) from e
     
     def _process_parameters(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         """
