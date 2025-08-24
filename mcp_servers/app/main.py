@@ -243,13 +243,74 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
         - calculate_hbar_value(hbar_amounts=["1000000000000", 3000000000000]) -> {"calculations": {"1000000000000": {...}, "3000000000000": {...}}, "count": 2, "success": True}
         - calculate_hbar_value(hbar_amounts=3000000000000, timestamp=1705276800) -> historical calculation for epoch timestamp
     """
-    async def calculate_single_hbar_value(hbar_amount, timestamp):
+    # Set correlation ID for request tracking
+    correlation_id = set_correlation_id()
+    
+    # Input validation (defensive check even though parameter is required)
+    if hbar_amounts is None:
+        error_response = handle_exception(
+            ValidationError("hbar_amounts is required", "hbar_amounts", hbar_amounts),
+            {"correlation_id": correlation_id}
+        )
+        logger.warning("Missing hbar_amounts parameter", extra={"correlation_id": correlation_id})
+        return error_response
+    
+    # Validate hbar_amounts format
+    if isinstance(hbar_amounts, list):
+        if not hbar_amounts:
+            error_response = handle_exception(
+                ValidationError("hbar_amounts list cannot be empty", "hbar_amounts", hbar_amounts),
+                {"correlation_id": correlation_id}
+            )
+            logger.warning("Empty hbar_amounts list provided", extra={"correlation_id": correlation_id})
+            return error_response
+        hbar_amount_list = hbar_amounts
+    else:
+        hbar_amount_list = [hbar_amounts]
+    
+    # Validate timestamp if provided
+    if timestamp is not None:
         try:
+            float(timestamp)
+        except (ValueError, TypeError):
+            error_response = handle_exception(
+                ValidationError("timestamp must be a valid number", "timestamp", timestamp),
+                {"correlation_id": correlation_id}
+            )
+            logger.warning("Invalid timestamp provided", extra={"timestamp": timestamp, "correlation_id": correlation_id})
+            return error_response
+
+    async def calculate_single_hbar_value(hbar_amount, timestamp, correlation_id):
+        try:
+            # Validate individual hbar_amount
+            try:
+                if isinstance(hbar_amount, str):
+                    tinybar_amount = int(hbar_amount)
+                else:
+                    tinybar_amount = int(hbar_amount)
+                
+                if tinybar_amount < 0:
+                    return {
+                        "error": "HBAR amount cannot be negative",
+                        "hbar_amount": hbar_amount,
+                        "success": False,
+                        "correlation_id": correlation_id
+                    }
+                    
+            except (ValueError, TypeError):
+                return {
+                    "error": f"Invalid HBAR amount format: {hbar_amount}",
+                    "hbar_amount": hbar_amount,
+                    "success": False,
+                    "correlation_id": correlation_id
+                }
+            
             if not exchange_rate_result.get("success", False):
                 return {
                     "error": f"Failed to fetch exchange rate: {exchange_rate_result.get('error', 'Unknown error')}",
                     "hbar_amount": hbar_amount,
-                    "success": False
+                    "success": False,
+                    "correlation_id": correlation_id
                 }
             
             # Extract exchange rate data from Pydantic model
@@ -258,7 +319,8 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
                 return {
                     "error": "No exchange rate data available",
                     "hbar_amount": hbar_amount,
-                    "success": False
+                    "success": False,
+                    "correlation_id": correlation_id
                 }
             
             # Access Pydantic model attributes directly
@@ -271,15 +333,9 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
                 return {
                     "error": "Invalid exchange rate data: hbar_equivalent is zero",
                     "hbar_amount": hbar_amount,
-                    "success": False
+                    "success": False,
+                    "correlation_id": correlation_id
                 }
-            
-            # Calculate USD values using integer arithmetic for precision
-            # Convert hbar_amount to int if it's a string
-            if isinstance(hbar_amount, str):
-                tinybar_amount = int(hbar_amount)
-            else:
-                tinybar_amount = int(hbar_amount)
             
             # Convert tinybars to HBAR (1 HBAR = 100,000,000 tinybars)
             TINYBARS_PER_HBAR = 100000000
@@ -305,47 +361,79 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
                     "expiration_time": expiration_time
                 },
                 "calculation_timestamp": data.timestamp,
-                "requested_timestamp": timestamp
+                "requested_timestamp": timestamp,
+                "correlation_id": correlation_id
             }
             
         except Exception as e:
+            logger.error(f"Calculation failed for amount {hbar_amount}", exc_info=True, extra={
+                "hbar_amount": hbar_amount,
+                "correlation_id": correlation_id
+            })
             return {
                 "error": f"Calculation failed: {str(e)}",
                 "hbar_amount": hbar_amount,
-                "success": False
+                "success": False,
+                "correlation_id": correlation_id
             }
     
-    if isinstance(hbar_amounts, list):
-        hbar_amount_list = hbar_amounts
-    else:
-        hbar_amount_list = [hbar_amounts]
+    try:
+        logger.info(f"Calculating HBAR value for {len(hbar_amount_list)} amount(s)", extra={
+            "amounts_count": len(hbar_amount_list),
+            "has_timestamp": timestamp is not None,
+            "correlation_id": correlation_id
+        })
+        
+        calculations = {}
+        all_successful = True
+        exchange_rate_params = {}
+
+        if timestamp:
+            exchange_rate_params["timestamp"] = str(timestamp)
+
+        # Fetch exchange rate using SDK service
+        exchange_rate_result = await get_sdk_service().call_method(
+            "get_network_exchange_rate", **exchange_rate_params
+        )
+
+        for hbar_amount in hbar_amount_list:
+            result = await calculate_single_hbar_value(hbar_amount, timestamp, correlation_id)
+            key = str(hbar_amount)
+            calculations[key] = result
+            if not result.get("success", False):
+                all_successful = False
+
+        final_result = {
+            "calculations": calculations,
+            "count": len(calculations),
+            "success": all_successful,
+            "correlation_id": correlation_id
+        }
+        
+        logger.info(f"HBAR value calculations completed", extra={
+            "calculations_count": len(calculations),
+            "all_successful": all_successful,
+            "correlation_id": correlation_id
+        })
+        
+        return final_result
+        
+    except SDKError as e:
+        logger.error("SDK error during HBAR value calculation", exc_info=True, extra={
+            "amounts_count": len(hbar_amount_list),
+            "correlation_id": correlation_id
+        })
+        return handle_exception(e, {"correlation_id": correlation_id})
     
-    calculations = {}
-    all_successful = True
-    exchange_rate_params = {}
-
-    if timestamp:
-        exchange_rate_params["timestamp"] = str(timestamp)
-
-    exchange_rate_result = await get_sdk_service().call_method(
-        "get_network_exchange_rate", **exchange_rate_params
-    )
-
-    for hbar_amount in hbar_amount_list:
-        result = await calculate_single_hbar_value(hbar_amount, timestamp)
-        key = str(hbar_amount)
-        calculations[key] = result
-        if not result.get("success", False):
-            all_successful = False
-    
-    return {
-        "calculations": calculations,
-        "count": len(calculations),
-        "success": all_successful
-    }
+    except Exception as e:
+        logger.error("Unexpected error during HBAR value calculation", exc_info=True, extra={
+            "amounts_count": len(hbar_amount_list),
+            "correlation_id": correlation_id
+        })
+        return handle_exception(e, {"correlation_id": correlation_id})
 
 @mcp.tool()
-async def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, float]]]) -> Dict[str, Any]:
+def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, float]]]) -> Dict[str, Any]:
     """
     Convert Unix timestamp(s) to human-readable date format.
     
@@ -364,20 +452,97 @@ async def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, i
         - convert_timestamp(1752127198.022577) -> {"conversions": {"1752127198.022577": {...}}, "count": 1, "success": True}
         - convert_timestamp([1752127198, "1752127200.123456"]) -> {"conversions": {"1752127198": {...}, "1752127200.123456": {...}}, "count": 2, "success": True}
     """
-    def convert_single_timestamp(timestamp):
+    # Set correlation ID for request tracking
+    correlation_id = set_correlation_id()
+    
+    # Input validation (defensive check even though parameter is required)
+    if timestamps is None:
+        error_response = handle_exception(
+            ValidationError("timestamps is required", "timestamps", timestamps),
+            {"correlation_id": correlation_id}
+        )
+        logger.warning("Missing timestamps parameter", extra={"correlation_id": correlation_id})
+        return error_response
+    
+    # Validate timestamps format
+    if isinstance(timestamps, list):
+        if not timestamps:
+            error_response = handle_exception(
+                ValidationError("timestamps list cannot be empty", "timestamps", timestamps),
+                {"correlation_id": correlation_id}
+            )
+            logger.warning("Empty timestamps list provided", extra={"correlation_id": correlation_id})
+            return error_response
+        timestamp_list = timestamps
+    else:
+        timestamp_list = [timestamps]
+
+    def convert_single_timestamp(timestamp, correlation_id):
         try:
             timestamp_str = str(timestamp)
             
+            # Basic validation of timestamp string
+            if not timestamp_str or timestamp_str.strip() == "":
+                return {
+                    "original_timestamp": timestamp,
+                    "error": "Timestamp cannot be empty",
+                    "success": False,
+                    "correlation_id": correlation_id
+                }
+            
             if '.' in timestamp_str:
                 # Hedera format with seconds.nanoseconds
-                seconds_str = timestamp_str.split('.')[0]
-                nanoseconds_str = timestamp_str.split('.')[1]
-                unix_seconds = int(seconds_str)
-                nanoseconds = int(nanoseconds_str.ljust(9, '0')[:9])  # Pad/truncate to 9 digits
+                parts = timestamp_str.split('.')
+                if len(parts) != 2:
+                    return {
+                        "original_timestamp": timestamp,
+                        "error": "Invalid timestamp format: multiple decimal points",
+                        "success": False,
+                        "correlation_id": correlation_id
+                    }
+                
+                seconds_str = parts[0]
+                nanoseconds_str = parts[1]
+                
+                try:
+                    unix_seconds = int(seconds_str)
+                    nanoseconds = int(nanoseconds_str.ljust(9, '0')[:9])  # Pad/truncate to 9 digits
+                except ValueError:
+                    return {
+                        "original_timestamp": timestamp,
+                        "error": "Invalid timestamp format: non-numeric components",
+                        "success": False,
+                        "correlation_id": correlation_id
+                    }
             else:
                 # Unix timestamp
-                unix_seconds = int(float(timestamp_str))
-                nanoseconds = 0
+                try:
+                    unix_seconds = int(float(timestamp_str))
+                    nanoseconds = 0
+                except ValueError:
+                    return {
+                        "original_timestamp": timestamp,
+                        "error": "Invalid timestamp format: not a valid number",
+                        "success": False,
+                        "correlation_id": correlation_id
+                    }
+            
+            # Validate timestamp range (reasonable bounds)
+            if unix_seconds < 0:
+                return {
+                    "original_timestamp": timestamp,
+                    "error": "Timestamp cannot be negative",
+                    "success": False,
+                    "correlation_id": correlation_id
+                }
+            
+            if unix_seconds > 4102444800:  # Year 2100
+                return {
+                    "original_timestamp": timestamp,
+                    "error": "Timestamp too far in the future (beyond year 2100)",
+                    "success": False,
+                    "correlation_id": correlation_id
+                }
             
             dt = datetime.fromtimestamp(unix_seconds, tz=timezone.utc)
             
@@ -390,35 +555,70 @@ async def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, i
                 "nanoseconds": nanoseconds,
                 "human_readable": human_readable,
                 "iso_format": iso_format,
-                "success": True
+                "success": True,
+                "correlation_id": correlation_id
             }
             
         except (ValueError, OverflowError) as e:
+            logger.warning(f"Timestamp conversion failed for {timestamp}", extra={
+                "timestamp": timestamp,
+                "error": str(e),
+                "correlation_id": correlation_id
+            })
             return {
                 "original_timestamp": timestamp,
                 "error": f"Invalid timestamp format: {str(e)}",
-                "success": False
+                "success": False,
+                "correlation_id": correlation_id
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error converting timestamp {timestamp}", exc_info=True, extra={
+                "timestamp": timestamp,
+                "correlation_id": correlation_id
+            })
+            return {
+                "original_timestamp": timestamp,
+                "error": f"Conversion failed: {str(e)}",
+                "success": False,
+                "correlation_id": correlation_id
             }
     
-    if isinstance(timestamps, list):
-        timestamp_list = timestamps
-    else:
-        timestamp_list = [timestamps]
-    
-    conversions = {}
-    all_successful = True
-    
-    for timestamp in timestamp_list:
-        result = convert_single_timestamp(timestamp)
-        key = str(timestamp)
-        conversions[key] = result
-        if not result.get("success", False):
-            all_successful = False
-    
-    return {
-        "conversions": conversions,
-        "count": len(conversions),
-        "success": all_successful
-    }
+    try:
+        logger.info(f"Converting {len(timestamp_list)} timestamp(s)", extra={
+            "timestamps_count": len(timestamp_list),
+            "correlation_id": correlation_id
+        })
+        
+        conversions = {}
+        all_successful = True
+        
+        for timestamp in timestamp_list:
+            result = convert_single_timestamp(timestamp, correlation_id)
+            key = str(timestamp)
+            conversions[key] = result
+            if not result.get("success", False):
+                all_successful = False
+
+        final_result = {
+            "conversions": conversions,
+            "count": len(conversions),
+            "success": all_successful,
+            "correlation_id": correlation_id
+        }
+        
+        logger.info(f"Timestamp conversions completed", extra={
+            "conversions_count": len(conversions),
+            "all_successful": all_successful,
+            "correlation_id": correlation_id
+        })
+        
+        return final_result
+        
+    except Exception as e:
+        logger.error("Unexpected error during timestamp conversion", exc_info=True, extra={
+            "timestamps_count": len(timestamp_list),
+            "correlation_id": correlation_id
+        })
+        return handle_exception(e, {"correlation_id": correlation_id})
 
 
