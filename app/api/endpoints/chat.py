@@ -75,7 +75,8 @@ async def websocket_chat(
                     await websocket.send_text(json.dumps({
                         "error": f"Rate limit exceeded. Limits: {settings.rate_limit_max_requests} per IP per {settings.rate_limit_window_seconds}s, {settings.global_rate_limit_max_requests} global per {settings.global_rate_limit_window_seconds}s."
                     }))
-                    continue  # Skip processing this message but keep connection alive
+                    await websocket.close(code=1008, reason="Rate limit exceeded")
+                    return
                 
                 # Check cost limits separately
                 if not cost_limiter.is_allowed(websocket):
@@ -87,7 +88,8 @@ async def websocket_chat(
                             f"${settings.global_cost_limit} global per {settings.global_cost_period_seconds}s."
                         )
                     }))
-                    continue  # Skip processing this message but keep connection alive
+                    await websocket.close(code=1008, reason="Cost limit exceeded")
+                    return
                 
                 message_data = json.loads(data)
                 
@@ -110,7 +112,16 @@ async def websocket_chat(
                     await websocket.send_text(json.dumps({
                         "error": "No user message found in request"
                     }))
-                    continue
+                    await websocket.close(code=1008, reason="No user message found in request")
+                    return
+                
+                if not chat_request.network:
+                    logger.warning(f"No network found in request for session {session_id}")
+                    await websocket.send_text(json.dumps({
+                        "error": "No network found in request"
+                    }))
+                    await websocket.close(code=1008, reason="No network found in request")
+                    return
                 
                 # Use context manager for safe database session handling
                 with get_db_session() as db:
@@ -130,6 +141,7 @@ async def websocket_chat(
 
                     async for token in llm_orchestrator.stream_llm_response(
                         query=chat_request.query,
+                        network=chat_request.network,
                         account_id=chat_request.account_id,
                         session_id=session_id,
                         db=db,  # Pass database session for conversation persistence

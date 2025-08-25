@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 class HederaSDKService:
     """Service wrapper for dynamic Hedera Mirror Node SDK method calling."""
     
-    def __init__(self):
+    def __init__(self, network: str):
         """Initialize the SDK service with configuration."""
         try:
-            self.client = MirrorNodeClient.for_testnet() # TODO: Make this configurable to support mainnet or other networks
+            self.client = MirrorNodeClient.for_network(network)
             logger.info("Successfully initialized Hedera SDK service for testnet")
         except Exception as e:
             logger.error(f"Failed to initialize Hedera SDK service: {e}", exc_info=True)

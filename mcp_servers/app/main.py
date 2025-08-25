@@ -14,16 +14,16 @@ load_dotenv()
 
 # Initialize the FastMCP server for Hedera Mirror Node
 mcp = FastMCP("HederaMirrorNode")
-sdk_service = None
+network_sdk_service = {}
 vector_store_service = None
 document_processor = None
 
-def get_sdk_service() -> HederaSDKService:
-    global sdk_service
-    if sdk_service is None:
-        sdk_service = HederaSDKService()
-    return sdk_service
-
+def get_sdk_service(network: str) -> HederaSDKService:
+    global network_sdk_service
+    if network not in network_sdk_service:
+        network_sdk_service[network] = HederaSDKService(network=network)
+    return network_sdk_service[network]
+    
 def get_vector_services():
     """Initialize and return vector store services."""
     global vector_store_service, document_processor
@@ -63,7 +63,7 @@ def get_vector_services():
     return vector_store_service, document_processor
 
 @mcp.tool()
-async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
+async def call_sdk_method(method_name: str, network: str, **kwargs) -> Dict[str, Any]:
     """
     Call any method from the Hedera Mirror Node SDK dynamically.
     
@@ -82,7 +82,7 @@ async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
         - call_sdk_method(method_name="get_transaction", transaction_id="0.0.123@1234567890")
         - call_sdk_method(method_name="get_account", account_id="0.0.123")
     """
-    return await get_sdk_service().call_method(method_name, **kwargs)
+    return await get_sdk_service(network=network).call_method(method_name, **kwargs)
 
 @mcp.tool()
 def retrieve_sdk_method(query: str) -> Dict[str, Any]:

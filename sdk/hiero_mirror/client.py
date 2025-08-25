@@ -85,6 +85,11 @@ class MirrorNodeClient:
         self._client.close()
 
     @classmethod
+    def for_network(cls, network: str, **kwargs) -> "MirrorNodeClient":
+        """Create a client for a specific network."""
+        return cls(get_network_urls()[network], **kwargs)
+
+    @classmethod
     def for_mainnet(cls, **kwargs) -> "MirrorNodeClient":
         """Create a client for Hiero mainnet."""
         return cls(get_network_urls()["mainnet"], **kwargs)
