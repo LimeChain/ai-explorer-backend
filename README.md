@@ -23,8 +23,8 @@ Hederion AI Explorer is a next-generation block explorer for the Hedera network 
 - Benchmarking
   - ✅ Tracing
   - ✅ Evaluations
-- [ ] Tests
-- [ ] CI/CD
+- [ ] Unit & Integration Tests
+- ✅ CI/CD
 - ✅ Documentation
 
 
@@ -86,14 +86,16 @@ uv run python scripts/ws_send_query.py
 
 ### Run Locally (with Docker)
 
-1. Start all services with Docker:
+1. Configure the `.env` file to use the correct mcp endpoint:
+
+2. Start all services with Docker:
 ```bash
 docker compose up
 ```
 
-2. Send a sample query over WebSocket:
+3. Send a sample query over WebSocket:
 ```bash
-docker compose exec api uv run python scripts/ws_send_query.py
+docker compose exec api uv run python scripts/dev/query_websocket_dev.py
 ```
 
 

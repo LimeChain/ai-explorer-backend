@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  db:
+  postgres:
     image: pgvector/pgvector:pg16
-    container_name: ai-explorer-db
+    container_name: ai-explorer-postgres
     environment:
       POSTGRES_DB: ai_explorer
       POSTGRES_USER: ai_explorer
@@ -11,7 +11,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ai_explorer -d ai_explorer"]
       interval: 10s
@@ -37,11 +37,11 @@ services:
     build: .
     container_name: ai-explorer-api
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      mcp-server-mirror-node:
+      mcp-server:
         condition: service_healthy
     environment:
       ENVIRONMENT: ${ENVIRONMENT}
@@ -71,11 +71,11 @@ services:
       start_period: 60s
     restart: unless-stopped
 
-  mcp-server-mirror-node:
+  mcp-server:
     build:
       context: .
       dockerfile: mcp_servers/Dockerfile
-    container_name: ai-explorer-mcp-server-mirror-node
+    container_name: ai-explorer-mcp-server
     environment:
       ENVIRONMENT: development
     ports:
@@ -92,7 +92,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  db_data:
+  postgres_data:
   redis_data:
 
 networks:
