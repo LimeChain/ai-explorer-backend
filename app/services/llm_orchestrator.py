@@ -1,12 +1,13 @@
 """
 LLM Orchestrator service implementing agentic workflow with LangGraph.
 """
+import asyncio
 import logging
 from typing import AsyncGenerator, Callable, List, Optional, TypedDict
 from uuid import UUID
 
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import HumanMessage, BaseMessage, AIMessage
+from langchain_core.messages import ChatMessage, HumanMessage, BaseMessage, AIMessage
 from langchain_core.exceptions import LangChainException
 from langgraph.graph import END
 from langchain_mcp_adapters.tools import load_mcp_tools
@@ -15,7 +16,6 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.exceptions import LLMServiceError, ValidationError
 from app.prompts.system_prompts import AGENTIC_SYSTEM_PROMPT, RESPONSE_FORMATTING_SYSTEM_PROMPT
-from app.schemas.chat import ChatMessage
 from app.services.chat_service import ChatService
 from app.services.helpers.tool_call_parser import ToolCallParser
 from app.services.helpers.workflow_builder import WorkflowBuilder
@@ -69,6 +69,7 @@ class LLMOrchestrator:
         self.tool_parser = ToolCallParser()
         self.workflow_builder = WorkflowBuilder(self.tool_parser)
         self.response_streamer = ResponseStreamer(self.llm, self.chat_service)
+        self._graph_tasks = {}
         self.cost_calculator = CostCalculator()
         self.enable_persistence = enable_persistence
         logger.info(f"LLM Orchestrator initialized with agentic workflow (persistence: {enable_persistence})")
@@ -106,7 +107,8 @@ class LLMOrchestrator:
         if len(query) > MAX_QUERY_LENGTH:
             raise ValidationError(f"Query exceeds maximum length of {MAX_QUERY_LENGTH} characters")
     
-    def _create_initial_state(self, query: str, account_id: Optional[str], session_id: Optional[UUID]) -> GraphState:
+    def _create_initial_state(self, query: str, account_id: Optional[str], session_id: UUID) -> GraphState:
+
         """Create initial workflow state."""
         return {
             "messages": [HumanMessage(content=query)],
@@ -122,6 +124,17 @@ class LLMOrchestrator:
             "session_id": session_id
         }
 
+    async def cancel_flow(self, session_id: UUID) -> None:
+        """Cancel a running graph flow for a given session_id, if any."""
+        if not session_id:
+            return
+        task = self._graph_tasks.get(session_id)
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
     def _build_initial_messages(self, query: str, conversation_history: Optional[List[ChatMessage]]) -> List[BaseMessage]:
         """Build initial messages from conversation history."""
         if conversation_history:
@@ -188,8 +201,8 @@ class LLMOrchestrator:
         self, 
         query: str, 
         network: str,
+        session_id: UUID,
         account_id: Optional[str] = None,
-        session_id: Optional[UUID] = None,
         db: Optional[Session] = None,
         on_complete: Optional[Callable[[UUID], None]] = None,
         on_cost_calculated: Optional[Callable[[GraphState], None]] = None
@@ -221,12 +234,12 @@ class LLMOrchestrator:
                     graph = self.workflow_builder.build_workflow(
                         GraphState, call_model_node, call_tool_node, self._continue_with_tool_or_end, checkpointer
                     )
-                    
+
+                    config = {}
+
                     if checkpointer:
                         # Prepare config for memory persistence
-                        config = {
-                            "configurable": {"thread_id": str(session_id)}
-                        }
+                        config = {"configurable": {"thread_id": str(session_id)}}
 
                         # Check if session already exists
                         existing_state = await checkpointer.aget_tuple(config)
@@ -236,25 +249,28 @@ class LLMOrchestrator:
                             channel_values = existing_state.checkpoint.get('channel_values', {})
                             if not channel_values or 'messages' not in channel_values:
                                 logger.warning(f"No messages found in existing state for session: {session_id}, starting new session")
-                                initial_state = self._create_initial_state(query, account_id, session_id)
-                                final_state = await graph.ainvoke(initial_state, config=config)
+                                state = self._create_initial_state(query, account_id, session_id)
                             else:
-                                restored_state = dict(channel_values)
+                                state = dict(channel_values)
                                 logger.info(f"Resuming existing session: {session_id}")
                                 logger.info(f"Existing state checkpoint ID: {existing_state.checkpoint.get('id', 'unknown')}")
-                                reset_cost_state = self._reset_cost_counters(restored_state)
-                                restored_state["messages"].append(HumanMessage(content=query))
-                                final_state = await graph.ainvoke(reset_cost_state, config=config)
+                                state["messages"].append(HumanMessage(content=query))
                         else:
                             # New session - create initial state
                             logger.info(f"Starting new session: {session_id}")
-                            initial_state = self._create_initial_state(query, account_id, session_id)
-                            final_state = await graph.ainvoke(initial_state, config=config)
+                            state = self._create_initial_state(query, account_id, session_id)
                     else:
                         # No persistence - just run with initial state
                         logger.info(f"Running without persistence for session: {session_id}")
-                        initial_state = self._create_initial_state(query, account_id, session_id)
-                        final_state = await graph.ainvoke(initial_state)
+                        state = self._create_initial_state(query, account_id, session_id)
+
+                    final_state_task = asyncio.create_task(graph.ainvoke(state, config=config))
+                    self._graph_tasks[session_id] = final_state_task
+
+                    try:
+                        final_state = await final_state_task
+                    finally:
+                        self._graph_tasks.pop(session_id, None)
 
                     assistant_msg_id = None
                     

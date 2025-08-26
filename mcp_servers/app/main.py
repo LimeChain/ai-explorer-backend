@@ -127,7 +127,7 @@ async def call_sdk_method(method_name: str, network: str, **kwargs) -> Dict[str,
             "correlation_id": correlation_id
         })
         
-        result = await get_sdk_service().call_method(method_name, **kwargs)
+        result = await get_sdk_service(network).call_method(method_name, **kwargs)
         
         # Add correlation ID to successful results
         if isinstance(result, dict):
