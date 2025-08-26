@@ -145,7 +145,7 @@ variable "llm_provider" {
 variable "llm_model" {
   description = "LLM model to use"
   type        = string
-  default     = "gpt-4o-mini"
+  default     = "gpt-4.1-mini"
 }
 
 variable "embedding_model" {
