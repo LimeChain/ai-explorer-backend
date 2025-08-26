@@ -26,20 +26,21 @@ logger = get_logger(__name__)
 
 # Initialize the FastMCP server for Hedera Mirror Node
 mcp = FastMCP("HederaMirrorNode")
-sdk_service = None
+network_sdk_service = {}
 vector_store_service = None
 document_processor = None
 
-def get_sdk_service() -> HederaSDKService:
-    global sdk_service
-    if sdk_service is None:
-        try:
-            sdk_service = HederaSDKService()
-            logger.info("SDK service initialized successfully")
-        except Exception as e:
+def get_sdk_service(network: str) -> HederaSDKService:
+    global network_sdk_service
+    if network not in network_sdk_service:
+      try:
+        network_sdk_service[network] = HederaSDKService(network=network)
+        logger.info("SDK service initialized successfully")
+      except Exception as e:
             logger.error("Failed to initialize SDK service", exc_info=True)
             raise ServiceInitializationError("HederaSDKService", str(e), e)
-    return sdk_service
+    return network_sdk_service[network]
+    
 
 def get_vector_services():
     """Initialize and return vector store services."""
@@ -87,7 +88,7 @@ def get_vector_services():
     return vector_store_service, document_processor
 
 @mcp.tool()
-async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
+async def call_sdk_method(method_name: str, network: str, **kwargs) -> Dict[str, Any]:
     """
     Call any method from the Hedera Mirror Node SDK dynamically.
     
@@ -106,6 +107,7 @@ async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
         - call_sdk_method(method_name="get_transaction", transaction_id="0.0.123@1234567890")
         - call_sdk_method(method_name="get_account", account_id="0.0.123")
     """
+
     # Set correlation ID for request tracking
     correlation_id = set_correlation_id()
     
@@ -125,7 +127,7 @@ async def call_sdk_method(method_name: str, **kwargs) -> Dict[str, Any]:
             "correlation_id": correlation_id
         })
         
-        result = await get_sdk_service().call_method(method_name, **kwargs)
+        result = await get_sdk_service(network).call_method(method_name, **kwargs)
         
         # Add correlation ID to successful results
         if isinstance(result, dict):

@@ -1,7 +1,7 @@
 """
 Chat-related Pydantic models for API request/response validation.
 """
-from typing import List, Optional
+from typing import Optional, Literal
 from pydantic import BaseModel, Field
 
 
@@ -34,7 +34,11 @@ class ChatRequest(BaseModel):
         None, 
         description="Connected wallet address (e.g., '0.0.12345') for personalized responses"
     )
-    
+    network: Literal["mainnet", "testnet"] = Field(
+        default="mainnet",
+        description="Blockchain network to use (mainnet or testnet)"
+    )
+
     def model_post_init(self, __context: None) -> None:
         """Validate that either messages or query is provided."""
         if not self.query:

@@ -200,6 +200,7 @@ class LLMOrchestrator:
     async def stream_llm_response(
         self, 
         query: str, 
+        network: str,
         session_id: UUID,
         account_id: Optional[str] = None,
         db: Optional[Session] = None,
@@ -227,7 +228,7 @@ class LLMOrchestrator:
                     call_model_node = self.workflow_builder.create_model_node_executor(
                         self.llm, self._create_context_aware_system_prompt
                     )
-                    call_tool_node = self.workflow_builder.create_tool_node_executor(tools)
+                    call_tool_node = self.workflow_builder.create_tool_node_executor(tools, network)
 
                     # Build workflow
                     graph = self.workflow_builder.build_workflow(
