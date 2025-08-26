@@ -15,7 +15,7 @@ class ChatValidators:
     """Centralized validation logic for chat operations."""
     
     @staticmethod
-    def validate_session_id(session_id: Optional[UUID]) -> UUID:
+    def validate_session_id(session_id: UUID) -> UUID:
         """Validate session ID - required field."""
         if session_id is None:
             raise ValidationError("Session ID is required")
