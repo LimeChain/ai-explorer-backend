@@ -103,7 +103,7 @@ class WorkflowBuilder:
                 state["messages"] = state["messages"] + [response]
                 
                 # Parse tool call from response
-                logger.info(f"LLM Response content: {response.content}")
+                logger.info(f"LLM Response content: {json.dumps(response.content, indent=2)}")
                 tool_call = self.tool_parser.parse_tool_call(response.content)
                 logger.info(f"Parsed tool call: {tool_call}")
                 

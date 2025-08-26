@@ -1,6 +1,20 @@
 # Git
 .git
 .gitignore
+.github/
+
+# Sensitive files - SECURITY CRITICAL
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.jks
+**/secrets/
+**/*secret*
+**/*password*
+**/*token*
+**/*credential*
 
 # Python
 __pycache__
@@ -11,10 +25,6 @@ __pycache__
 env
 .venv
 venv
-.env
-.env.local
-.env.production
-.env.test
 
 # IDE
 .vscode
@@ -45,7 +55,50 @@ docs/
 .coverage
 htmlcov/
 
+# Terraform files - contain infrastructure secrets
+terraform/
+terraform.tfstate*
+tfplan*
+*.tfvars
+*.tfvars.*
+.terraform/
+.terraform.lock.hcl
+
+# CI/CD files (not needed in runtime)
+.github/
+Jenkinsfile
+azure-pipelines.yml
+.travis.yml
+.circleci/
+
+# Development scripts
+scripts/dev/
+scripts/setup*
+scripts/bootstrap*
+scripts/local*
+
+# Package build artifacts that might sneak in
+*.egg-info/
+**/*.egg-info/
+
+# Database files
+*.db
+*.sqlite*
+*.dump
+
 # Build artifacts
 dist/
 build/
 *.egg-info/
+
+# Node.js (if any)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Backup and temporary files
+*.bak
+*.backup
+tmp/
+temp/
+*.tmp

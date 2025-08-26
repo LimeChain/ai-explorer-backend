@@ -2,14 +2,16 @@
 Database manager for PostgreSQL connections and collection management.
 Handles database connections, engine creation, and collection existence checks.
 """
-import logging
 from typing import Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..settings import settings
+from ..logging_config import get_service_logger
+from ..exceptions import DatabaseConnectionError, DatabaseOperationError
 
-logger = logging.getLogger(__name__)
+logger = get_service_logger("database_manager")
 
 
 class DatabaseManager:
@@ -31,17 +33,30 @@ class DatabaseManager:
         
         Returns:
             SQLAlchemy Engine instance
+            
+        Raises:
+            DatabaseConnectionError: If engine creation fails
         """
         if self._engine is None:
-            
-            self._engine = create_engine(
-                self.connection_string,
-                pool_size=settings.database_pool_size,
-                max_overflow=settings.database_max_overflow,
-                pool_timeout=settings.database_pool_timeout,
-                echo=settings.database_echo
-            )
-            logger.info("Database engine created successfully")
+            try:
+                self._engine = create_engine(
+                    self.connection_string,
+                    pool_size=settings.database_pool_size,
+                    max_overflow=settings.database_max_overflow,
+                    pool_timeout=settings.database_pool_timeout,
+                    echo=settings.database_echo
+                )
+                logger.info("Database engine created successfully", extra={
+                    "pool_size": settings.database_pool_size,
+                    "max_overflow": settings.database_max_overflow,
+                    "pool_timeout": settings.database_pool_timeout
+                })
+            except Exception as e:
+                logger.error("Failed to create database engine", exc_info=True, extra={
+                    "pool_size": settings.database_pool_size,
+                    "max_overflow": settings.database_max_overflow
+                })
+                raise DatabaseConnectionError(str(e), self.connection_string, e)
             
         return self._engine
     
@@ -66,7 +81,10 @@ class DatabaseManager:
                 collection_table_exists = result.scalar()
                 
                 if not collection_table_exists:
-                    logger.info("Collection table 'langchain_pg_collection' does not exist")
+                    logger.info("Collection table does not exist", extra={
+                        "table_name": "langchain_pg_collection",
+                        "collection_name": collection_name
+                    })
                     return False
                 
                 # Check if our specific collection exists
@@ -75,12 +93,23 @@ class DatabaseManager:
                 ), {"collection_name": collection_name})
                 
                 exists = result.scalar()
-                logger.info(f"Collection '{collection_name}' exists: {exists}")
+                logger.info("Collection existence check completed", extra={
+                    "collection_name": collection_name,
+                    "exists": exists
+                })
                 return exists
                 
+        except SQLAlchemyError as e:
+            logger.error("Database error checking collection existence", exc_info=True, extra={
+                "collection_name": collection_name,
+                "error_type": type(e).__name__
+            })
+            raise DatabaseOperationError("check_collection_exists", str(e), e)
         except Exception as e:
-            logger.error(f"Error checking collection existence for '{collection_name}': {e}")
-            return False
+            logger.error("Unexpected error checking collection existence", exc_info=True, extra={
+                "collection_name": collection_name
+            })
+            raise DatabaseOperationError("check_collection_exists", str(e), e)
     
     def create_collection(self, collection_name: str) -> bool:
         """
