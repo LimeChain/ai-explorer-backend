@@ -155,9 +155,21 @@ class WorkflowBuilder:
                 )
                 state["messages"] = state["messages"] + [tool_result_message]
 
-                parsed_result = json.loads(result)
-                if tool_name == ToolName.TEXT_TO_SQL_QUERY and parsed_result.get('success'):
-                    cost = parsed_result.get('cost', 0)
+                # Result may be dict (preferred) or JSON string; support both safely
+                try:
+                    if isinstance(result, (str, bytes, bytearray)):
+                        parsed_result = json.loads(result)
+                    elif isinstance(result, dict):
+                        parsed_result = result
+                    else:
+                        logger.warning("Unexpected tool result type: %s", type(result).__name__)
+                        parsed_result = {}
+                except json.JSONDecodeError as e:
+                    logger.error("Failed to parse tool result JSON: %s", e)
+                    parsed_result = {}
+
+                if tool_name == ToolName.TEXT_TO_SQL_QUERY and parsed_result.get("success"):
+                    cost = parsed_result.get("cost", 0) or 0
                     state["total_cost"] = state.get("total_cost", 0) + cost
 
                 return state
