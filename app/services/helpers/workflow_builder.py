@@ -154,7 +154,12 @@ class WorkflowBuilder:
                     content=f"Tool '{tool_name}' returned: {json.dumps(result, indent=2)}"
                 )
                 state["messages"] = state["messages"] + [tool_result_message]
-                
+
+                parsed_result = json.loads(result)
+                if tool_name == ToolName.TEXT_TO_SQL_QUERY and parsed_result.get('success'):
+                    cost = parsed_result.get('cost', 0)
+                    state["total_cost"] = state.get("total_cost", 0) + cost
+
                 return state
                 
             except Exception as e:

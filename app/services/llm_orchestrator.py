@@ -100,7 +100,6 @@ class LLMOrchestrator:
         """Determine graph routing based on state."""
         if state.get("pending_tool_call"):
             return "call_tool"
-
         return END
 
 
@@ -166,6 +165,7 @@ class LLMOrchestrator:
                 await task
             except asyncio.CancelledError:
                 pass
+
     def _build_initial_messages(self, query: str, conversation_history: Optional[List[ChatMessage]]) -> List[BaseMessage]:
         """Build initial messages from conversation history."""
         if conversation_history:
@@ -200,7 +200,7 @@ class LLMOrchestrator:
                 
                 state["total_input_cost"] = input_cost
                 state["total_output_cost"] = output_cost
-                state["total_cost"] = total_cost
+                state["total_cost"] = state.get("total_cost", 0) + total_cost
                 
                 logger.info(f"Cost calculation - Input: {input_tokens} tokens (${input_cost:.6f}), "
                            f"Output: {output_tokens} tokens (${output_cost:.6f}), "

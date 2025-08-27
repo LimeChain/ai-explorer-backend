@@ -81,7 +81,7 @@ def get_vector_services():
         except Exception as e:
             logger.error("Failed to initialize vector services", exc_info=True, extra={
                 "doc_path": doc_path,
-                "vector_store_url": vector_store_url,
+                "vector_store_url": database_url,   
                 "collection_name": collection_name,
                 "embedding_model": embedding_model
             })
