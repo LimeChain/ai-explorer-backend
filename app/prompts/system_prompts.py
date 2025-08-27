@@ -259,6 +259,7 @@ RESPONSE_FORMATTING_SYSTEM_PROMPT = """
 - **Transaction IDs**: Wrap all Transactions in `<span class="transaction-id">0.0.123456-1752127198-266857936</span>`
 
 **HTML Formatting Rules:**
+- Escape inner text before wrapping: convert &, <, >, ", ' to HTML entities; never include raw HTML inside wrappers.
 - Apply HTML formatting to ALL instances of these elements in your response
 - Use the exact CSS class names specified above
 - Preserve all original text content within the HTML tags
