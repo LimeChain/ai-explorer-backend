@@ -106,8 +106,9 @@ async def websocket_chat(
                     return
                 
                 message_data = json.loads(data)
+                message_type = message_data.get("type")
                 
-                if message_data.get("type") == "close":
+                if message_type == "close":
                     await cancel_active_flow()
                     await websocket.send_text(json.dumps({
                         "closed": True
@@ -115,21 +116,57 @@ async def websocket_chat(
                     await websocket.close(code=1000, reason="User disconnected")
                     return
                 
-                # Validate using ChatRequest schema
-                try:
-                    chat_request = ChatRequest(**message_data)
-                except ValueError as e:
-                    logger.warning(f"Invalid request format: {e}")
-                    await websocket.send_text(json.dumps({
-                        "error": f"Invalid request: {str(e)}"
-                    }))
-                    continue
+                elif message_type == "query":
+                    # Handle regular query messages
+                    content = message_data.get("content")
+                    account_id = message_data.get("account_id")
+                    network = message_data.get("network")
+                    if not content:
+                        await websocket.send_text(json.dumps({
+                            "error": "content is required for query type"
+                        }))
+                        await websocket.close(code=1007, reason="Content is required for query type")
+                        return
+                    
+                    # Create equivalent ChatRequest for existing flow
+                    chat_request = ChatRequest(query=content, account_id=account_id, network=network)
+                    continue_from_message_id = None
                 
+                elif message_type == "continue_from_message":
+                    # Handle continue from message
+                    message_id = message_data.get("message_id")
+                    account_id = message_data.get("account_id")
+                    network = message_data.get("network")
+                    if not message_id:
+                        await websocket.send_text(json.dumps({
+                            "error": "message_id is required for continue_from_message type"
+                        }))
+                        await websocket.close(code=1007, reason="message_id is required for continue_from_message type")
+                        return
+                    
+                    # Create empty ChatRequest for continue flow (no query needed)
+                    chat_request = ChatRequest(query="", account_id=account_id, network=network)
+                    try:
+                        continue_from_message_id = UUID(message_id)
+                    except ValueError:
+                        await websocket.send_text(json.dumps({
+                            "error": "Invalid message_id format"
+                        }))
+                        await websocket.close(code=1007, reason="Invalid message_id format")
+                        return
+
+                else:
+                    await websocket.send_text(json.dumps({
+                        "error": f"Unknown message type: {message_type}"
+                    }))
+                    await websocket.close(code=1007, reason="Unknown message type")
+                    return
                 # Log account context for traceability  
                 if chat_request.account_id:
                     logger.info(f"Processing request with account_id={chat_request.account_id}")
                 
-                if not chat_request.query:
+                # For continue_from_message, query can be empty; for regular queries it's required
+                if not chat_request.query and message_type == "query":
                     logger.warning(f"No user message found in request for session {session_id}")
                     await websocket.send_text(json.dumps({
                         "error": "No user message found in request"
@@ -149,12 +186,18 @@ async def websocket_chat(
                 if active_flow_task and not active_flow_task.done():
                     await cancel_active_flow()
 
-                async def run_flow_and_stream(local_chat_request: ChatRequest = chat_request):
+                async def run_flow_and_stream(local_chat_request: ChatRequest = chat_request, local_continue_id = continue_from_message_id):
                     with get_db_session() as db:
+
                         assistant_msg_id = None
-                        def on_complete(msg_id):
+                        user_msg_id = None
+
+                        def on_complete(_assistant_msg_id, _user_msg_id):
                             nonlocal assistant_msg_id
-                            assistant_msg_id = msg_id
+                            nonlocal user_msg_id
+                            assistant_msg_id = _assistant_msg_id
+                            user_msg_id = _user_msg_id
+
                     def on_cost_calculated(final_state):
                         """Record actual costs after LLM completion."""
                         actual_cost = final_state.get("total_cost", 0.0)
@@ -171,7 +214,8 @@ async def websocket_chat(
                             session_id=session_id,
                             db=db,  # Pass database session for conversation persistence
                             on_complete=on_complete,
-                            on_cost_calculated=on_cost_calculated
+                            on_cost_calculated=on_cost_calculated,
+                            continue_from_message_id=local_continue_id
                         ):
                             await websocket.send_text(json.dumps({
                                 "token": token
@@ -181,6 +225,11 @@ async def websocket_chat(
                         if assistant_msg_id:
                             await websocket.send_text(json.dumps({
                                 "assistant_msg_id": str(assistant_msg_id)
+                            }))
+
+                        if user_msg_id:
+                            await websocket.send_text(json.dumps({
+                                "user_msg_id": str(user_msg_id)
                             }))
 
                         # Send completion signal

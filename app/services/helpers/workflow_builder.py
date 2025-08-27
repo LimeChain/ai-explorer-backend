@@ -197,6 +197,13 @@ class WorkflowBuilder:
                 kwargs = {k: v for k, v in tool_params.items() if k != "method_name"}
                 tool_input = {"method_name": method_name, "kwargs": kwargs, "network": network}
                 result = await tool_to_call.ainvoke(tool_input)
+            elif tool_name == ToolName.CALCULATE_HBAR_VALUE:
+                effective_params = (
+                    {"network": network, **tool_params}
+                    if "network" not in tool_params
+                    else dict(tool_params)
+                )
+                result = await tool_to_call.ainvoke(effective_params)
             else:
                 result = await tool_to_call.ainvoke(tool_params)
             

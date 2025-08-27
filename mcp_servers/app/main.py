@@ -224,7 +224,7 @@ def retrieve_sdk_method(query: str) -> Dict[str, Any]:
         return handle_exception(e, {"correlation_id": correlation_id})
 
 @mcp.tool()
-async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[str, int, float]]], timestamp: Union[str, int, float] = None) -> Dict[str, Any]:
+async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[str, int, float]]], network: str, timestamp: Union[str, int, float] = None) -> Dict[str, Any]:
     """
     Calculate the USD value of HBAR tokens using current exchange rates.
     
@@ -394,7 +394,7 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
             exchange_rate_params["timestamp"] = str(timestamp)
 
         # Fetch exchange rate using SDK service
-        exchange_rate_result = await get_sdk_service().call_method(
+        exchange_rate_result = await get_sdk_service(network).call_method(
             "get_network_exchange_rate", **exchange_rate_params
         )
 

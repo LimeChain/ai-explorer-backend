@@ -5,6 +5,7 @@ import logging
 from typing import List, Optional
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
@@ -88,12 +89,21 @@ class ChatDBOperations:
             raise ChatServiceError("Database error occurred while adding message", e) from e
     
     @staticmethod
-    def get_conversation_messages(db: Session, conversation_id: UUID, limit: int) -> List[Message]:
+    def get_conversation_messages(db: Session, conversation_id: UUID, limit: int, continue_from_message_id: Optional[UUID] = None) -> List[Message]:
         """Get messages for a conversation."""
         try:
-            return db.query(Message).filter(
-                Message.conversation_id == conversation_id
-            ).order_by(Message.created_at.asc()).limit(limit).all()
+            filters = [Message.conversation_id == conversation_id]
+            if continue_from_message_id:
+                message = db.query(Message).filter(
+                    Message.id == continue_from_message_id,
+                    Message.conversation_id == conversation_id
+                ).first()
+                if not message:
+                    raise ChatServiceError(f"Message with ID {continue_from_message_id} not found in conversation {conversation_id}")
+                filters.append(Message.created_at <= message.created_at)
+            query = db.query(Message).filter(*filters).order_by(Message.created_at.asc())
+            
+            return query.limit(limit).all()
         except SQLAlchemyError as e:
             logger.error(f"Database error retrieving messages: {e}")
             raise ChatServiceError("Database error occurred while retrieving messages", e) from e
@@ -114,3 +124,35 @@ class ChatDBOperations:
             ChatMessage(role=msg.role, content=msg.content)
             for msg in messages
         ]
+    
+    @staticmethod
+    def edit_message_and_delete_after(db: Session, message_id: UUID, new_content: str) -> tuple[Message, int]:
+        """Atomically update message content and delete subsequent messages in the same conversation."""
+        try:
+            message = db.query(Message).filter(Message.id == message_id).with_for_update().first()
+            if not message:
+                raise ChatServiceError(f"Message with ID {message_id} not found")
+            pivot_ts = message.created_at
+            conv_id = message.conversation_id
+            message.content = new_content
+            message.edited_at = func.now()
+            deleted_count = db.query(Message).filter(
+                Message.conversation_id == conv_id,
+                Message.created_at > pivot_ts
+            ).delete(synchronize_session=False)
+            db.commit()
+            db.refresh(message)
+            return message, deleted_count
+        except SQLAlchemyError as e:
+            logger.error(f"Database error editing message and deleting subsequent: {e}")
+            db.rollback()
+            raise ChatServiceError("Database error occurred while editing message", e) from e
+    
+    @staticmethod
+    def get_message_by_id(db: Session, message_id: UUID) -> Optional[Message]:
+        """Get a specific message by ID."""
+        try:
+            return db.query(Message).filter(Message.id == message_id).first()
+        except SQLAlchemyError as e:
+            logger.error(f"Database error retrieving message: {e}")
+            raise ChatServiceError("Database error occurred while retrieving message", e) from e

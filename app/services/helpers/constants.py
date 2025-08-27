@@ -25,7 +25,7 @@ class GraphNode(str, Enum):
 class ToolName(str, Enum):
     CALL_SDK_METHOD = "call_sdk_method"
     RETRIEVE_SDK_METHOD = "retrieve_sdk_method"
-
+    CALCULATE_HBAR_VALUE = "calculate_hbar_value"
 # === Chat Service Constants ===
 
 # Length limits

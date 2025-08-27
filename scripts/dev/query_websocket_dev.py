@@ -8,13 +8,26 @@ URI = f"ws://localhost:8000/api/v1/chat/ws/{SESSION_ID}"
 async def send_query(query: str):
     try:
         async with websockets.connect(URI) as websocket:
-            query = {"query": query}
-            await websocket.send(json.dumps(query))
-            print(f"Sent: {query}")
+            message = {
+                "type": "query",
+                "content": query,
+                "network": "testnet"
+            }
+            await websocket.send(json.dumps(message))
+            print(f"Sent: {message}")
             
             async for message in websocket:
-                response = json.loads(message)
-                print(response["token"] + " ", end="", flush=True)
+                try:
+                    response = json.loads(message)
+                    if "token" in response:
+                        print(response["token"] + " ", end="", flush=True)
+                    elif "complete" in response and response["complete"]:
+                        print("\n[Complete]")
+                        break
+                    else:
+                        print(f"\n[Response: {response}]")
+                except json.JSONDecodeError:
+                    print(f"\n[Non-JSON: {message}]")
                 
     except websockets.exceptions.ConnectionClosed:
         print("Connection closed")

@@ -2,6 +2,7 @@
 LLM Orchestrator service implementing agentic workflow with LangGraph.
 """
 import asyncio
+import json
 import logging
 from typing import AsyncGenerator, Callable, List, Optional, TypedDict
 from uuid import UUID
@@ -20,6 +21,7 @@ from app.services.chat_service import ChatService
 from app.services.helpers.tool_call_parser import ToolCallParser
 from app.services.helpers.workflow_builder import WorkflowBuilder
 from app.services.helpers.response_streamer import ResponseStreamer
+from app.services.helpers.message_converter import MessageConverter
 from app.services.helpers.cost_calculator import CostCalculator
 from app.services.helpers.constants import (
     MAX_QUERY_LENGTH, DEFAULT_TEMPERATURE
@@ -107,11 +109,38 @@ class LLMOrchestrator:
         if len(query) > MAX_QUERY_LENGTH:
             raise ValidationError(f"Query exceeds maximum length of {MAX_QUERY_LENGTH} characters")
     
-    def _create_initial_state(self, query: str, account_id: Optional[str], session_id: UUID) -> GraphState:
-
-        """Create initial workflow state."""
+    def _create_initial_state(self, query: Optional[str], account_id: Optional[str], session_id: UUID, db: Session, continue_from_message_id: Optional[UUID] = None) -> GraphState:
+        """Create initial workflow state, loading conversation history from database."""
+        messages = []
+        
+        if continue_from_message_id:
+            # Continue from message case - load conversation history only
+            logger.info(f"Continue from message {continue_from_message_id} requested for session {session_id}")
+            try:
+                chat_history = self.chat_service.get_conversation_history(db, session_id, continue_from_message_id=continue_from_message_id)
+                if chat_history:
+                    historical_messages = MessageConverter.chat_messages_to_langgraph_messages(chat_history)
+                    messages.extend(historical_messages)
+                    logger.info(f"Loaded {len(historical_messages)} messages from database for continue from message {continue_from_message_id}")
+            except Exception as e:
+                logger.warning(f"Could not load conversation history for continue: {e}")
+        else:
+            # Regular query - load conversation history and add new query
+            try:
+                chat_history = self.chat_service.get_conversation_history(db, session_id)
+                if chat_history:
+                    historical_messages = MessageConverter.chat_messages_to_langgraph_messages(chat_history)
+                    messages.extend(historical_messages)
+                    logger.info(f"Loaded {len(historical_messages)} messages from database for session {session_id}")
+            except Exception as e:
+                logger.warning(f"Could not load conversation history for session {session_id}: {e}")
+            
+            # Add the new query as the latest message
+            if query:
+                messages.append(HumanMessage(content=query))
+        
         return {
-            "messages": [HumanMessage(content=query)],
+            "messages": messages,
             "tool_calls_made": [],
             "iteration_count": 0,
             "pending_tool_call": None,
@@ -199,18 +228,22 @@ class LLMOrchestrator:
 
     async def stream_llm_response(
         self, 
-        query: str, 
+        query: Optional[str], 
         network: str,
         session_id: UUID,
         account_id: Optional[str] = None,
         db: Optional[Session] = None,
-        on_complete: Optional[Callable[[UUID], None]] = None,
+        continue_from_message_id: Optional[UUID] = None,
+        on_complete: Optional[Callable[[UUID, UUID], None]] = None,
         on_cost_calculated: Optional[Callable[[GraphState], None]] = None
     ) -> AsyncGenerator[str, None]:
         """Stream LLM response using agentic workflow with real token streaming."""
         try:
-            logger.info(f"Starting LLM orchestration for query: {query[:100]}...")
-            self._validate_query(query)
+            if continue_from_message_id:
+                logger.info(f"Starting LLM orchestration for continue from message: {continue_from_message_id}")
+            else:
+                logger.info(f"Starting LLM orchestration for query: {query[:100]}...")
+                self._validate_query(query)
             
             # Create checkpointer outside of MCP context to avoid connection conflicts
             checkpointer = self.get_checkpointer()
@@ -249,20 +282,21 @@ class LLMOrchestrator:
                             channel_values = existing_state.checkpoint.get('channel_values', {})
                             if not channel_values or 'messages' not in channel_values:
                                 logger.warning(f"No messages found in existing state for session: {session_id}, starting new session")
-                                state = self._create_initial_state(query, account_id, session_id)
+                                state = self._create_initial_state(query, account_id, session_id, db, continue_from_message_id)
                             else:
                                 state = dict(channel_values)
                                 logger.info(f"Resuming existing session: {session_id}")
                                 logger.info(f"Existing state checkpoint ID: {existing_state.checkpoint.get('id', 'unknown')}")
-                                state["messages"].append(HumanMessage(content=query))
+                                if query and not continue_from_message_id:  # Only add query if not continuing
+                                    state["messages"].append(HumanMessage(content=query))
                         else:
-                            # New session - create initial state
+                            # New session - create initial state with database history
                             logger.info(f"Starting new session: {session_id}")
-                            state = self._create_initial_state(query, account_id, session_id)
+                            state = self._create_initial_state(query, account_id, session_id, db, continue_from_message_id)
                     else:
-                        # No persistence - just run with initial state
+                        # No persistence - just run with initial state, still load database history
                         logger.info(f"Running without persistence for session: {session_id}")
-                        state = self._create_initial_state(query, account_id, session_id)
+                        state = self._create_initial_state(query, account_id, session_id, db, continue_from_message_id)
 
                     final_state_task = asyncio.create_task(graph.ainvoke(state, config=config))
                     self._graph_tasks[session_id] = final_state_task
@@ -273,10 +307,14 @@ class LLMOrchestrator:
                         self._graph_tasks.pop(session_id, None)
 
                     assistant_msg_id = None
-                    
-                    def on_complete_callback(msg_id):
+                    user_msg_id = None
+        
+                    def on_complete_callback(_assistant_msg_id, _user_msg_id):
+
                         nonlocal assistant_msg_id
-                        assistant_msg_id = msg_id
+                        nonlocal user_msg_id
+                        assistant_msg_id = _assistant_msg_id
+                        user_msg_id = _user_msg_id
 
                     async for token in self.response_streamer.stream_final_response(
                         final_state,
@@ -285,6 +323,7 @@ class LLMOrchestrator:
                         session_id,
                         account_id,
                         db,
+                        is_continue=bool(continue_from_message_id),
                         on_complete=on_complete_callback
                     ):
                         yield token
@@ -295,7 +334,7 @@ class LLMOrchestrator:
                         on_cost_calculated(final_state)
 
                     if on_complete and assistant_msg_id:
-                        on_complete(assistant_msg_id)
+                        on_complete(assistant_msg_id, user_msg_id)
 
         except ValidationError:
             raise
