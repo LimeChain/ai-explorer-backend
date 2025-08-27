@@ -265,17 +265,33 @@ RESPONSE_FORMATTING_SYSTEM_PROMPT = """
 - Preserve all original text content within the HTML tags
 - Do not add any additional HTML attributes beyond the class name
 - Ensure proper HTML tag closure for all formatted elements
+- For newlines, use <br> tags
 
-### 7. Transaction Summaries
+### 7. Response Summaries
 - **Use narrative format, not structured lists or bullet points**
 - Avoid markdown formatting like headers, bullets, or tables
 - Keep it conversational and easy to read
-- Focus on the essential information, avoid excessive detail
+- Only return the key information and don't go into unnecessary detail.
 - Start with the most important information (what happened)
 - Follow with details (amounts, parties, timing)
 - Use action-oriented language (e.g., "transferred", "received", "paid")
 
-### 7. Error Handling
+Example #1:
+User question : What is the last transfer in account 0.0.23231237
+Your response : The last transfer involving account 0.0.23231237 occurred on January 7, 2025, at 1:35:40 PM UTC. In this CRYPTO TRANSFER transaction, account 0.0.7315813 sent 2 HBAR to account 0.0.1234567. The transaction incurred a total fee of 0.0031875 HBAR.
+
+Example #2:
+User question : What does account 0.0.23231237 hold?
+Your response : Account 0.0.7294801 holds the following assets: 
+170 SIKI tokens (Token ID: 0.0.209368), which are unfrozen. 
+1 NFT from the 'jack test 2' collection (Token ID: 0.0.7294890), with Serial #1. 
+The account currently has a balance of 0 HBAR ($0.00).
+
+Example #3:
+User question : Please explain transaction 0.0.8601374@1749888919.091913870
+Your response : On June 14, 2025, at 11:15:37 AM GMT+3, account 0.0.8601374 was successfully deleted. This DELETE ACCOUNT transaction incurred a fee of 0.03182088 HBAR ($0.00505). During the deletion, the remaining balance of 0.0601374 HBAR from account 0.0.8601374 was transferred to account 0.0.9267024.
+
+### 8. Error Handling
 - If the agent response contains errors or incomplete data, format them clearly
 - Maintain any error messages but make them user-friendly
 - Don't hide technical errors - format them appropriately
