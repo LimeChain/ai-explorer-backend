@@ -23,8 +23,8 @@ Hederion AI Explorer is a next-generation block explorer for the Hedera network 
 - Benchmarking
   - ✅ Tracing
   - ✅ Evaluations
-- [ ] Tests
-- [ ] CI/CD
+- [ ] Unit & Integration Tests
+- ✅ CI/CD
 - ✅ Documentation
 
 
@@ -86,14 +86,16 @@ uv run python scripts/ws_send_query.py
 
 ### Run Locally (with Docker)
 
-1. Start all services with Docker:
+1. Configure the `.env` file to use the correct mcp endpoint:
+
+2. Start all services with Docker:
 ```bash
 docker compose up
 ```
 
-2. Send a sample query over WebSocket:
+3. Send a sample query over WebSocket:
 ```bash
-docker compose exec api uv run python scripts/ws_send_query.py
+docker compose exec api uv run python scripts/dev/query_websocket_dev.py
 ```
 
 
@@ -126,22 +128,16 @@ uv run python -m evals.main
 
 ### Spamming the WebSocket endpoint
 
-Tests the rate limiting by sending multiple requests to the WebSocket endpoint.
+Tests the rate and cost limiting by sending multiple requests to the WebSocket endpoint.
 
 ```sh
-python scripts/spam_websocket.py
-python scripts/spam_websocket.py concurrent
-```
+uv run python scripts/spam.py
+uv run python scripts/spam.py concurrent
 
-Monitors and manages rate limiting data stored in Redis.
-
-```sh
-python scripts/check_redis_counters.py list
-python scripts/check_redis_counters.py list --details --requests
-python scripts/check_redis_counters.py monitor
-python scripts/check_redis_counters.py monitor 3
-python scripts/check_redis_counters.py stats
-python scripts/check_redis_counters.py clear
+uv run python scripts/check_limits.py list --details   
+uv run python scripts/check_limits.py stats
+uv run python scripts/check_limits.py clear
+uv run python scripts/check_limits.py monitor
 ```
 
 

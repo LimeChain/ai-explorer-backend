@@ -76,7 +76,7 @@ app.include_router(suggestions.router, prefix="/api/v1", tags=["suggestions"])
 logger.info("AI Explorer Backend service started")
 
 
-@app.get("/")
-async def root() -> dict[str, str]:
-    """Root endpoint for health check."""
-    return {"message": "AI Explorer Backend is running"}
+@app.get("/health")
+async def health() -> dict[str, str]:
+    """Health check endpoint for load balancer."""
+    return {"status": "healthy", "message": "AI Explorer Backend is running"}
