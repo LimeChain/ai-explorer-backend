@@ -98,16 +98,6 @@ class LLMOrchestrator:
 
     def _continue_with_tool_or_end(self, state: GraphState) -> str:
         """Determine graph routing based on state."""
-        if state.get("tool_calls_made"):
-            last_tool_call = state.get("tool_calls_made", [])[-1]
-            if last_tool_call.get('result'):
-                try:
-                    result_data = json.loads(last_tool_call['result'])
-                    if result_data.get('success') == False and result_data.get('cost') > settings.cost_threshold:
-                        state['messages'].append(HumanMessage(content=f"The query cost is too high. Please simplify the query, add more filters, or limit the time range."))
-                        return END
-                except (json.JSONDecodeError, KeyError) as e:
-                    print(f"Error parsing result: {e}")
         if state.get("pending_tool_call"):
             return "call_tool"
 
