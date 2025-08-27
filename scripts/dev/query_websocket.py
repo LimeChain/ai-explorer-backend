@@ -15,9 +15,13 @@ async def send_query(query: str):
         ssl_context.verify_mode = ssl.CERT_NONE
         
         async with websockets.connect(URI, ssl=ssl_context) as websocket:
-            query = {"query": query}
-            await websocket.send(json.dumps(query))
-            print(f"Sent: {query}")
+            message = {
+                "type": "query",
+                "content": query,
+                "network": "testnet"
+            }
+            await websocket.send(json.dumps(message))
+            print(f"Sent: {message}")
             
             async for message in websocket:
                 try:

@@ -17,8 +17,10 @@ BASE_URL = os.getenv("API_BASE_URL", "ws://localhost:8000")
 MAX_REQUESTS = 10  # Number of requests to send
 DELAY_BETWEEN_REQUESTS = 0.1  # Delay in seconds between requests
 TEST_MESSAGE = {
-    "query": "What is Hedera?",
-    "account_id": "test-account"
+    "type": "query",
+    "content": "What is Hedera?",
+    "account_id": "test-account",
+    "network": "testnet"
 }
 
 
