@@ -72,11 +72,6 @@ class MCPSettings(BaseSettings):
         description="Cost threshold for BigQuery queries"
     )
 
-    bigquery_query_timeout: int = Field(
-        default=300,
-        description="BigQuery query timeout in seconds"
-    )
-
 
 # Global settings instance
 settings = MCPSettings()
