@@ -146,9 +146,15 @@ async def websocket_chat(
                     
                     # Create empty ChatRequest for continue flow (no query needed)
                     chat_request = ChatRequest(query="", account_id=account_id, network=network)
-                    # We'll pass the message_id separately to the LLM orchestrator
-                    continue_from_message_id = UUID(message_id)
-                
+                    try:
+                        continue_from_message_id = UUID(message_id)
+                    except ValueError:
+                        await websocket.send_text(json.dumps({
+                            "error": "Invalid message_id format"
+                        }))
+                        await websocket.close(code=1007, reason="Invalid message_id format")
+                        return
+
                 else:
                     await websocket.send_text(json.dumps({
                         "error": f"Unknown message type: {message_type}"

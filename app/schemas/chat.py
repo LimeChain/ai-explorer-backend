@@ -2,6 +2,7 @@
 Chat-related Pydantic models for API request/response validation.
 """
 from typing import Optional, Literal
+from uuid import UUID
 from pydantic import BaseModel, Field
 
 
@@ -38,7 +39,7 @@ class ChatRequest(BaseModel):
         ...,
         description="Blockchain network to use (mainnet or testnet)"
     )
-    message_id: Optional[str] = Field(
+    message_id: Optional[UUID] = Field(
         None,
         description="Message ID to continue from (for continue_from_message flow)"
     )
