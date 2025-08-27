@@ -103,6 +103,9 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+.env.local
+.env.*.local
 .venv
 env/
 venv/
@@ -145,3 +148,47 @@ ehthumbs.db
 Thumbs.db
 
 temp
+
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.*
+*tfvars.backup*
+*tfvars.local*
+!terraform.tfvars.example
+.terraform/
+tfplan*
+*.tfplan
+errored.tfstate
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Secrets and Keys
+*.key
+*.pem
+service-account-*.json
+gcp-key.json
+
+# Local configuration files
+config.local.*
+settings.local.*
+
+# Additional backup and temporary files
+*.backup
+*.bak
+*.tmp
+*.temp
+*~
+.cache/
+
+# Package build artifacts
+*.egg-info/
+build/
+dist/

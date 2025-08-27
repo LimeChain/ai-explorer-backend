@@ -46,15 +46,10 @@ class MCPSettings(BaseSettings):
         description="Vector store connection URL"
     )
     
-    collection_name: str = Field(
-        default="sdk_methods",
-        description="Vector store collection name"
-    )
+    collection_name: str = Field(..., description="Vector store collection name")
     
-    embedding_model: str = Field(
-        default="text-embedding-ada-002",
-        description="The model to use for embeddings"
-    )
+
+    embedding_model: str = Field(..., description="The model to use for embeddings")
     
     sdk_documentation_path: str = Field(
         default="hiero_mirror_sdk_methods_documentation.json",

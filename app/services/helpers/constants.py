@@ -9,6 +9,7 @@ from enum import Enum
 MAX_QUERY_LENGTH = 1000
 MAX_ITERATIONS = 8
 MAX_TOOL_CONTEXT_ITEMS = 5
+MAX_CHAT_HISTORY_MESSAGES = 15
 
 # LLM configuration
 DEFAULT_TEMPERATURE = 0.1
@@ -25,11 +26,10 @@ class ToolName(str, Enum):
     CALL_SDK_METHOD = "call_sdk_method"
     RETRIEVE_SDK_METHOD = "retrieve_sdk_method"
     TEXT_TO_SQL_QUERY = "text_to_sql_query"
-
+    CALCULATE_HBAR_VALUE = "calculate_hbar_value"
 # === Chat Service Constants ===
 
 # Length limits
-MAX_SESSION_ID_LENGTH = 255
 MAX_ACCOUNT_ID_LENGTH = 255
 MAX_MESSAGE_CONTENT_LENGTH = 100000  # 100KB
 MAX_CONVERSATION_LIMIT = 1000

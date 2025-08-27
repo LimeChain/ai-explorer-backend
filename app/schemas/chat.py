@@ -1,7 +1,8 @@
 """
 Chat-related Pydantic models for API request/response validation.
 """
-from typing import List, Optional
+from typing import Optional, Literal
+from uuid import UUID
 from pydantic import BaseModel, Field
 
 
@@ -22,37 +23,33 @@ class ChatRequest(BaseModel):
     Request model for chat endpoint.
     
     Attributes:
-        messages: List of conversation messages (supports multi-turn conversations)
         query: The user's natural language query (for backwards compatibility)
         account_id: Optional connected wallet address for personalized context
-        session_id: Optional client-generated session identifier for traceability
     """
-    messages: Optional[List[ChatMessage]] = Field(
-        None, 
-        description="List of conversation messages for multi-turn chat"
-    )
     query: Optional[str] = Field(
         None, 
         description="User's natural language query (for single queries)", 
-        min_length=1
+        min_length=0  # Allow empty strings for continue_from_message flow
     )
     account_id: Optional[str] = Field(
         None, 
         description="Connected wallet address (e.g., '0.0.12345') for personalized responses"
     )
-    session_id: Optional[str] = Field(
-        None, 
-        description="Client-generated session identifier for request traceability"
+    network: Literal["mainnet", "testnet"] = Field(
+        ...,
+        description="Blockchain network to use (mainnet or testnet)"
     )
-    
+    message_id: Optional[UUID] = Field(
+        None,
+        description="Message ID to continue from (for continue_from_message flow)"
+    )
+
     def model_post_init(self, __context: None) -> None:
-        """Validate that either messages or query is provided."""
-        if not self.messages and not self.query:
-            raise ValueError("Either 'messages' or 'query' must be provided")
-        
-        # Convert single query to messages format for internal processing
-        if self.query and not self.messages:
-            self.messages = [ChatMessage(role="user", content=self.query)]
+        """Validate that query is provided when not empty string."""
+        # Allow empty string for continue_from_message flow
+        if self.query is None:
+            raise ValueError("'query' must be provided")
+
 
 
 class ChatResponse(BaseModel):

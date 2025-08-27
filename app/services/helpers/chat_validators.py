@@ -2,10 +2,11 @@
 Validation utilities for chat service operations.
 """
 from typing import Optional
+from uuid import UUID
 
 from app.exceptions import ValidationError
 from app.services.helpers.constants import (
-    MAX_SESSION_ID_LENGTH, MAX_ACCOUNT_ID_LENGTH, MAX_MESSAGE_CONTENT_LENGTH,
+    MAX_ACCOUNT_ID_LENGTH, MAX_MESSAGE_CONTENT_LENGTH,
     MAX_CONVERSATION_LIMIT, MessageRole
 )
 
@@ -14,17 +15,13 @@ class ChatValidators:
     """Centralized validation logic for chat operations."""
     
     @staticmethod
-    def validate_session_id(session_id: Optional[str]) -> str:
+    def validate_session_id(session_id: UUID) -> UUID:
         """Validate session ID - required field."""
         if session_id is None:
             raise ValidationError("Session ID is required")
             
-        if not isinstance(session_id, str) or len(session_id.strip()) == 0:
-            raise ValidationError("Session ID must be a non-empty string")
-            
-        session_id = session_id.strip()
-        if len(session_id) > MAX_SESSION_ID_LENGTH:
-            raise ValidationError(f"Session ID too long (max {MAX_SESSION_ID_LENGTH} characters)")
+        if not isinstance(session_id, UUID):
+            raise ValidationError("Session ID must be a valid UUID")
             
         return session_id
     

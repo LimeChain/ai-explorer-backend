@@ -12,6 +12,7 @@ import asyncio
 import logging
 import os
 import re
+import uuid
 from typing import List, Optional
 
 EXPERIMENT_PREFIX = "ai-explorer-eval"
@@ -25,13 +26,12 @@ os.environ["OPENAI_API_KEY"] = settings.llm_api_key.get_secret_value()
 client = Client(api_key=settings.langsmith_api_key.get_secret_value())
 dataset = get_or_create_dataset(client)
 
-llm_orchestrator = LLMOrchestrator()
+llm_orchestrator = LLMOrchestrator(enable_persistence=False)
 
 async def get_orchestrator_response(
     query: str, 
     account_id: Optional[str] = None, 
-    session_id: Optional[str] = None, 
-    conversation_history: Optional[List[ChatMessage]] = None
+    session_id: Optional[uuid.UUID] = None, 
 ) -> str:
     """
     Helper function to collect the full response from the streaming LLM orchestrator.
@@ -47,8 +47,8 @@ async def get_orchestrator_response(
             
             async for token in llm_orchestrator.stream_llm_response(
                 query=query,
+                network='testnet',
                 account_id=account_id,
-                conversation_history=conversation_history,
                 session_id=session_id,
                 db=db
             ):
@@ -62,7 +62,7 @@ async def get_orchestrator_response(
         return f"Service error: {str(e)}"
     except LLMServiceError as e:
         logger.error(f"LLM service error for session {session_id}: {e}")
-        return "AI service temporarily unavailable. Please try again."
+        return f"AI service temporarily unavailable. Please try again. Error: {str(e)}"
     except Exception as e:
         logger.error(f"Unexpected error processing evaluation for session {session_id}: {e}")
         if response_parts:
@@ -89,17 +89,12 @@ def target(inputs: dict) -> dict:
         account_id = match.group(0)
     
     # Generate a unique session_id for each evaluation
-    session_id = f"eval_session_{hash(question) % 10000}"
-    
-    # Create conversation history in the same format as the chat endpoint
-    # For single-turn evaluation, this would be just the current question
-    conversation_history = [ChatMessage(role="user", content=question)]
+    session_id = uuid.uuid4()
     
     response = asyncio.run(get_orchestrator_response(
         query=question,
         account_id=account_id,
         session_id=session_id,
-        conversation_history=conversation_history
     ))
     
     return {"answer": response}

@@ -5,6 +5,7 @@ This script will send multiple requests rapidly to trigger rate limiting.
 """
 import asyncio
 import os
+import uuid
 import websockets
 import json
 import time
@@ -16,17 +17,14 @@ BASE_URL = os.getenv("API_BASE_URL", "ws://localhost:8000")
 MAX_REQUESTS = 10  # Number of requests to send
 DELAY_BETWEEN_REQUESTS = 0.1  # Delay in seconds between requests
 TEST_MESSAGE = {
-    "messages": [
-        {
-            "role": "user",
-            "content": "What is Hedera?"
-        }
-    ],
-    "account_id": "test-account"
+    "type": "query",
+    "content": "What is Hedera?",
+    "account_id": "test-account",
+    "network": "testnet"
 }
 
 
-async def send_single_request(session_id: str, request_num: int) -> Dict[str, Any]:
+async def send_single_request(session_id: uuid.UUID, request_num: int) -> Dict[str, Any]:
     """Send a single WebSocket request and return the result."""
     url = f"{BASE_URL}/api/v1/chat/ws/{session_id}"
     
@@ -106,7 +104,7 @@ async def spam_websocket_sequential():
     print("-" * 60)
     
     results = []
-    session_id = f"spam-test-{int(time.time())}"
+    session_id = uuid.uuid4()
     
     for i in range(MAX_REQUESTS):
         print(f"📤 Sending request {i+1}/{MAX_REQUESTS}...")
@@ -138,16 +136,17 @@ async def spam_websocket_concurrent():
     
     # Create tasks for concurrent execution
     tasks = []
-    base_session_id = f"spam-concurrent-{int(time.time())}"
+    base_session_id = uuid.uuid4()
     
     for i in range(MAX_REQUESTS):
         # Use different session IDs to test IP-based rate limiting
-        session_id = f"{base_session_id}-{i}"
+        session_id = uuid.uuid4()
         task = send_single_request(session_id, i+1)
         tasks.append(task)
     
     # Execute all requests concurrently
     results = await asyncio.gather(*tasks)
+    
     
     # Print results
     for result in results:
@@ -196,14 +195,14 @@ async def main():
     
     print_summary(results)
     
-    print(f"\n💡 To check Redis counters, run: python scripts/check_redis_counters.py")
+    print(f"\n💡 To check Redis counters, run: python scripts/check_limits.py stats")
 
 
 if __name__ == "__main__":
     print("🔥 WebSocket Rate Limit Spam Test")
     print("Usage:")
-    print("  python scripts/spam_websocket.py          # Sequential requests")
-    print("  python scripts/spam_websocket.py concurrent # Concurrent requests")
+    print("  python scripts/spam.py          # Sequential requests")
+    print("  python scripts/spam.py concurrent # Concurrent requests")
     print()
     
     try:
