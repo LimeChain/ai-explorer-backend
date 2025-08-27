@@ -53,15 +53,11 @@ def upgrade() -> None:
     # Define the seed data
     seed_data = [
         # Anonymous queries
-        {'id': '550e8400-e29b-41d4-a716-446655440001', 'query': 'What is the current price of HBAR?', 'context': 'ANONYMOUS', 'display_order': 1},
-        {'id': '550e8400-e29b-41d4-a716-446655440002', 'query': 'What happened in transaction 0.0.12345@1750376965.638444236?', 'context': 'ANONYMOUS', 'display_order': 2},
-        {'id': '550e8400-e29b-41d4-a716-446655440003', 'query': 'Show recent activity for wallet 0.0.98', 'context': 'ANONYMOUS', 'display_order': 3},
-        {'id': '550e8400-e29b-41d4-a716-446655440004', 'query': 'What are the latest transactions on the Hedera network?', 'context': 'ANONYMOUS', 'display_order': 4},
-        # Connected queries
-        {'id': '550e8400-e29b-41d4-a716-446655440005', 'query': 'What tokens do I currently hold?', 'context': 'CONNECTED', 'display_order': 1},
-        {'id': '550e8400-e29b-41d4-a716-446655440006', 'query': 'Show my last 5 transactions', 'context': 'CONNECTED', 'display_order': 2},
-        {'id': '550e8400-e29b-41d4-a716-446655440007', 'query': 'What is the total value of my wallet?', 'context': 'CONNECTED', 'display_order': 3},
-        {'id': '550e8400-e29b-41d4-a716-446655440008', 'query': 'Show my NFT collection', 'context': 'CONNECTED', 'display_order': 4},
+        {'id': '550e8400-e29b-41d4-a716-446655440001', 'query': 'What is the price of 1 HBAR at the moment?', 'context': 'ANONYMOUS', 'display_order': 1},
+        {'id': '550e8400-e29b-41d4-a716-446655440002', 'query': 'Please explain transaction 0.0.4686511@1709237346.000000000', 'context': 'ANONYMOUS', 'display_order': 2},
+        {'id': '550e8400-e29b-41d4-a716-446655440003', 'query': 'Show me the last 3 transactions for account 0.0.5947117', 'context': 'ANONYMOUS', 'display_order': 3},
+        {'id': '550e8400-e29b-41d4-a716-446655440004', 'query': 'Summarize the assets of 0.0.4904246', 'context': 'ANONYMOUS', 'display_order': 4},
+        {'id': '550e8400-e29b-41d4-a716-446655440005', 'query': 'Did transaction 0.0.995584@1750920389.856235105 go through?', 'context': 'ANONYMOUS', 'display_order': 5},
     ]
     
     op.bulk_insert(suggested_queries_table, seed_data)
