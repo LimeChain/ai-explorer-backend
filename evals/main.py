@@ -12,6 +12,7 @@ import asyncio
 import logging
 import os
 import re
+import uuid
 from typing import List, Optional
 
 EXPERIMENT_PREFIX = "ai-explorer-eval"
@@ -30,7 +31,7 @@ llm_orchestrator = LLMOrchestrator(enable_persistence=False)
 async def get_orchestrator_response(
     query: str, 
     account_id: Optional[str] = None, 
-    session_id: Optional[str] = None, 
+    session_id: Optional[uuid.UUID] = None, 
 ) -> str:
     """
     Helper function to collect the full response from the streaming LLM orchestrator.
@@ -46,6 +47,7 @@ async def get_orchestrator_response(
             
             async for token in llm_orchestrator.stream_llm_response(
                 query=query,
+                network='testnet',
                 account_id=account_id,
                 session_id=session_id,
                 db=db
@@ -87,7 +89,7 @@ def target(inputs: dict) -> dict:
         account_id = match.group(0)
     
     # Generate a unique session_id for each evaluation
-    session_id = f"eval_session_{hash(question) % 10000}"
+    session_id = uuid.uuid4()
     
     response = asyncio.run(get_orchestrator_response(
         query=question,

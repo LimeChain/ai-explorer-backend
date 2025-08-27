@@ -120,10 +120,6 @@ class ResponseStreamer:
                     return assistant_msg.id, None
                 else:
                     # Normal flow - save both user message and assistant response
-                    if not query:
-                        logger.warning(f"No query provided for normal conversation flow")
-                        return None, None
-                    
                     saved_session_id, assistant_msg_id, user_msg_id = self.chat_service.save_conversation_turn(
                         session_id=session_id,
                         account_id=account_id,
