@@ -94,10 +94,13 @@ class ChatDBOperations:
         try:
             filters = [Message.conversation_id == conversation_id]
             if continue_from_message_id:
-                message = db.query(Message).filter(Message.id == continue_from_message_id).first()
-                if message:
-                    filters.append(Message.created_at <= message.created_at)
-
+                message = db.query(Message).filter(
+                    Message.id == continue_from_message_id,
+                    Message.conversation_id == conversation_id
+                ).first()
+                if not message:
+                    raise ChatServiceError(f"Message with ID {continue_from_message_id} not found in conversation {conversation_id}")
+                filters.append(Message.created_at <= message.created_at)
             query = db.query(Message).filter(*filters).order_by(Message.created_at.asc())
             
             return query.limit(limit).all()
@@ -123,39 +126,27 @@ class ChatDBOperations:
         ]
     
     @staticmethod
-    def update_message_content(db: Session, message_id: UUID, new_content: str) -> Message:
-        """Update message content and set edited_at timestamp."""
+    def edit_message_and_delete_after(db: Session, message_id: UUID, new_content: str) -> tuple[Message, int]:
+        """Atomically update message content and delete subsequent messages in the same conversation."""
         try:
-            message = db.query(Message).filter(Message.id == message_id).first()
+            message = db.query(Message).filter(Message.id == message_id).with_for_update().first()
             if not message:
                 raise ChatServiceError(f"Message with ID {message_id} not found")
-            
+            pivot_ts = message.created_at
+            conv_id = message.conversation_id
             message.content = new_content
             message.edited_at = func.now()
+            deleted_count = db.query(Message).filter(
+                Message.conversation_id == conv_id,
+                Message.created_at > pivot_ts
+            ).delete(synchronize_session=False)
             db.commit()
             db.refresh(message)
-            logger.info(f"Updated message {message_id} content")
-            return message
+            return message, deleted_count
         except SQLAlchemyError as e:
-            logger.error(f"Database error updating message: {e}")
+            logger.error(f"Database error editing message and deleting subsequent: {e}")
             db.rollback()
-            raise ChatServiceError("Database error occurred while updating message", e) from e
-    
-    @staticmethod
-    def delete_messages_after_timestamp(db: Session, conversation_id: UUID, after_timestamp) -> int:
-        """Delete all messages in conversation created after given timestamp."""
-        try:
-            deleted_count = db.query(Message).filter(
-                Message.conversation_id == conversation_id,
-                Message.created_at > after_timestamp
-            ).delete()
-            db.commit()
-            logger.info(f"Deleted {deleted_count} messages after timestamp for conversation {conversation_id}")
-            return deleted_count
-        except SQLAlchemyError as e:
-            logger.error(f"Database error deleting messages: {e}")
-            db.rollback()
-            raise ChatServiceError("Database error occurred while deleting messages", e) from e
+            raise ChatServiceError("Database error occurred while editing message", e) from e
     
     @staticmethod
     def get_message_by_id(db: Session, message_id: UUID) -> Optional[Message]:

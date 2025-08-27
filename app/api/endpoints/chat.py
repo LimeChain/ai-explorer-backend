@@ -208,7 +208,8 @@ async def websocket_chat(
                             session_id=session_id,
                             db=db,  # Pass database session for conversation persistence
                             on_complete=on_complete,
-                            on_cost_calculated=on_cost_calculated
+                            on_cost_calculated=on_cost_calculated,
+                            continue_from_message_id=local_continue_id
                         ):
                             await websocket.send_text(json.dumps({
                                 "token": token

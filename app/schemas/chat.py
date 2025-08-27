@@ -35,8 +35,12 @@ class ChatRequest(BaseModel):
         description="Connected wallet address (e.g., '0.0.12345') for personalized responses"
     )
     network: Literal["mainnet", "testnet"] = Field(
-        None,
+        ...,
         description="Blockchain network to use (mainnet or testnet)"
+    )
+    message_id: Optional[str] = Field(
+        None,
+        description="Message ID to continue from (for continue_from_message flow)"
     )
 
     def model_post_init(self, __context: None) -> None:

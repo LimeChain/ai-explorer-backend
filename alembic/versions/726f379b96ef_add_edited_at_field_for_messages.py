@@ -1,7 +1,7 @@
 """Add edited_at field for messages
 
 Revision ID: 726f379b96ef
-Revises: 13f9da3db90d
+Revises: fc53479d7923
 Create Date: 2025-08-21 11:10:41.926410
 
 """

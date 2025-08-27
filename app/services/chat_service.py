@@ -108,6 +108,12 @@ class ChatService:
             if not conversation:
                 logger.info(f"No conversation found for session_id: {session_id}")
                 raise SessionNotFoundError(f"No conversation found for session: {session_id}")
+
+            if continue_from_message_id:
+                pivot = ChatDBOperations.get_message_by_id(db, continue_from_message_id)
+                if not pivot or pivot.conversation_id != conversation.id:
+                    logger.warning(f"Message ID {continue_from_message_id} not found in conversation {session_id}")
+                    raise ValidationError(f"Message ID {continue_from_message_id} not found in conversation {session_id}")
             
             # Retrieve messages
             messages = ChatDBOperations.get_conversation_messages(db, conversation.id, validated_limit, continue_from_message_id)
@@ -192,14 +198,7 @@ class ChatService:
             validated_content = ChatValidators.validate_message_content(new_content, "user")
             
             # Delete all messages created after this message's timestamp
-            deleted_count = ChatDBOperations.delete_messages_after_timestamp(
-                db, message.conversation_id, message.created_at
-            )
-            
-            # Update the message content
-            updated_message = ChatDBOperations.update_message_content(
-                db, message_id, validated_content
-            )
+            updated_message, deleted_count = ChatDBOperations.edit_message_and_delete_after(db, message_id, validated_content)
             
             logger.info(f"Edited message {message_id} and deleted {deleted_count} subsequent messages")
             return updated_message
@@ -213,6 +212,7 @@ class ChatService:
             db.rollback()
             raise ChatServiceError("Unexpected error occurred while editing message", e) from e
     
+
     @staticmethod 
     async def clear_session_checkpoint(session_id: UUID) -> None:
         """Clear checkpoint state for a session after message editing."""
