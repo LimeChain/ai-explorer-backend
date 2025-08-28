@@ -91,7 +91,7 @@ variable "rate_limit_window_seconds" {
 variable "global_rate_limit_max_requests" {
   description = "Maximum global requests per window"
   type        = number
-  default     = 200
+  default     = 100
 }
 
 variable "global_rate_limit_window_seconds" {
@@ -104,7 +104,7 @@ variable "global_rate_limit_window_seconds" {
 variable "per_user_cost_limit" {
   description = "Per user cost limit in USD"
   type        = number
-  default     = 1
+  default     = 10
 }
 
 variable "per_user_cost_period_seconds" {
@@ -116,7 +116,7 @@ variable "per_user_cost_period_seconds" {
 variable "global_cost_limit" {
   description = "USD cost limit"
   type        = number
-  default     = 10
+  default     = 200
 }
 
 variable "global_cost_period_seconds" {
@@ -175,7 +175,7 @@ variable "langsmith_endpoint" {
 variable "allowed_origins" {
   description = "CORS allowed origins"
   type        = list(string)
-  default     = ["*"]
+  default     = ["dev.hederion.com", "hederion.com"]
 }
 
 # Redis configuration
