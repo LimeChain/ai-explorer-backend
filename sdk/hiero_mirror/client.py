@@ -1,6 +1,8 @@
 """Synchronous client for Hiero Mirror Node REST API."""
 
 import time
+import logging
+
 from timeit import default_timer as timer
 
 from typing import Dict, List, Optional, Iterator, Any
@@ -30,6 +32,8 @@ from .utils import (
     extract_next_link,
 )
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class MirrorNodeClient:
     """Synchronous client for Hiero Mirror Node REST API."""
@@ -955,17 +959,17 @@ class MirrorNodeClient:
             result=result,
             type=type,
         )
-        start_time = timer()
-        timeout_seconds = 10
+        start_time = time.monotonic()
+        timeout_seconds = 10.0
         # Get first page
-        response = self._get(f"/api/v1/transactions", params)
+        response = self._get("/api/v1/transactions", params)
         all_transactions = response.get('transactions', [])
         
         # Paginate through all remaining pages
         while response.get('links', {}).get('next'):
-            elapsed_time = timer() - start_time
+            elapsed_time = time.monotonic() - start_time
             if elapsed_time > timeout_seconds:
-                print(f"Timeout after {elapsed_time} seconds") # TODO: pass this to the caller
+                logger.warning("Pagination timed out after %.2fs; returning partial results", elapsed_time)  # TODO: surface to caller
                 break
             next_link = extract_next_link(response.get('links'))
             if next_link:
@@ -973,7 +977,7 @@ class MirrorNodeClient:
                 query_params = dict(parse_qs(next_link))
                 
                 # Get next page
-                next_response = self._get(f"/api/v1/transactions", query_params)
+                next_response = self._get("/api/v1/transactions", query_params)
                 
                 # Append transactions from this page
                 next_transactions = next_response.get('transactions', [])
@@ -987,7 +991,7 @@ class MirrorNodeClient:
         # Create final response with all transactions
         final_response = response.copy()
         final_response['transactions'] = all_transactions
-        print(f"Total transactions collected: {len(final_response.get('transactions'))}")
+        logger.info(f"Total transactions collected: {len(final_response.get('transactions'))}")
         return self._parse_response(final_response, TransactionsResponse)
 
     def get_transaction(
