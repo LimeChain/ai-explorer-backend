@@ -1,6 +1,8 @@
 """Synchronous client for Hiero Mirror Node REST API."""
 
 import time
+from timeit import default_timer as timer
+
 from typing import Dict, List, Optional, Iterator, Any
 from urllib.parse import parse_qs
 import httpx
@@ -933,19 +935,16 @@ class MirrorNodeClient:
         result: Optional[str] = None,
         type: Optional[str] = None,
     ) -> TransactionsResponse:
-        """Get transactions.
-
+        """Get all transactions of an account.
+        
         Args:
-            account_id: Filter by account ID
+            account_id: Account ID
             limit: Maximum number of results
             order: Sort order (asc/desc)
             timestamp: Filter by timestamp
             transaction_type: Filter by transaction type
             result: Filter by result (success/fail)
             type: Filter by type (credit/debit)
-
-        Returns:
-            TransactionsResponse with transaction information
         """
         params = build_query_params(
             account_id=account_id,
@@ -956,9 +955,40 @@ class MirrorNodeClient:
             result=result,
             type=type,
         )
+        start_time = timer()
+        timeout_seconds = 10
+        # Get first page
+        response = self._get(f"/api/v1/transactions", params)
+        all_transactions = response.get('transactions', [])
         
-        response = self._get("/api/v1/transactions", params)
-        return self._parse_response(response, TransactionsResponse)
+        # Paginate through all remaining pages
+        while response.get('links', {}).get('next'):
+            elapsed_time = timer() - start_time
+            if elapsed_time > timeout_seconds:
+                print(f"Timeout after {elapsed_time} seconds") # TODO: pass this to the caller
+                break
+            next_link = extract_next_link(response.get('links'))
+            if next_link:
+                # Parse query parameters from next link
+                query_params = dict(parse_qs(next_link))
+                
+                # Get next page
+                next_response = self._get(f"/api/v1/transactions", query_params)
+                
+                # Append transactions from this page
+                next_transactions = next_response.get('transactions', [])
+                all_transactions.extend(next_transactions)
+                
+                # Update response for next iteration
+                response = next_response
+            else:
+                break
+        
+        # Create final response with all transactions
+        final_response = response.copy()
+        final_response['transactions'] = all_transactions
+        print(f"Total transactions collected: {len(final_response.get('transactions'))}")
+        return self._parse_response(final_response, TransactionsResponse)
 
     def get_transaction(
         self,
