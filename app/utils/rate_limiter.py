@@ -1,12 +1,12 @@
 import redis
 import time
 import hashlib
-import logging
 from fastapi import WebSocket
 from typing import Optional
 from app.config import settings
+from app.utils.logging_config import get_service_logger
 
-logger = logging.getLogger(__name__)
+logger = get_service_logger("rate_limiter")
 
 # Redis client with connection pooling
 redis_client = redis.Redis.from_url(
@@ -18,9 +18,9 @@ redis_client = redis.Redis.from_url(
 
 try:
     redis_client.ping()
-    logger.info("Redis connection established successfully")
+    logger.info("✅ Redis connection established successfully")
 except redis.ConnectionError as e:
-    logger.error(f"Failed to connect to Redis at {settings.redis_url}: {e}")
+    logger.error(f"❌ Failed to connect to Redis at {settings.redis_url}: {e}")
     raise
 
 
@@ -72,15 +72,22 @@ class GlobalRateLimiter:
             )
             
             if result == 0:
-                logger.warning(f"Global rate limit exceeded: {self.max_requests} requests per {self.window_seconds}s")
+                logger.warning(f"🚨 Global rate limit exceeded: {self.max_requests} requests per {self.window_seconds}s")
                 return False
             
             return True
             
         except Exception as e:
-            logger.error(f"Redis error in global rate limiting: {e}")
+            logger.error("❌ Redis error in global rate limiting", exc_info=True, extra={
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "operation": "global_rate_limit_check",
+                "max_requests": self.max_requests,
+                "window_seconds": self.window_seconds,
+                "redis_key": key
+            })
             # Fail closed for better security - deny request if Redis is down
-            logger.warning("Global rate limiting unavailable, denying request for safety")
+            logger.warning("⚠️ Global rate limiting unavailable, denying request for safety")
             return False
 
 
@@ -131,7 +138,7 @@ class IPRateLimiter:
         # Normalize IP address (handle IPv4 and IPv6)
         normalized_ip = real_ip[:45] if real_ip else "unknown"
         
-        logger.info(f"Rate limiting based on IP: {normalized_ip[:8]}...")
+        logger.info(f"🔍 Rate limiting based on IP: {normalized_ip}")
         
         # Create secure IP-only hash
         return hashlib.sha256(normalized_ip.encode()).hexdigest()[:32]
@@ -141,7 +148,7 @@ class IPRateLimiter:
         
         # Check global rate limit first (most restrictive)
         if self.global_limiter and not self.global_limiter.is_allowed():
-            logger.warning("Request denied due to global rate limit")
+            logger.warning("🚨 Request denied due to global rate limit")
             return False
         
         # Check per-IP rate limit
@@ -158,15 +165,23 @@ class IPRateLimiter:
             )
             
             if result == 0:
-                logger.warning(f"Per-IP rate limit exceeded for {identifier[:8]}...")
+                logger.warning(f"🚨 Per-IP rate limit exceeded for {identifier[:8]}...")
                 return False
             
             return True
             
         except Exception as e:
-            logger.error(f"Redis error in rate limiting: {e}")
+            logger.error("❌ Redis error in IP rate limiting", exc_info=True, extra={
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "operation": "ip_rate_limit_check",
+                "ip_identifier": identifier[:8] + "...",
+                "max_requests": self.max_requests,
+                "window_seconds": self.window_seconds,
+                "redis_key": key
+            })
             # Fail closed for better security - deny request if Redis is down
-            logger.warning("Rate limiting unavailable, denying request for safety")
+            logger.warning("⚠️ Rate limiting unavailable, denying request for safety")
             return False
 
 

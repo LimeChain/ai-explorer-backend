@@ -1,5 +1,3 @@
-import logging
-
 from uuid import UUID
 from datetime import datetime
 
@@ -12,8 +10,9 @@ from app.db.models import Feedback, FeedbackType, Message
 from app.db.session import get_db
 from app.services.chat_service import ChatService
 from app.exceptions import ValidationError, ChatServiceError
+from app.utils.logging_config import get_api_logger
 
-logger = logging.getLogger(__name__)
+logger = get_api_logger("message")
 router = APIRouter()
 
 class FeedbackRequest(BaseModel):
@@ -54,6 +53,9 @@ def feedback(
     Returns:
         FeedbackResponse with confirmation and feedback details
     """
+    import time
+    request_start = time.time()
+    
     try:
         # Validate message exists
         message = db.query(Message).filter(Message.id == message_id).first()
@@ -74,15 +76,14 @@ def feedback(
             db.commit()
             db.refresh(feedback)
             
-            logger.info(
-                f"Feedback created successfully",
-                extra={
-                    "feedback_id": str(feedback.id),
-                    "message_id": str(message_id),
-                    "feedback_type": feedback_request.feedback_type.value,
-                    "action": "created"
-                }
-            )
+            response_time = round((time.time() - request_start) * 1000, 2)
+            logger.info("✅ Feedback created successfully", extra={
+                "message_id": str(message_id),
+                "feedback_id": str(feedback.id),
+                "feedback_type": feedback_request.feedback_type.value,
+                "action": "created",
+                "response_time_ms": response_time
+            })
             
             return FeedbackResponse(
                 message="Feedback received successfully",
@@ -104,15 +105,14 @@ def feedback(
                     db.commit()
                     db.refresh(existing_feedback)
                     
-                    logger.info(
-                        f"Feedback updated successfully",
-                        extra={
-                            "feedback_id": str(existing_feedback.id),
-                            "message_id": str(message_id),
-                            "feedback_type": feedback_request.feedback_type.value,
-                            "action": "updated"
-                        }
-                    )
+                    response_time = round((time.time() - request_start) * 1000, 2)
+                    logger.info("✅ Feedback updated successfully", extra={
+                        "message_id": str(message_id),
+                        "feedback_id": str(existing_feedback.id),
+                        "feedback_type": feedback_request.feedback_type.value,
+                        "action": "updated",
+                        "response_time_ms": response_time
+                    })
                     
                     return FeedbackResponse(
                         message="Feedback updated successfully",
@@ -136,7 +136,7 @@ def feedback(
         # Re-raise HTTPExceptions (like 404) without modification
         raise
     except Exception as e:
-        logger.error(f"Unexpected error saving feedback: {e}", exc_info=True)
+        logger.error(f"❌ Unexpected error saving feedback: {e}", exc_info=True)
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -159,6 +159,19 @@ async def edit_message(
     Returns:
         MessageEditResponse with confirmation and edit details
     """
+    import time
+    request_start = time.time()
+    
+    # Log API access with sanitized content preview
+    content_preview = edit_request.content[:50] + "..." if len(edit_request.content) > 50 else edit_request.content
+    logger.info("✏️ Message edit API access", extra={
+        "endpoint": "PUT /message/{message_id}/edit",
+        "message_id": str(message_id),
+        "content_preview": content_preview,
+        "generate_response": edit_request.generate_response,
+        "request_timestamp": time.time()
+    })
+    
     try:
         # Validate message exists and is a user message
         message = db.query(Message).filter(Message.id == message_id).first()
@@ -186,15 +199,14 @@ async def edit_message(
         if conversation:
             await ChatService.clear_session_checkpoint(conversation.session_id)
         
-        logger.info(
-            f"Message edited successfully",
-            extra={
-                "message_id": str(message_id),
-                "deleted_count": messages_after,
-                "conversation_id": str(message.conversation_id),
-                "session_id": str(conversation.session_id)
-            }
-        )
+        response_time = round((time.time() - request_start) * 1000, 2)
+        logger.info("✅ Message edited successfully", extra={
+            "message_id": str(message_id),
+            "session_id": str(conversation.session_id),
+            "conversation_id": str(message.conversation_id),
+            "deleted_count": messages_after,
+            "response_time_ms": response_time
+        })
         
         return MessageEditResponse(
             message="Message edited successfully",
@@ -206,19 +218,19 @@ async def edit_message(
         )
         
     except ValidationError as e:
-        logger.warning(f"Validation error editing message {message_id}: {e}")
+        logger.warning(f"⚠️ Validation error editing message {message_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except ChatServiceError as e:
-        logger.error(f"Service error editing message {message_id}: {e}")
+        logger.error(f"❌ Service error editing message {message_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to edit message"
         )
     except Exception as e:
-        logger.error(f"Unexpected error editing message {message_id}: {e}", exc_info=True)
+        logger.error(f"❌ Unexpected error editing message {message_id}: {e}", exc_info=True)
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

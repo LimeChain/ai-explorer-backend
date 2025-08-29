@@ -103,22 +103,20 @@ class WorkflowBuilder:
                 state["messages"] = state["messages"] + [response]
                 
                 # Parse tool call from response
-                logger.info(f"LLM Response content: {json.dumps(response.content, indent=2)}")
                 tool_call = self.tool_parser.parse_tool_call(response.content)
-                logger.info(f"Parsed tool call: {tool_call}")
                 
                 if tool_call:
                     state["pending_tool_call"] = tool_call
-                    logger.info("Setting pending_tool_call")
+                    logger.debug(f"🔍 Parsed tool call: {tool_call['name']}")
                 else:
                     state["final_response"] = response.content
-                    logger.info("Setting final_response")
+                    logger.debug("✅ Generated final response")
                 
                 state["iteration_count"] = state.get("iteration_count", 0) + 1
                 return state
                 
             except Exception as e:
-                logger.error(f"Error in call_model_node: {e}", exc_info=True)
+                logger.error(f"❌ Error in call_model_node: {e}", exc_info=True)
                 state["final_response"] = "I apologize, but I encountered an error. Please try again."
                 return state
         
@@ -139,6 +137,8 @@ class WorkflowBuilder:
                 # Find and execute the tool
                 result = await self._execute_tool(tools, tool_name, tool_params, network)
                 
+                logger.info(f"✅ {tool_name} completed", extra={"result_size": len(str(result)) if result else 0})
+                
                 # Store the tool call result
                 tool_call_record = {
                     "name": tool_name,
@@ -158,7 +158,7 @@ class WorkflowBuilder:
                 return state
                 
             except Exception as e:
-                logger.error(f"Error in call_tool_node: {e}", exc_info=True)
+                logger.error(f"❌ Error in call_tool_node: {e}", exc_info=True)
                 error_message = HumanMessage(content=f"Tool execution failed: {str(e)}")
                 state["messages"] = state["messages"] + [error_message]
                 return state
@@ -185,10 +185,8 @@ class WorkflowBuilder:
         
         if not tool_to_call:
             error_msg = f"Error: Tool '{tool_name}' not found."
-            logger.warning(f"Tool '{tool_name}' not found in available tools")
+            logger.warning(f"⚠️ Tool '{tool_name}' not found in available tools")
             return error_msg
-        
-        logger.info(f"Executing tool '{tool_name}' with parameters: {tool_params}")
         
         try:
             # Special handling for call_sdk_method
@@ -207,9 +205,9 @@ class WorkflowBuilder:
             else:
                 result = await tool_to_call.ainvoke(tool_params)
             
-            logger.info(f"Tool '{tool_name}' executed successfully")
+            logger.info(f"⚙️ Tool '{tool_name}' with parameters: {tool_params} executed successfully")
             return result
             
         except Exception as tool_error:
-            logger.error(f"Tool '{tool_name}' execution failed: {tool_error}")
+            logger.error(f"❌ Tool '{tool_name}' execution failed: {tool_error}")
             return f"Error executing tool '{tool_name}': {str(tool_error)}"

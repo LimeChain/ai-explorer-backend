@@ -34,12 +34,12 @@ class SuggestionDBOperations:
                            .limit(limit)\
                            .all()
             
-            logger.info(f"Retrieved {len(suggestions)} suggestions for context: {context}")
+            logger.info(f"✅ Retrieved {len(suggestions)} suggestions for context: {context}")
             return suggestions
             
         except SQLAlchemyError as e:
-            logger.error(f"Database error retrieving suggestions: {e}")
+            logger.error(f"❌ Database error retrieving suggestions: {e}")
             raise SuggestionServiceError("Database error occurred while retrieving suggestions", e) from e
         except Exception as e:
-            logger.error(f"Unexpected error retrieving suggestions: {e}")
+            logger.error(f"❌ Unexpected error retrieving suggestions: {e}")
             raise SuggestionServiceError("Unexpected error occurred while retrieving suggestions", e) from e

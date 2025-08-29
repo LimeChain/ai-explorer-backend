@@ -1,7 +1,6 @@
 """
 Suggestions endpoint for the AI Explorer backend service.
 """
-import logging
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 
@@ -9,8 +8,9 @@ from app.services.suggestion_service import SuggestionService
 from app.schemas.suggestions import SuggestionContext, SuggestedQuery, SuggestedQueriesResponse
 from app.db.session import get_db
 from app.exceptions import SuggestionServiceError, ValidationError
+from app.utils.logging_config import get_api_logger
 
-logger = logging.getLogger(__name__)
+logger = get_api_logger("suggestions")
 router = APIRouter()
 
 
@@ -56,7 +56,7 @@ def get_suggested_queries(
         HTTPException: 400 for validation errors, 500 for server errors
     """
     try:
-        logger.info(f"Retrieving suggested queries for context: {context}, limit: {limit}")
+        logger.info(f"💡 Retrieving suggested queries for context: {context}, limit: {limit}")
         
         # Get suggestions using refactored service
         db_suggestions = SuggestionService.get_suggestions_by_context(
@@ -68,15 +68,15 @@ def get_suggested_queries(
         # Map SQLAlchemy models to Pydantic schemas for the response
         suggestions = [SuggestedQuery(query=s.query) for s in db_suggestions]
         
-        logger.info(f"Successfully returned {len(suggestions)} suggestions for context: {context}")
+        logger.info(f"✅ Successfully returned {len(suggestions)} suggestions for context: {context}")
         return SuggestedQueriesResponse(suggestions=suggestions)
         
     except ValidationError as e:
-        logger.warning(f"Validation error in get_suggested_queries: {e}")
+        logger.warning(f"⚠️ Validation error in get_suggested_queries: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
     except SuggestionServiceError as e:
-        logger.error(f"Service error in get_suggested_queries: {e}")
+        logger.error(f"❌ Service error in get_suggested_queries: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve suggestions") from e
     except Exception as e:
-        logger.error(f"Unexpected error in get_suggested_queries: {e}")
+        logger.error(f"❌ Unexpected error in get_suggested_queries: {e}")
         raise HTTPException(status_code=500, detail="Internal server error") from e

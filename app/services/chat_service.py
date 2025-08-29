@@ -4,8 +4,6 @@ Chat Service for managing conversation persistence.
 This service handles GDPR-compliant storage of chat conversations for internal
 analysis and AI agent improvement while maintaining user privacy.
 """
-import logging
-
 from uuid import UUID
 from typing import Optional, List, Tuple
 
@@ -17,9 +15,9 @@ from app.exceptions import ChatServiceError, ValidationError, SessionNotFoundErr
 from app.services.helpers.chat_validators import ChatValidators
 from app.services.helpers.chat_db_operations import ChatDBOperations
 from app.services.helpers.constants import DEFAULT_CONVERSATION_LIMIT
+from app.utils.logging_config import get_service_logger
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = get_service_logger("chat", "api")
 
 
 class ChatService:
@@ -38,23 +36,54 @@ class ChatService:
             validated_session_id = ChatValidators.validate_session_id(session_id)
             validated_account_id = ChatValidators.validate_account_id(account_id)
             
-            logger.info(f"Finding or creating conversation for session_id: {validated_session_id}")
+            logger.info(
+                f"💬 Finding or creating conversation",
+                extra={
+                    "operation_type": "query",
+                    "session_id": str(validated_session_id),
+                    "account_id": validated_account_id
+                }
+            )
             
             # Try to find existing conversation
             conversation = ChatDBOperations.find_conversation_by_session(db, validated_session_id)
             
             if conversation:
-                logger.info(f"Found existing conversation (ID: {conversation.id}) for session_id: {validated_session_id}")
+                logger.info(
+                    f"✅ Found existing conversation",
+                    extra={
+                        "operation_type": "query",
+                        "conversation_id": str(conversation.id),
+                        "session_id": str(validated_session_id),
+                        "message_count": len(conversation.messages)
+                    }
+                )
                 # Update account_id if provided and different
                 if validated_account_id and conversation.account_id != validated_account_id:
                     ChatDBOperations.update_conversation_account(db, conversation, validated_account_id)
                 return conversation
             
             # Create new conversation
+            logger.info(
+                f"✨ Creating new conversation",
+                extra={
+                    "operation_type": "create",
+                    "session_id": str(validated_session_id),
+                    "account_id": validated_account_id
+                }
+            )
             return ChatDBOperations.create_conversation(db, validated_session_id, validated_account_id)
             
-        except ValidationError:
-            logger.warning(f"Validation error in find_or_create_conversation: session_id={session_id}, account_id={account_id}")
+        except ValidationError as e:
+            logger.warning(
+                f"⚠️ Validation error in find_or_create_conversation",
+                extra={
+                    "operation_type": "validation",
+                    "session_id": str(session_id),
+                    "account_id": account_id,
+                    "error": str(e)
+                }
+            )
             raise
         except ChatServiceError:
             raise
@@ -72,7 +101,15 @@ class ChatService:
             validated_role = ChatValidators.validate_message_role(role)
             validated_content = ChatValidators.validate_message_content(content, role)
             
-            logger.info(f"Adding {role} message to conversation {conversation_id}")
+            logger.info(
+                f"💬 Adding {validated_role} message",
+                extra={
+                    "operation_type": "create",
+                    "conversation_id": str(conversation_id),
+                    "role": validated_role,
+                    "content_length": len(validated_content)
+                }
+            )
             
             # Verify conversation exists
             if not ChatDBOperations.conversation_exists(db, conversation_id):

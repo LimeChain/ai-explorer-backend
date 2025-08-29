@@ -44,10 +44,10 @@ class ResponseStreamer:
         except Exception as e:
             # Fallback for unknown models/providers
             base = "o200k_base" if "gpt-4.1-mini" in settings.llm_model else "cl100k_base"
-            logger.error(f"Error getting encoding for model {settings.llm_model}: {e}")
+            logger.error(f"❌ Error getting encoding for model {settings.llm_model}: {e}")
             encoding = tiktoken.get_encoding(base)
             logger.warning(
-                f"Unknown model for tiktoken: provider={getattr(settings, 'llm_provider', 'unknown')}, "
+                f"⚠️ Unknown model for tiktoken: provider={getattr(settings, 'llm_provider', 'unknown')}, "
                 f"model={settings.llm_model}. Falling back to {base}."
             )
         
@@ -60,7 +60,12 @@ class ResponseStreamer:
         try:
             input_tokens = len(encoding.encode(str(state['messages'][-1].content)))
         except Exception as e:
-            logger.warning(f"Tokenization failed for input; approximating tokens. error={e}")
+            logger.error("❌ Tokenization failed for input; approximating tokens", extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "fallback_used": True,
+                "operation": "input_tokenization"
+            })
             input_tokens = max(1, len(str(state['messages'][-1].content)) // 4)
 
 
@@ -76,7 +81,13 @@ class ResponseStreamer:
         try:
             output_tokens = len(encoding.encode(accumulated_response))
         except Exception as e:
-            logger.warning(f"Tokenization failed for output; approximating tokens. error={e}")
+            logger.error("❌ Tokenization failed for output; approximating tokens", extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "fallback_used": True,
+                "operation": "output_tokenization",
+                "response_length": len(accumulated_response)
+            })
             output_tokens = max(1, len(accumulated_response) // 4)
 
         total_tokens = input_tokens + output_tokens
@@ -116,7 +127,7 @@ class ResponseStreamer:
                         role="assistant",
                         content=response
                     )
-                    logger.info(f"Continue response saved (assistant only) for session: {session_id}")
+                    logger.info(f"💾 Continue response saved (assistant only) for session: {session_id}")
                     return assistant_msg.id, None
                 else:
                     # Normal flow - save both user message and assistant response
@@ -127,8 +138,8 @@ class ResponseStreamer:
                         assistant_response=response,
                         db=db
                     )
-                    logger.info(f"Conversation saved with session_id: {saved_session_id}")
+                    logger.info(f"💾 Conversation saved with session_id: {saved_session_id}")
                     return assistant_msg_id, user_msg_id
         except Exception as save_error:
-            logger.error(f"Failed to save conversation: {save_error}")
+            logger.error(f"❌ Failed to save conversation: {save_error}")
             # Don't raise - shouldn't break streaming response

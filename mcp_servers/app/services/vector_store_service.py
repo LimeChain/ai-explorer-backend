@@ -8,8 +8,9 @@ from typing import Dict, List, Any
 from .database_manager import DatabaseManager
 from .text_processor import TextProcessor
 from .vector_search_service import VectorSearchService
+from ..logging_config import get_service_logger
 
-logger = logging.getLogger(__name__)
+logger = get_service_logger("vector_store_service", "mcp")
 
 
 class VectorStoreService:
@@ -42,6 +43,11 @@ class VectorStoreService:
         # Keep these for backward compatibility
         self.connection_string = connection_string
         self.collection_name = collection_name
+        
+        logger.info("✅ VectorStoreService initialized", extra={
+            "collection_name": collection_name,
+            "embedding_model": embedding_model
+        })
         
     def initialize_vector_store(self):
         """Initialize the PostgreSQL pgVector store - delegates to VectorSearchService."""

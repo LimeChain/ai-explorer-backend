@@ -211,7 +211,7 @@ def setup_logging(
     level: str = "INFO",
     use_json: bool = False,
     log_file: Optional[str] = None,
-    service_name: str = "mcp",
+    service_name: str = "ai-explorer",
     use_colors: Optional[bool] = None
 ) -> bool:
     """
@@ -393,7 +393,7 @@ def setup_logging(
         return False
 
 
-def get_logger(name: str, service_name: str = "mcp") -> logging.Logger:
+def get_logger(name: str, service_name: str = "ai-explorer") -> logging.Logger:
     """
     Get a logger instance with the specified name.
     
@@ -416,11 +416,11 @@ def get_logger(name: str, service_name: str = "mcp") -> logging.Logger:
 
 
 # Convenience functions for different service types
-def get_service_logger(service_name: str, app_name: str = "mcp") -> logging.Logger:
+def get_service_logger(service_name: str, app_name: str = "ai-explorer") -> logging.Logger:
     """Get a logger for a service."""
     return logging.getLogger(f"{app_name}.services.{service_name}")
 
 
-def get_api_logger(endpoint_name: str, app_name: str = "mcp") -> logging.Logger:
+def get_api_logger(endpoint_name: str, app_name: str = "ai-explorer") -> logging.Logger:
     """Get a logger for an API endpoint."""
     return logging.getLogger(f"{app_name}.api.{endpoint_name}")

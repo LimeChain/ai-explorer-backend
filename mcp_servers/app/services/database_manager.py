@@ -11,7 +11,7 @@ from ..settings import settings
 from ..logging_config import get_service_logger
 from ..exceptions import DatabaseConnectionError, DatabaseOperationError
 
-logger = get_service_logger("database_manager")
+logger = get_service_logger("database_manager", "mcp")
 
 
 class DatabaseManager:

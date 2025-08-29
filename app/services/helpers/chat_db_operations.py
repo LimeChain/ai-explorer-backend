@@ -42,7 +42,7 @@ class ChatDBOperations:
             db.add(conversation)
             db.commit()
             db.refresh(conversation)
-            logger.info(f"Created new conversation (ID: {conversation.id}) with session_id: {session_id}")
+            logger.debug(f"Created new conversation (ID: {conversation.id}) with session_id: {session_id}")
             return conversation
         except IntegrityError as e:
             logger.error(f"Integrity constraint error creating conversation: {e}")
@@ -59,7 +59,7 @@ class ChatDBOperations:
         try:
             conversation.account_id = account_id
             db.commit()
-            logger.info(f"Updated account_id for conversation {conversation.id}")
+            logger.debug(f"Updated account_id for conversation {conversation.id}")
         except SQLAlchemyError as e:
             logger.error(f"Database error updating conversation: {e}")
             db.rollback()
@@ -77,7 +77,7 @@ class ChatDBOperations:
             db.add(message)
             db.commit()
             db.refresh(message)
-            logger.info(f"Added {role} message (ID: {message.id}) to conversation {conversation_id}")
+            logger.debug(f"Added {role} message (ID: {message.id}) to conversation {conversation_id}")
             return message
         except IntegrityError as e:
             logger.error(f"Integrity constraint error creating message: {e}")
