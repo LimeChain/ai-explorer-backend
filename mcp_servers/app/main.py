@@ -3,6 +3,8 @@ import os
 from typing import Any, Dict, List, Union
 from datetime import datetime, timezone
 
+from hiero_mirror.async_client import AsyncMirrorNodeClient
+from hiero_mirror.client import MirrorNodeClient
 from mcp.server.fastmcp import FastMCP
 
 from .services.sdk_service import HederaSDKService
@@ -24,7 +26,9 @@ logger = get_logger(__name__, service_name="mcp")
 
 # Initialize the FastMCP server for Hedera Mirror Node
 mcp = FastMCP("HederaMirrorNode")
+ASYNC_METHODS = ["get_transactions"]
 network_sdk_service = {}
+async_network_sdk_service = {}
 vector_store_service = None
 document_processor = None
 
@@ -32,12 +36,23 @@ def get_sdk_service(network: str) -> HederaSDKService:
     global network_sdk_service
     if network not in network_sdk_service:
       try:
-        network_sdk_service[network] = HederaSDKService(network=network)
+        network_sdk_service[network] = HederaSDKService(client=MirrorNodeClient.for_network(network))
         logger.info("✅ SDK service initialized successfully")
       except Exception as e:
             logger.error("❌ Failed to initialize SDK service", exc_info=True)
             raise ServiceInitializationError("HederaSDKService", str(e), e)
     return network_sdk_service[network]
+
+def get_async_sdk_service(network: str) -> HederaSDKService:
+    global async_network_sdk_service
+    if network not in async_network_sdk_service:
+      try:
+        async_network_sdk_service[network] = HederaSDKService(client=AsyncMirrorNodeClient.for_network(network, request_timeout=settings.request_timeout))
+        logger.info("Async SDK service initialized successfully")
+      except Exception as e:
+            logger.error("Failed to initialize SDK service", exc_info=True)
+            raise ServiceInitializationError("HederaSDKService", str(e), e)
+    return async_network_sdk_service[network]
     
 
 def get_vector_services():
@@ -129,8 +144,10 @@ async def call_sdk_method(method_name: str, network: str, **kwargs) -> Dict[str,
             "parameters_count": len(kwargs),
             "correlation_id": correlation_id
         })
-        
-        result = await get_sdk_service(network).call_method(method_name, **kwargs)
+        if (method_name in ASYNC_METHODS):
+            result = await get_async_sdk_service(network).call_method(method_name, **kwargs)
+        else:
+            result = get_sdk_service(network).call_method(method_name, **kwargs)
         
         # Add correlation ID to successful results
         if isinstance(result, dict):

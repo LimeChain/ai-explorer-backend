@@ -43,6 +43,8 @@ class MCPSettings(BaseSettings):
         description="Path to the SDK documentation file"
     )
 
+    request_timeout: int = Field(default=5, description="Request timeout in seconds")
+
 
 # Global settings instance
 settings = MCPSettings()
