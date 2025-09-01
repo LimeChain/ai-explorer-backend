@@ -770,7 +770,7 @@ class AsyncMirrorNodeClient:
         """Get all transactions of an account with manual timestamp-based pagination."""
         params = build_query_params(
             account_id=account_id,
-            limit=100,
+            limit=limit,
             order=normalize_order(order),
             timestamp=timestamp,
             transactiontype=transaction_type,
