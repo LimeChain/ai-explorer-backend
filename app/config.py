@@ -27,8 +27,8 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr = Field(..., description="LLM API key (required)", alias="LLM_API_KEY")
     
     # Token pricing settings
-    llm_input_cost_per_token: float = Field(default=0.0000004, ge=0, description="Cost per input token in USD")
-    llm_output_cost_per_token: float = Field(default=0.0000016, ge=0, description="Cost per output token in USD")
+    llm_input_cost_per_token: float = Field(..., ge=0, description="Cost per input token in USD")
+    llm_output_cost_per_token: float = Field(..., ge=0, description="Cost per output token in USD")
 
     environment: str = Field(..., pattern="^(development|production|staging)$")
     log_level: str = Field(..., pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
