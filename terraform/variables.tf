@@ -154,6 +154,18 @@ variable "embedding_model" {
   default     = "text-embedding-3-small"
 }
 
+variable "llm_input_cost_per_token" {
+  description = "LLM input cost per token in USD"
+  type        = number
+  default     = 0.0000004
+}
+
+variable "llm_output_cost_per_token" {
+  description = "LLM output cost per token in USD"
+  type        = number
+  default     = 0.0000016
+}
+
 variable "collection_name" {
   description = "Vector store collection name"
   type        = string

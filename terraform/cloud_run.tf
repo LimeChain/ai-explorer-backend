@@ -190,6 +190,16 @@ resource "google_cloud_run_v2_service" "backend_api" {
         name  = "EMBEDDING_MODEL"
         value = var.embedding_model
       }
+
+      env {
+        name  = "LLM_INPUT_COST_PER_TOKEN"
+        value = tostring(var.llm_input_cost_per_token)
+      }
+
+      env {
+        name  = "LLM_OUTPUT_COST_PER_TOKEN"
+        value = tostring(var.llm_output_cost_per_token)
+      }
     }
   }
 
