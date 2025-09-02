@@ -18,7 +18,7 @@
       "Investigate transaction routing and memo patterns"
     ],
     "rules": [
-      "CRITICAL: ALWAYS include the partition field for the selected table in the WHERE clause, adjust the date filters based on user query",
+      "CRITICAL: ALWAYS include the partition field 'created' for the selected table in the WHERE clause, adjust the date filters based on user query",
       "CRITICAL: NEVER add date filters with INTERVAL unless user explicitly specifies a time period (like 'last 30 days', 'this month', 'recent transactions')",
       "CRITICAL: For queries like 'largest transaction', 'all transactions', 'transaction history' - search the ENTIRE table without ANY date restrictions",
       "CRITICAL: Do NOT assume users want recent data - they want ALL data unless they specifically say otherwise",
@@ -29,78 +29,87 @@
   },
   "account": {
     "use_cases": [],
-    "rules": []
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'modified' for the selected table in the WHERE clause, adjust the date filters based on user query"
+    ]
   },
-  "token": {
+  "block": {
     "use_cases": [],
-    "rules": []
-  },
-  "topic": {
-    "use_cases": [],
-    "rules": []
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'created' for the selected table in the WHERE clause, adjust the date filters based on user query"
+    ]
   },
   "contract": {
     "use_cases": [],
-    "rules": []
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'modified' for the selected table in the WHERE clause, adjust the date filters based on user query"
+    ]
   },
-  "contract_result": {
+  "contract_latest": {
     "use_cases": [],
-    "rules": []
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'modified' for the selected table in the WHERE clause, adjust the date filters based on user query"
+
+    ]
   },
-  "contract_log": {
+  "exchangerateset": {
     "use_cases": [],
-    "rules": []
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'created' for the selected table in the WHERE clause, adjust the date filters based on user query"
+    ]
   },
-  "contract_state_change": {
+  "file": {
     "use_cases": [],
-    "rules": []
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'modified' for the selected table in the WHERE clause, adjust the date filters based on user query"
+    ]
   },
-  "crypto_transfer": {
+  "native_token_balance": {
     "use_cases": [],
-    "rules": []
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'created' for the selected table in the WHERE clause, adjust the date filters based on user query"
+    ]
   },
-  "file_data": {
+  "networkfee": {
     "use_cases": [],
-    "rules": []
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'created' for the selected table in the WHERE clause, adjust the date filters based on user query"
+    ]
   },
-  "nft": {
+  "networknode": {
     "use_cases": [],
-    "rules": []
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'created' for the selected table in the WHERE clause, adjust the date filters based on user query"
+    ]
+  },
+  "networkstake": {
+    "use_cases": [],
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'created' for the selected table in the WHERE clause, adjust the date filters based on user query"
+    ]
   },
   "schedule": {
     "use_cases": [],
-    "rules": []
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'modified' for the selected table in the WHERE clause, adjust the date filters based on user query"
+    ]
   },
-  "token_transfer": {
+  "token": {
     "use_cases": [],
-    "rules": []
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'modified' for the selected table in the WHERE clause, adjust the date filters based on user query"
+    ]
   },
   "token_balance": {
     "use_cases": [],
-    "rules": []
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'created' for the selected table in the WHERE clause, adjust the date filters based on user query"
+    ]
   },
-  "assessed_custom_fee": {
+  "topicmessage": {
     "use_cases": [],
-    "rules": []
-  },
-  "staking_reward_transfer": {
-    "use_cases": [],
-    "rules": []
-  },
-  "node_stake": {
-    "use_cases": [],
-    "rules": []
-  },
-  "network_stake": {
-    "use_cases": [],
-    "rules": []
-  },
-  "address_book": {
-    "use_cases": [],
-    "rules": []
-  },
-  "address_book_entry": {
-    "use_cases": [],
-    "rules": []
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field 'created' for the selected table in the WHERE clause, adjust the date filters based on user query"
+    ]
   }
 }

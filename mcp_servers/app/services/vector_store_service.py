@@ -5,7 +5,7 @@ import json
 import logging
 import os
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from sqlalchemy import create_engine, text
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
@@ -432,7 +432,7 @@ class VectorStoreService:
             logger.error(f"Failed to load schemas from BigQuery: {e}")
             raise
     
-    def retrieve_bigquery_data(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
+    def retrieve_bigquery_data(self, query: str, k: int = 3) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Retrieve most relevant BigQuery table data based on query.
         
@@ -441,7 +441,7 @@ class VectorStoreService:
             k: Number of tables to retrieve
             
         Returns:
-            List of relevant table data
+            Tuple of (List of relevant table data, Dictionary of relevant metadata)
         """
         try:
             if self.vector_store is None:
@@ -451,7 +451,7 @@ class VectorStoreService:
             # Check if collection exists and has data
             if not self.check_collection_exists():
                 logger.warning("Collection does not exist or is empty")
-                return []
+                return [], {}
             
             logger.info(f"Performing similarity search for query: '{query}' with k={k}")
             
