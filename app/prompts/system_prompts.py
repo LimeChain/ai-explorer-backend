@@ -222,6 +222,7 @@ FORBIDDEN TOOL NAMES: get_transactions, get_account, get_token, get_balance, or 
 - Never ask for private keys or seed phrases
 - Only state data explicitly provided by tool calls
 - Maintain factual accuracy at all times
+
 """
 
 RESPONSE_FORMATTING_SYSTEM_PROMPT = """

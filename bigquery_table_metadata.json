@@ -1,0 +1,106 @@
+{
+  "transaction": {
+    "use_cases": [
+      "Track HBAR transfers and payments between accounts",
+      "Analyze transaction fees and costs for network usage",
+      "Monitor smart contract interactions and function calls",
+      "Track token transfers and exchanges (fungible and non-fungible)",
+      "Audit account activity patterns and transaction history",
+      "Generate transaction volume reports and statistics",
+      "Investigate suspicious or fraudulent transaction patterns",
+      "Monitor network congestion and transaction throughput",
+      "Analyze transaction success rates and failure patterns",
+      "Track consensus timestamp patterns and network timing",
+      "Monitor transaction types and their frequency",
+      "Analyze gas usage patterns for smart contracts",
+      "Track multi-signature transaction approvals",
+      "Monitor scheduled transaction execution",
+      "Investigate transaction routing and memo patterns"
+    ],
+    "rules": [
+      "CRITICAL: ALWAYS include the partition field for the selected table in the WHERE clause, adjust the date filters based on user query",
+      "CRITICAL: NEVER add date filters with INTERVAL unless user explicitly specifies a time period (like 'last 30 days', 'this month', 'recent transactions')",
+      "CRITICAL: For queries like 'largest transaction', 'all transactions', 'transaction history' - search the ENTIRE table without ANY date restrictions",
+      "CRITICAL: Do NOT assume users want recent data - they want ALL data unless they specifically say otherwise",
+      "When user DOES specify time ranges like 'last 30 days', use DATE_SUB with INTERVAL and DAY unit only (not YEAR, MONTH, WEEK)",
+      "Use EXTRACT(YEAR FROM created) instead of non-existent YEAR() function",
+      "Current timestamp queries should use CURRENT_TIMESTAMP() or CURRENT_DATE()"
+    ]
+  },
+  "account": {
+    "use_cases": [],
+    "rules": []
+  },
+  "token": {
+    "use_cases": [],
+    "rules": []
+  },
+  "topic": {
+    "use_cases": [],
+    "rules": []
+  },
+  "contract": {
+    "use_cases": [],
+    "rules": []
+  },
+  "contract_result": {
+    "use_cases": [],
+    "rules": []
+  },
+  "contract_log": {
+    "use_cases": [],
+    "rules": []
+  },
+  "contract_state_change": {
+    "use_cases": [],
+    "rules": []
+  },
+  "crypto_transfer": {
+    "use_cases": [],
+    "rules": []
+  },
+  "file_data": {
+    "use_cases": [],
+    "rules": []
+  },
+  "nft": {
+    "use_cases": [],
+    "rules": []
+  },
+  "schedule": {
+    "use_cases": [],
+    "rules": []
+  },
+  "token_transfer": {
+    "use_cases": [],
+    "rules": []
+  },
+  "token_balance": {
+    "use_cases": [],
+    "rules": []
+  },
+  "assessed_custom_fee": {
+    "use_cases": [],
+    "rules": []
+  },
+  "staking_reward_transfer": {
+    "use_cases": [],
+    "rules": []
+  },
+  "node_stake": {
+    "use_cases": [],
+    "rules": []
+  },
+  "network_stake": {
+    "use_cases": [],
+    "rules": []
+  },
+  "address_book": {
+    "use_cases": [],
+    "rules": []
+  },
+  "address_book_entry": {
+    "use_cases": [],
+    "rules": []
+  }
+}

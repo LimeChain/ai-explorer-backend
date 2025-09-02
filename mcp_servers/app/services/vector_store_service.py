@@ -3,6 +3,7 @@ Unified vector store service for both SDK method retrieval and BigQuery schema r
 """
 import json
 import logging
+import os
 
 from typing import Dict, List, Any, Optional
 from sqlalchemy import create_engine, text
@@ -31,6 +32,7 @@ class VectorStoreService:
         self.bigquery_client: Optional[bigquery.Client] = None
         self.bigquery_credentials: Optional[service_account.Credentials] = None
         self.dataset_id: Optional[str] = None
+        self._table_metadata: Optional[Dict[str, Any]] = None
         
     def initialize_vector_store(self):
         """Initialize the PostgreSQL pgVector store."""
@@ -237,6 +239,35 @@ class VectorStoreService:
         
         return field_info
     
+    def _load_table_metadata(self) -> Dict[str, Any]:
+        """
+        Load table metadata from JSON file.
+        
+        Returns:
+            Dict containing table metadata with use cases
+        """
+        if self._table_metadata is not None:
+            return self._table_metadata
+            
+        try:
+            # Look for metadata file in app root directory
+            metadata_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'bigquery_table_metadata.json')
+            metadata_path = os.path.abspath(metadata_path)
+            
+            if os.path.exists(metadata_path):
+                with open(metadata_path, 'r') as f:
+                    self._table_metadata = json.load(f)
+                logger.info(f"Loaded table metadata from: {metadata_path}")
+            else:
+                logger.warning(f"Table metadata file not found at: {metadata_path}")
+                self._table_metadata = {}
+                
+            return self._table_metadata
+            
+        except Exception as e:
+            logger.error(f"Failed to load table metadata: {e}")
+            return {}
+    
     def _extract_table_schema(self, table_ref) -> Dict[str, Any]:
         """
         Extract complete schema information for a BigQuery table.
@@ -313,6 +344,18 @@ class VectorStoreService:
         if schema_data['partition_info']:
             parts.append(f"Partitioned by {schema_data['partition_info']['field']}")
         
+        # Add use cases and rules if available
+        table_metadata = self._load_table_metadata()
+        table_id = schema_data['table_id']
+        if table_id in table_metadata:
+            table_meta = table_metadata[table_id]
+            # Add use cases
+            if table_meta.get('use_cases'):
+                parts.extend(table_meta['use_cases'])
+            # Add rules
+            if table_meta.get('rules'):
+                parts.extend(table_meta['rules'])
+        
         return " ".join(parts)
     
     def load_bigquery_schemas(self, credentials_path: str, dataset_id: str):
@@ -342,6 +385,15 @@ class VectorStoreService:
                     # Create searchable text
                     searchable_text = self._create_bigquery_searchable_text(schema_data)
                     
+                    # Load table metadata for use cases and rules
+                    table_metadata = self._load_table_metadata()
+                    table_use_cases = []
+                    table_rules = []
+                    if schema_data["table_id"] in table_metadata:
+                        table_meta = table_metadata[schema_data["table_id"]]
+                        table_use_cases = table_meta.get('use_cases', [])
+                        table_rules = table_meta.get('rules', [])
+                    
                     # Prepare metadata
                     metadata = {
                         "table_id": schema_data["table_id"],
@@ -351,6 +403,8 @@ class VectorStoreService:
                         "has_partition": schema_data["partition_info"] is not None,
                         "partition_field": schema_data["partition_info"]["field"] if schema_data["partition_info"] else None,
                         "dataset_id": self.dataset_id,
+                        "use_cases": table_use_cases,
+                        "rules": table_rules,
                         "schema_data": json.dumps(schema_data)
                     }
                     
@@ -378,16 +432,16 @@ class VectorStoreService:
             logger.error(f"Failed to load schemas from BigQuery: {e}")
             raise
     
-    def retrieve_bigquery_schemas(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
+    def retrieve_bigquery_data(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
         """
-        Retrieve most relevant BigQuery table schemas based on query.
+        Retrieve most relevant BigQuery table data based on query.
         
         Args:
             query: User's natural language query
             k: Number of tables to retrieve
             
         Returns:
-            List of relevant table schema data
+            List of relevant table data
         """
         try:
             if self.vector_store is None:
@@ -410,15 +464,21 @@ class VectorStoreService:
             logger.info(f"Similarity search returned {len(results)} documents")
             
             retrieved_schemas = []
+            retrieved_metadata = {}
+            
             for i, doc in enumerate(results):
                 logger.info(f"Document {i+1}: page_content length={len(doc.page_content)}, metadata keys={list(doc.metadata.keys())}")
                 # Parse the full schema data from metadata
                 schema_data = json.loads(doc.metadata["schema_data"])
+                retrieved_metadata[doc.metadata["table_id"]] = {
+                    "use_cases": doc.metadata["use_cases"],
+                    "rules": doc.metadata["rules"]
+                }
                 retrieved_schemas.append(schema_data)
                 logger.info(f"  -> Table: {schema_data.get('table_id', 'unknown')}")
             
             logger.info(f"Retrieved {len(retrieved_schemas)} relevant schemas for query: '{query}'")
-            return retrieved_schemas
+            return retrieved_schemas, retrieved_metadata
             
         except Exception as e:
             logger.error(f"Failed to retrieve schemas for query '{query}': {e}")
