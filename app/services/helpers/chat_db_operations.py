@@ -1,7 +1,6 @@
 """
 Database operation utilities for chat service.
 """
-import logging
 from typing import List, Optional
 from uuid import UUID
 
@@ -12,9 +11,9 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from app.db.models import Conversation, Message
 from app.schemas.chat import ChatMessage
 from app.exceptions import ChatServiceError
+from app.utils.logging_config import get_service_logger
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = get_service_logger("chat")
 
 
 class ChatDBOperations:

@@ -4,10 +4,10 @@ Logging middleware for correlation ID tracking and request logging.
 from typing import Callable
 from fastapi import Request, Response
 from fastapi.responses import StreamingResponse
-from app.utils.logging_config import set_correlation_id, get_correlation_id, get_logger
+from app.utils.logging_config import set_correlation_id, get_correlation_id, get_api_logger
 import time
 
-logger = get_logger(__name__, service_name="api")
+logger = get_api_logger(__name__)
 
 
 async def correlation_id_middleware(request: Request, call_next: Callable) -> Response:

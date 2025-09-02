@@ -62,7 +62,7 @@ class JSONFormatter(logging.Formatter):
                           'exc_text', 'stack_info', 'correlation_id']:
                 log_obj[key] = value
         
-        return json.dumps(log_obj)
+        return json.dumps(log_obj, default=str)
 
 
 class RichCorrelationHandler(RichHandler if RICH_AVAILABLE else logging.Handler):

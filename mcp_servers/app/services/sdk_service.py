@@ -25,10 +25,10 @@ class HederaSDKService:
         """Initialize the SDK service with configuration."""
         try:
             self.client = MirrorNodeClient.for_network(network)
-            logger.info("✅ Successfully initialized Hedera SDK service for testnet")
+            logger.info(f"Initialized Hedera SDK service for {network}")
         except Exception as e:
             logger.error("❌ Failed to initialize Hedera SDK service", exc_info=True, extra={
-                "network": "testnet"
+                "network": network
             })
             raise ConfigurationError(f"Failed to initialize Hedera SDK service: {e}", "hedera_network") from e
     

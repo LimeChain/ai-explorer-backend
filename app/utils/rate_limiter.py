@@ -20,7 +20,7 @@ try:
     redis_client.ping()
     logger.info("✅ Redis connection established successfully")
 except redis.ConnectionError as e:
-    logger.error(f"❌ Failed to connect to Redis at {settings.redis_url}: {e}")
+    logger.error(f"❌ Failed to connect to Redis: {e}")
     raise
 
 
