@@ -20,7 +20,7 @@ def get_ip_identifier(websocket: WebSocket) -> str:
         websocket.headers.get("x-forwarded-for", "").split(",")[0].strip() or
         websocket.headers.get("x-real-ip", "") or
         websocket.headers.get("cf-connecting-ip", "") or  # Cloudflare
-        websocket.headers.get("x-original-forwarded-for", ""),  # Additional proxy header
+        websocket.headers.get("x-original-forwarded-for", "") or  # Additional proxy header
         (websocket.client.host if websocket.client else "unknown")
     )
     
