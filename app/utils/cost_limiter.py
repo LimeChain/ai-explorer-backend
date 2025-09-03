@@ -28,7 +28,7 @@ def get_ip_identifier(websocket: WebSocket) -> str:
     normalized_ip = real_ip[:45] if real_ip else "unknown"
     
     # Create secure IP-only hash
-    return hashlib.sha256(normalized_ip.encode()).hexdigest()[:32]
+    return hashlib.sha256(normalized_ip.encode()).hexdigest()[:16]
 
 
 class IPCostLimiter:
@@ -41,7 +41,7 @@ class IPCostLimiter:
     
     def _get_ip_key(self, ip_identifier: str) -> str:
         """Generate Redis key for IP cost tracking."""
-        return f"cost_limit:ip:{ip_identifier}"
+        return f"cost:ip:{ip_identifier}"
     
     def is_within_limits(self, ip_identifier: str) -> bool:
         """Check if IP is within their cost limit for current period."""
@@ -98,7 +98,7 @@ class GlobalCostLimiter:
     
     def _get_global_key(self) -> str:
         """Generate Redis key for global cost tracking."""
-        return "cost_limit:global"
+        return "cost:global"
     
     def is_within_limits(self) -> bool:
         """Check if global system is within cost limit for current period."""

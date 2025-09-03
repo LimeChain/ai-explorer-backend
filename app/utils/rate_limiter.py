@@ -62,7 +62,7 @@ class GlobalRateLimiter:
         """Check if the global rate limit allows this request."""
         now = time.time()
         window_start = now - self.window_seconds
-        key = "rate_limit:global"
+        key = "rate:global"
         
         try:
             # Execute atomic Lua script
@@ -134,7 +134,7 @@ class IPRateLimiter:
         logger.info(f"Rate limiting based on IP: {normalized_ip[:8]}...")
         
         # Create secure IP-only hash
-        return hashlib.sha256(normalized_ip.encode()).hexdigest()[:32]
+        return hashlib.sha256(normalized_ip.encode()).hexdigest()[:16]
     
     def is_allowed(self, websocket: WebSocket) -> bool:
         """Check if the request is allowed (checks global limit first, then per-IP limit)"""
@@ -148,7 +148,7 @@ class IPRateLimiter:
         identifier = self.get_ip_identifier(websocket)
         now = time.time()
         window_start = now - self.window_seconds
-        key = f"rate_limit:ip:{identifier}"
+        key = f"rate:ip:{identifier}"
         
         try:
             # execute atomic Lua script
