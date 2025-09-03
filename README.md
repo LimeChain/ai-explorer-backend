@@ -147,3 +147,25 @@ Once running, visit:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 
+## Deployment
+Prod and dev environments are running in the same GCP project. 
+
+Dev environment is deployed with default Terraform workspace while prod is deployed with prod workspace. This makes Terraform use different state files for both environments.
+
+Before deploying check the Terraform workspace:
+```sh
+terraform workspace list
+```
+If needed change the workspace:
+```sh
+terraform workspace select <workspace>
+```
+### tfvars used for prod
+```
+project_id        = "<PROJECT_ID>>"
+llm_api_key       = "<API_KEY>"
+langsmith_api_key = ""
+environment       = "production"
+domain_name       = "hederion.com"
+app_name          = "ai-explorer-prod"
+```
