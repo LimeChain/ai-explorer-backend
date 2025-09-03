@@ -4,8 +4,6 @@ Chat Service for managing conversation persistence.
 This service handles GDPR-compliant storage of chat conversations for internal
 analysis and AI agent improvement while maintaining user privacy.
 """
-import logging
-
 from uuid import UUID
 from typing import Optional, List, Tuple
 
@@ -17,9 +15,9 @@ from app.exceptions import ChatServiceError, ValidationError, SessionNotFoundErr
 from app.services.helpers.chat_validators import ChatValidators
 from app.services.helpers.chat_db_operations import ChatDBOperations
 from app.services.helpers.constants import DEFAULT_CONVERSATION_LIMIT
+from app.utils.logging_config import get_service_logger
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = get_service_logger("chat", "api")
 
 
 class ChatService:
@@ -38,23 +36,54 @@ class ChatService:
             validated_session_id = ChatValidators.validate_session_id(session_id)
             validated_account_id = ChatValidators.validate_account_id(account_id)
             
-            logger.info(f"Finding or creating conversation for session_id: {validated_session_id}")
+            logger.info(
+                "💬 Finding or creating conversation",
+                extra={
+                    "operation_type": "query",
+                    "session_id": str(validated_session_id),
+                    "account_id": validated_account_id
+                }
+            )
             
             # Try to find existing conversation
             conversation = ChatDBOperations.find_conversation_by_session(db, validated_session_id)
             
             if conversation:
-                logger.info(f"Found existing conversation (ID: {conversation.id}) for session_id: {validated_session_id}")
+                logger.info(
+                    "✅ Found existing conversation",
+                    extra={
+                        "operation_type": "query",
+                        "conversation_id": str(conversation.id),
+                        "session_id": str(validated_session_id),
+                        "message_count": len(conversation.messages)
+                    }
+                )
                 # Update account_id if provided and different
                 if validated_account_id and conversation.account_id != validated_account_id:
                     ChatDBOperations.update_conversation_account(db, conversation, validated_account_id)
                 return conversation
             
             # Create new conversation
+            logger.info(
+                "✨ Creating new conversation",
+                extra={
+                    "operation_type": "create",
+                    "session_id": str(validated_session_id),
+                    "account_id": validated_account_id
+                }
+            )
             return ChatDBOperations.create_conversation(db, validated_session_id, validated_account_id)
             
-        except ValidationError:
-            logger.warning(f"Validation error in find_or_create_conversation: session_id={session_id}, account_id={account_id}")
+        except ValidationError as e:
+            logger.warning(
+                "⚠️ Validation error in find_or_create_conversation",
+                extra={
+                    "operation_type": "validation",
+                    "session_id": str(session_id),
+                    "account_id": account_id,
+                    "error": str(e)
+                }
+            )
             raise
         except ChatServiceError:
             raise
@@ -72,17 +101,25 @@ class ChatService:
             validated_role = ChatValidators.validate_message_role(role)
             validated_content = ChatValidators.validate_message_content(content, role)
             
-            logger.info(f"Adding {role} message to conversation {conversation_id}")
+            logger.info(
+                "💬 Adding %s message", validated_role,
+                extra={
+                    "operation_type": "create",
+                    "conversation_id": str(conversation_id),
+                    "role": validated_role,
+                    "content_length": len(validated_content)
+                }
+            )
             
             # Verify conversation exists
             if not ChatDBOperations.conversation_exists(db, conversation_id):
-                raise ValidationError(f"Conversation with ID {conversation_id} not found")
+                raise ValidationError("Conversation with ID %s not found" % conversation_id)
             
             # Create message
             return ChatDBOperations.create_message(db, conversation_id, validated_role, validated_content)
             
         except ValidationError:
-            logger.warning(f"Validation error in add_message: conversation_id={conversation_id}, role={role}")
+            logger.warning("Validation error in add_message: conversation_id=%s, role=%s", conversation_id, role)
             raise
         except ChatServiceError:
             raise
@@ -100,20 +137,20 @@ class ChatService:
             validated_session_id = ChatValidators.validate_session_id(session_id)
             validated_limit = ChatValidators.validate_limit(limit)
             
-            logger.info(f"Retrieving conversation history for session_id: {session_id}, limit: {limit}")
+            logger.info("Retrieving conversation history for session_id: %s, limit: %s", session_id, limit)
             
             # Find conversation
             conversation = ChatDBOperations.find_conversation_by_session(db, validated_session_id)
             
             if not conversation:
-                logger.info(f"No conversation found for session_id: {session_id}")
-                raise SessionNotFoundError(f"No conversation found for session: {session_id}")
+                logger.info("No conversation found for session_id: %s", session_id)
+                raise SessionNotFoundError("No conversation found for session: %s" % session_id)
 
             if continue_from_message_id:
                 pivot = ChatDBOperations.get_message_by_id(db, continue_from_message_id)
                 if not pivot or pivot.conversation_id != conversation.id:
-                    logger.warning(f"Message ID {continue_from_message_id} not found in conversation {session_id}")
-                    raise ValidationError(f"Message ID {continue_from_message_id} not found in conversation {session_id}")
+                    logger.warning("Message ID %s not found in conversation %s", continue_from_message_id, session_id)
+                    raise ValidationError("Message ID %s not found in conversation %s" % (continue_from_message_id, session_id))
             
             # Retrieve messages
             messages = ChatDBOperations.get_conversation_messages(db, conversation.id, validated_limit, continue_from_message_id)
@@ -121,11 +158,11 @@ class ChatService:
             # Convert to ChatMessage schema
             chat_messages = ChatDBOperations.messages_to_chat_messages(messages)
             
-            logger.info(f"Retrieved {len(chat_messages)} messages for session {session_id}")
+            logger.info("Retrieved %s messages for session %s", len(chat_messages), session_id)
             return chat_messages
             
         except ValidationError:
-            logger.warning(f"Validation error in get_conversation_history: session_id={session_id}, limit={limit}")
+            logger.warning("Validation error in get_conversation_history: session_id=%s, limit=%s", session_id, limit)
             raise
         except (SessionNotFoundError, ChatServiceError):
             raise
@@ -140,7 +177,7 @@ class ChatService:
     ) -> Tuple[UUID, UUID, UUID]:
         """Save a complete conversation turn (user message + assistant response)."""
         try:
-            logger.info(f"Saving conversation turn for session: {session_id}")
+            logger.info("Saving conversation turn for session: %s", session_id)
             
             # Find or create conversation
             conversation = ChatService.find_or_create_conversation(
@@ -165,13 +202,13 @@ class ChatService:
                 content=assistant_response
             )
             
-            logger.info(f"Saved conversation turn (user: {user_msg.id}, assistant: {assistant_msg.id}) for session: {conversation.session_id}")
+            logger.info("Saved conversation turn (user: %s, assistant: %s) for session: %s", user_msg.id, assistant_msg.id, conversation.session_id)
             return conversation.session_id, assistant_msg.id, user_msg.id
             
         except (ValidationError, ChatServiceError, SessionNotFoundError):
             raise
         except Exception as e:
-            logger.error(f"Unexpected error saving conversation turn: {e}")
+            logger.error("Unexpected error saving conversation turn: %s", e)
             db.rollback()
             raise ChatServiceError("Unexpected error occurred while saving conversation turn", e) from e
     
@@ -183,12 +220,12 @@ class ChatService:
     ) -> Message:
         """Edit a user message and delete all subsequent messages."""
         try:
-            logger.info(f"Editing message: {message_id}")
+            logger.info("Editing message: %s", message_id)
             
             # Get the message to edit
             message = ChatDBOperations.get_message_by_id(db, message_id)
             if not message:
-                raise ValidationError(f"Message with ID {message_id} not found")
+                raise ValidationError("Message with ID %s not found" % message_id)
             
             # Validate it's a user message
             if message.role != "user":
@@ -200,7 +237,7 @@ class ChatService:
             # Delete all messages created after this message's timestamp
             updated_message, deleted_count = ChatDBOperations.edit_message_and_delete_after(db, message_id, validated_content)
             
-            logger.info(f"Edited message {message_id} and deleted {deleted_count} subsequent messages")
+            logger.info("Edited message %s and deleted %s subsequent messages", message_id, deleted_count)
             return updated_message
             
         except ValidationError:
@@ -208,7 +245,7 @@ class ChatService:
         except ChatServiceError:
             raise
         except Exception as e:
-            logger.error(f"Unexpected error editing message: {e}")
+            logger.error("Unexpected error editing message: %s", e)
             db.rollback()
             raise ChatServiceError("Unexpected error occurred while editing message", e) from e
     
@@ -224,9 +261,9 @@ class ChatService:
                 return
             
             await checkpointer.adelete_thread(str(session_id))
-            logger.info(f"Cleared checkpoint state for session {session_id}")
+            logger.info("Cleared checkpoint state for session %s", session_id)
             
         except Exception as e:
             # Don't fail the edit operation if checkpoint clearing fails
-            logger.error(f"Failed to clear checkpoint for session {session_id}: {e}")
+            logger.error("Failed to clear checkpoint for session %s: %s", session_id, e)
             # Don't raise - this is a best-effort operation

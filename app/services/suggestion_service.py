@@ -1,7 +1,6 @@
 """
 Service for managing suggested queries.
 """
-import logging
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -11,9 +10,9 @@ from app.exceptions import ValidationError
 from app.services.helpers.suggestion_validators import SuggestionValidators
 from app.services.helpers.suggestion_db_operations import SuggestionDBOperations
 from app.services.helpers.constants import DEFAULT_SUGGESTION_LIMIT
+from app.utils.logging_config import get_service_logger
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = get_service_logger("suggestion_service")
 
 
 class SuggestionService:
@@ -38,5 +37,5 @@ class SuggestionService:
             )
             
         except ValidationError:
-            logger.warning(f"Validation error in get_suggestions_by_context: context={context}, limit={limit}")
+            logger.warning("⚠️ Validation error in get_suggestions_by_context: context=%s, limit=%s", context, limit)
             raise

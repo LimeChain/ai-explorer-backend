@@ -1,31 +1,36 @@
 """
 Main FastAPI application for the AI Explorer backend service.
 """
-import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.endpoints import chat, message, suggestions
 from app.config import settings
 from app.exception_handlers import register_exception_handlers
+from app.utils.logging_config import setup_logging, get_logger, set_correlation_id
+from app.middleware import correlation_id_middleware
 from fastapi.middleware.cors import CORSMiddleware
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-if settings.langsmith_tracing:
-    logging.info("LangSmith tracing enabled")
-else:
-    logging.info("LangSmith tracing disabled")
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-    ]
+# Setup centralized logging
+logging_success = setup_logging(
+    level=settings.log_level,
+    use_json=(settings.environment == "production"),
+    use_colors=(settings.environment != "production"),
+    service_name="api"
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, service_name="api")
+
+if logging_success:
+    logger.info("Advanced logging configuration loaded successfully")
+else:
+    logger.warning("⚠️ Fallback logging configuration is active")
+
+if settings.langsmith_tracing:
+    logger.info("✅ LangSmith tracing enabled")
+else:
+    logger.info("🚫 LangSmith tracing disabled")
 
 # Global checkpointer instance
 checkpointer = None
@@ -40,12 +45,12 @@ async def lifespan(app: FastAPI):
         # Create the checkpointer using the context manager
         async with AsyncPostgresSaver.from_conn_string(settings.database_url) as checkpointer:
             await checkpointer.setup()
-            logging.info("Checkpointer initialized successfully")
+            logger.info("Checkpointer initialized successfully")
             
             yield  # Application runs here
             
     except Exception as e:
-        logging.error(f"Failed to initialize checkpointer: {e}")
+        logger.error("❌ Failed to initialize checkpointer: %s", e)
         raise
 
 
@@ -56,6 +61,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,  # Add this line
 )
+
+# Add middleware (order matters - correlation ID middleware should be first)
+app.middleware("http")(correlation_id_middleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -73,7 +81,7 @@ app.include_router(message.router, prefix="/api/v1", tags=["message"])
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(suggestions.router, prefix="/api/v1", tags=["suggestions"])
 
-logger.info("AI Explorer Backend service started")
+logger.info("🚀 AI Explorer Backend service started")
 
 
 @app.get("/health")

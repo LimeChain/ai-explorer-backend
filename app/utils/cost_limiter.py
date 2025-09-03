@@ -6,11 +6,11 @@ separate from request-based rate limiting.
 """
 import redis
 import hashlib
-import logging
 from fastapi import WebSocket
 from app.config import settings
+from app.utils.logging_config import get_service_logger
 
-logger = logging.getLogger(__name__)
+logger = get_service_logger("api")
 
 
 def get_ip_identifier(websocket: WebSocket) -> str:
@@ -51,7 +51,15 @@ class IPCostLimiter:
             current_cost = float(self.redis.get(key) or 0)
             return current_cost < self.max_cost
         except Exception as e:
-            logger.error(f"Redis error checking user cost limit: {e}")
+            logger.error("❌ Redis error checking IP cost limit", exc_info=True, extra={
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "operation": "ip_cost_limit_check",
+                "ip_identifier": ip_identifier[:8] + "...",
+                "max_cost": self.max_cost,
+                "period_seconds": self.period_seconds,
+                "redis_key": key
+            })
             # Fail open for cost limits - allow request if Redis fails
             return True
     
@@ -69,14 +77,21 @@ class IPCostLimiter:
             if current_cost is None:
                 # First cost record - set both value and TTL
                 self.redis.set(key, actual_cost, ex=self.period_seconds)
-                logger.debug(f"First cost record for IP {ip_identifier[:8]}...: ${actual_cost:.6f} (TTL: {self.period_seconds}s)")
+                logger.debug("💰 First cost record for IP %s...: $%.6f (TTL: %ss)", ip_identifier[:8], actual_cost, self.period_seconds)
             else:
                 # Key exists - just increment (preserves existing TTL)
                 self.redis.incrbyfloat(key, actual_cost)
-                logger.debug(f"Added cost for IP {ip_identifier[:8]}...: ${actual_cost:.6f}")
+                logger.debug("💰 Added cost for IP %s...: $%.6f", ip_identifier[:8], actual_cost)
                 
         except Exception as e:
-            logger.error(f"Error recording IP cost: {e}")
+            logger.error("❌ Error recording IP cost", exc_info=True, extra={
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "operation": "ip_cost_record",
+                "ip_identifier": ip_identifier[:8] + "...",
+                "actual_cost": actual_cost,
+                "redis_key": key
+            })
     
     def get_current_usage(self, ip_identifier: str) -> float:
         """Get current cost usage for IP in current period."""
@@ -84,7 +99,13 @@ class IPCostLimiter:
         try:
             return float(self.redis.get(key) or 0)
         except Exception as e:
-            logger.error(f"Error getting IP cost usage: {e}")
+            logger.error("❌ Error getting IP cost usage", exc_info=True, extra={
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "operation": "ip_cost_usage_get",
+                "ip_identifier": ip_identifier[:8] + "...",
+                "redis_key": key
+            })
             return 0.0
 
 
@@ -108,7 +129,14 @@ class GlobalCostLimiter:
             current_cost = float(self.redis.get(key) or 0)
             return current_cost < self.max_cost
         except Exception as e:
-            logger.error(f"Redis error checking global cost limit: {e}")
+            logger.error("❌ Redis error checking global cost limit", exc_info=True, extra={
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "operation": "global_cost_limit_check",
+                "max_cost": self.max_cost,
+                "period_seconds": self.period_seconds,
+                "redis_key": key
+            })
             # Fail open for cost limits - allow request if Redis fails
             return True
     
@@ -126,14 +154,20 @@ class GlobalCostLimiter:
             if current_cost is None:
                 # First global cost record - set both value and TTL
                 self.redis.set(key, actual_cost, ex=self.period_seconds)
-                logger.debug(f"First global cost record: ${actual_cost:.6f} (TTL: {self.period_seconds}s)")
+                logger.debug("💰 First global cost record: $%.6f (TTL: %ss)", actual_cost, self.period_seconds)
             else:
                 # Key exists - just increment (preserves existing TTL)
                 self.redis.incrbyfloat(key, actual_cost)
-                logger.debug(f"Added global cost: ${actual_cost:.6f}")
+                logger.debug("💰 Added global cost: $%.6f", actual_cost)
                 
         except Exception as e:
-            logger.error(f"Error recording global cost: {e}")
+            logger.error("❌ Error recording global cost", exc_info=True, extra={
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "operation": "global_cost_record",
+                "actual_cost": actual_cost,
+                "redis_key": key
+            })
     
     def get_current_usage(self) -> float:
         """Get current global cost usage in current period."""
@@ -141,7 +175,12 @@ class GlobalCostLimiter:
         try:
             return float(self.redis.get(key) or 0)
         except Exception as e:
-            logger.error(f"Error getting global cost usage: {e}")
+            logger.error("❌ Error getting global cost usage", exc_info=True, extra={
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "operation": "global_cost_usage_get",
+                "redis_key": key
+            })
             return 0.0
 
 
@@ -167,12 +206,12 @@ class CostLimiter:
         
         # Check global limit first (most restrictive)
         if not self.global_limiter.is_within_limits():
-            logger.warning(f"Global cost limit exceeded: {self.global_limiter.get_current_usage():.6f} >= {self.global_limiter.max_cost}")
+            logger.warning("🚨 Global cost limit exceeded: %.6f >= %s", self.global_limiter.get_current_usage(), self.global_limiter.max_cost)
             return False
         
         # Check IP limit
         if not self.ip_limiter.is_within_limits(ip_identifier):
-            logger.warning(f"IP cost limit exceeded for {ip_identifier[:8]}...: {self.ip_limiter.get_current_usage(ip_identifier):.6f} >= {self.ip_limiter.max_cost}")
+            logger.warning("🚨 IP cost limit exceeded for %s...: %.6f >= %s", ip_identifier[:8], self.ip_limiter.get_current_usage(ip_identifier), self.ip_limiter.max_cost)
             return False
         
         return True
@@ -187,4 +226,4 @@ class CostLimiter:
         self.ip_limiter.record_cost(ip_identifier, actual_cost)
         self.global_limiter.record_cost(actual_cost)
         
-        logger.info(f"Recorded cost ${actual_cost:.6f} for IP {ip_identifier[:8]}...")
+        logger.info("💰 Recorded cost $%.6f for IP %s...", actual_cost, ip_identifier[:8])

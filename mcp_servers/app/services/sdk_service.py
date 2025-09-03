@@ -15,7 +15,7 @@ from ..exceptions import (
     ConfigurationError
 )
 
-logger = get_service_logger("sdk_service")
+logger = get_service_logger("sdk_service", "mcp")
 
 
 class HederaSDKService:
@@ -25,10 +25,10 @@ class HederaSDKService:
         """Initialize the SDK service with configuration."""
         try:
             self.client = MirrorNodeClient.for_network(network)
-            logger.info("Successfully initialized Hedera SDK service for testnet")
+            logger.info("Initialized Hedera SDK service for %s", network)
         except Exception as e:
-            logger.error("Failed to initialize Hedera SDK service", exc_info=True, extra={
-                "network": "testnet"
+            logger.error("❌ Failed to initialize Hedera SDK service", exc_info=True, extra={
+                "network": network
             })
             raise ConfigurationError(f"Failed to initialize Hedera SDK service: {e}", "hedera_network") from e
     
@@ -43,14 +43,15 @@ class HederaSDKService:
         Returns:
             Dict containing the method result or error information
         """
-        logger.info(f"Calling SDK method: {method_name}")
-        logger.debug(f"Raw parameters received: {kwargs}")
+        import time
+        start_time = time.time()
+        logger.info("🌐 Mirror API: %s", method_name, extra={"params": list(kwargs.keys())})
         
         try:
             # Validate method exists
             if not hasattr(self.client, method_name):
                 available_methods = self.get_available_methods()
-                logger.warning("SDK method not found", extra={
+                logger.warning("⚠️ SDK method not found", extra={
                     "method_name": method_name,
                     "available_methods": available_methods
                 })
@@ -60,7 +61,7 @@ class HederaSDKService:
             
             # Validate method is callable
             if not callable(method):
-                logger.warning("SDK attribute is not callable", extra={
+                logger.warning("⚠️ SDK attribute is not callable", extra={
                     "method_name": method_name,
                     "attribute_type": type(method).__name__
                 })
@@ -68,17 +69,17 @@ class HederaSDKService:
             
             # Process and filter parameters
             filtered_kwargs = self._process_parameters(kwargs)
-            logger.debug(f"Processed parameters: {filtered_kwargs}")
+            logger.debug("⚙️ Processed parameters: %s", filtered_kwargs)
             
             # Execute method
-            logger.debug(f"Executing {method_name} with parameters: {filtered_kwargs}")
+            logger.debug("🚀 Executing %s with parameters: %s", method_name, filtered_kwargs)
             if inspect.iscoroutinefunction(method):
                 result = await method(**filtered_kwargs)
             else:
                 result = method(**filtered_kwargs)
             
-            logger.info(f"Successfully executed {method_name}")
-            logger.debug(f"Method result type: {type(result)}")
+            response_time = round((time.time() - start_time) * 1000, 2)
+            logger.info("✅ %s", method_name, extra={"response_time_ms": response_time, "result_size": len(str(result)) if result else 0})
             
             return {
                 "success": True,
@@ -91,19 +92,19 @@ class HederaSDKService:
             # Re-raise custom exceptions
             raise
         except TypeError as e:
-            logger.error("Parameter type error calling SDK method", exc_info=True, extra={
+            logger.error("❌ Parameter type error calling SDK method", exc_info=True, extra={
                 "method_name": method_name,
                 "parameters": locals().get('filtered_kwargs', kwargs)
             })
             raise SDKParameterError(method_name, str(e), locals().get('filtered_kwargs', kwargs)) from e
         except json.JSONDecodeError as e:
-            logger.error("JSON parsing error in SDK parameters", exc_info=True, extra={
+            logger.error("❌ JSON parsing error in SDK parameters", exc_info=True, extra={
                 "method_name": method_name,
                 "raw_kwargs": kwargs
             })
             raise SDKParameterError(method_name, f"Invalid JSON in kwargs parameter: {e}", kwargs) from e
         except Exception as e:
-            logger.error("Unexpected error calling SDK method", exc_info=True, extra={
+            logger.error("❌ Unexpected error calling SDK method", exc_info=True, extra={
                 "method_name": method_name,
                 "parameters": locals().get('filtered_kwargs', kwargs)
             })
@@ -122,34 +123,22 @@ class HederaSDKService:
         filtered_kwargs = {}
         
         for k, v in kwargs.items():
-            logger.debug(f"Processing parameter '{k}' = '{v}' (type: {type(v)})")
-            
             if k == "kwargs":
                 # Handle nested kwargs parameter
                 if isinstance(v, dict):
-                    logger.debug(f"Found kwargs dict: {v}")
                     filtered_kwargs.update(v)
                 elif isinstance(v, str) and v.strip():
-                    logger.debug(f"Found kwargs JSON string: {v}")
                     try:
                         parsed_kwargs = json.loads(v)
                         if isinstance(parsed_kwargs, dict):
-                            logger.debug(f"Successfully parsed kwargs: {parsed_kwargs}")
                             filtered_kwargs.update(parsed_kwargs)
                         else:
-                            logger.warning(f"Parsed kwargs is not a dict: {parsed_kwargs}")
+                            logger.warning("⚠️ Parsed kwargs is not a dict: %s", parsed_kwargs)
                     except json.JSONDecodeError as e:
-                        logger.error(f"Failed to parse kwargs JSON '{v}': {e}")
+                        logger.error("❌ Failed to parse kwargs JSON '%s': %s", v, e)
                         raise
-                else:
-                    logger.debug(f"Skipping invalid kwargs: {v}")
             elif k != "kwargs" and v is not None and v != "":
-                logger.debug(f"Adding regular parameter: {k} = {v}")
                 filtered_kwargs[k] = v
-            else:
-                logger.debug(f"Skipping parameter '{k}' = '{v}' (empty or None)")
-        
-        logger.debug(f"Final processed parameters: {filtered_kwargs}")
         return filtered_kwargs
     
     def get_available_methods(self) -> list:

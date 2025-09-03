@@ -35,9 +35,9 @@ class CostCalculator:
         output_cost = output_tokens * output_cost_per_token
         total_cost = input_cost + output_cost
         
-        logger.debug(f"Cost calculation: {input_tokens} input tokens × {input_cost_per_token:.8f} = ${input_cost:.6f}")
-        logger.debug(f"Cost calculation: {output_tokens} output tokens × {output_cost_per_token:.8f} = ${output_cost:.6f}")
-        logger.debug(f"Total cost: ${total_cost:.6f}")
+        logger.debug("Cost calculation: %d input tokens × $%.8f = $%.6f", input_tokens, input_cost_per_token, input_cost)
+        logger.debug("Cost calculation: %d output tokens × $%.8f = $%.6f", output_tokens, output_cost_per_token, output_cost)
+        logger.debug("Total cost: $%.6f", total_cost)
         
         return input_cost, output_cost, total_cost
     

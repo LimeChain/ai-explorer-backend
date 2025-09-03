@@ -2,8 +2,6 @@
 LLM Orchestrator service implementing agentic workflow with LangGraph.
 """
 import asyncio
-import json
-import logging
 from typing import AsyncGenerator, Callable, List, Optional, TypedDict
 from uuid import UUID
 
@@ -26,12 +24,12 @@ from app.services.helpers.cost_calculator import CostCalculator
 from app.services.helpers.constants import (
     MAX_QUERY_LENGTH, DEFAULT_TEMPERATURE
 )
+from app.utils.logging_config import get_service_logger
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = get_service_logger("llm_orchestrator", "api")
 
 
 
@@ -74,7 +72,14 @@ class LLMOrchestrator:
         self._graph_tasks = {}
         self.cost_calculator = CostCalculator()
         self.enable_persistence = enable_persistence
-        logger.info(f"LLM Orchestrator initialized with agentic workflow (persistence: {enable_persistence})")
+        logger.info("🤖 LLM Orchestrator initialized", extra={
+            "agentic_workflow": True,
+            "persistence_enabled": enable_persistence,
+            "llm_provider": settings.llm_provider,
+            "llm_model": settings.llm_model,
+            "temperature": DEFAULT_TEMPERATURE,
+            "streaming": True
+        })
 
     def _create_context_aware_system_prompt(self, account_id: Optional[str]) -> str:
         """Create a context-aware system prompt that includes account information."""
@@ -115,15 +120,15 @@ class LLMOrchestrator:
         
         if continue_from_message_id:
             # Continue from message case - load conversation history only
-            logger.info(f"Continue from message {continue_from_message_id} requested for session {session_id}")
+            logger.info("➡️ Continue from message %s requested for session %s", continue_from_message_id, session_id)
             try:
                 chat_history = self.chat_service.get_conversation_history(db, session_id, continue_from_message_id=continue_from_message_id)
                 if chat_history:
                     historical_messages = MessageConverter.chat_messages_to_langgraph_messages(chat_history)
                     messages.extend(historical_messages)
-                    logger.info(f"Loaded {len(historical_messages)} messages from database for continue from message {continue_from_message_id}")
+                    logger.info("📜 Loaded %s messages from database for continue from message %s", len(historical_messages), continue_from_message_id)
             except Exception as e:
-                logger.warning(f"Could not load conversation history for continue: {e}")
+                logger.warning("⚠️ Could not load conversation history for continue: %s", e)
         else:
             # Regular query - load conversation history and add new query
             try:
@@ -131,9 +136,9 @@ class LLMOrchestrator:
                 if chat_history:
                     historical_messages = MessageConverter.chat_messages_to_langgraph_messages(chat_history)
                     messages.extend(historical_messages)
-                    logger.info(f"Loaded {len(historical_messages)} messages from database for session {session_id}")
+                    logger.info("📜 Loaded %s messages from database for session %s", len(historical_messages), session_id)
             except Exception as e:
-                logger.warning(f"Could not load conversation history for session {session_id}: {e}")
+                logger.warning("⚠️ Could not load conversation history for session %s: %s", session_id, e)
             
             # Add the new query as the latest message
             if query:
@@ -200,12 +205,11 @@ class LLMOrchestrator:
                 state["total_output_cost"] = output_cost
                 state["total_cost"] = total_cost
                 
-                logger.info(f"Cost calculation - Input: {input_tokens} tokens (${input_cost:.6f}), "
-                           f"Output: {output_tokens} tokens (${output_cost:.6f}), "
-                           f"Total: ${total_cost:.6f}")
+                logger.info("💰 Cost calculation - Input: %d tokens ($%.6f), Output: %d tokens ($%.6f), Total: $%.6f", 
+                           input_tokens, input_cost, output_tokens, output_cost, total_cost)
                 
             except Exception as e:
-                logger.error(f"Error calculating token costs: {e}")
+                logger.error("❌ Error calculating token costs: %s", e)
                 # Set costs to 0 if calculation fails
                 state["total_input_cost"] = 0.0
                 state["total_output_cost"] = 0.0
@@ -224,7 +228,7 @@ class LLMOrchestrator:
                 raise ImportError("Checkpointer not initialized. Ensure the application has started properly.")
             return checkpointer
         except ImportError as e :
-            raise ImportError(f"Checkpointer not found: {e}")
+            raise ImportError("Checkpointer not found: %s" % e)
 
     async def stream_llm_response(
         self, 
@@ -239,23 +243,53 @@ class LLMOrchestrator:
     ) -> AsyncGenerator[str, None]:
         """Stream LLM response using agentic workflow with real token streaming."""
         try:
+            import time
+            start_time = time.time()
+            
             if continue_from_message_id:
-                logger.info(f"Starting LLM orchestration for continue from message: {continue_from_message_id}")
+                logger.info("🔄 Starting LLM orchestration (continue mode)", extra={
+                    "continue_from_message_id": str(continue_from_message_id),
+                    "session_id": str(session_id),
+                    "account_id": account_id,
+                    "network": network
+                })
             else:
-                logger.info(f"Starting LLM orchestration for query: {query[:100]}...")
+                logger.info("🚀 Starting LLM orchestration (new query)", extra={
+                    "session_id": str(session_id),
+                    "account_id": "***" if account_id else None,
+                    "network": network,
+                    "query_length": len(query) if query else 0
+                })
                 self._validate_query(query)
             
             # Create checkpointer outside of MCP context to avoid connection conflicts
             checkpointer = self.get_checkpointer()
+            logger.debug("Checkpointer initialized", extra={
+                "persistence_enabled": self.enable_persistence,
+                "checkpointer_available": checkpointer is not None
+            })
 
             async with streamablehttp_client(settings.mcp_endpoint) as (read, write, _):
                 async with ClientSession(read, write) as session:
+                    session_start = time.time()
                     await session.initialize()
-                    logger.info("MCP session initialized")
+                    session_init_time = time.time() - session_start
+                    
+                    logger.info("MCP session initialized", extra={
+                        "mcp_endpoint": settings.mcp_endpoint,
+                        "initialization_time_ms": round(session_init_time * 1000, 2)
+                    })
 
                     # Load tools and create workflow
+                    tools_start = time.time()
                     tools = await load_mcp_tools(session)
-                    logger.info(f"Loaded {len(tools)} tools")
+                    tools_load_time = time.time() - tools_start
+                    
+                    logger.info("🛠️ MCP tools loaded", extra={
+                        "tool_count": len(tools),
+                        "tool_names": [tool.name for tool in tools] if tools else [],
+                        "load_time_ms": round(tools_load_time * 1000, 2)
+                    })
 
                     # Create node executors using helper classes
                     call_model_node = self.workflow_builder.create_model_node_executor(
@@ -281,28 +315,29 @@ class LLMOrchestrator:
                             # Get the actual workflow state from channel_values
                             channel_values = existing_state.checkpoint.get('channel_values', {})
                             if not channel_values or 'messages' not in channel_values:
-                                logger.warning(f"No messages found in existing state for session: {session_id}, starting new session")
+                                logger.warning("⚠️ No messages found in existing state for session: %s, starting new session", session_id)
                                 state = self._create_initial_state(query, account_id, session_id, db, continue_from_message_id)
                             else:
                                 state = dict(channel_values)
-                                logger.info(f"Resuming existing session: {session_id}")
-                                logger.info(f"Existing state checkpoint ID: {existing_state.checkpoint.get('id', 'unknown')}")
+                                logger.info("🔄 Resuming session", extra={"session_id": str(session_id), "msgs": len(state.get('messages', [])), "tools": len(state.get('tool_calls_made', [])), "flow": "continue"})
                                 if query and not continue_from_message_id:  # Only add query if not continuing
                                     state["messages"].append(HumanMessage(content=query))
                         else:
                             # New session - create initial state with database history
-                            logger.info(f"Starting new session: {session_id}")
+                            logger.info("🆕 New session", extra={"session_id": str(session_id), "flow": "new"})
                             state = self._create_initial_state(query, account_id, session_id, db, continue_from_message_id)
                     else:
                         # No persistence - just run with initial state, still load database history
-                        logger.info(f"Running without persistence for session: {session_id}")
+                        logger.info("🏃 Stateless session", extra={"session_id": str(session_id), "flow": "stateless"})
                         state = self._create_initial_state(query, account_id, session_id, db, continue_from_message_id)
 
+                    logger.info("🤖 Executing agent workflow", extra={"session_id": str(session_id)})
                     final_state_task = asyncio.create_task(graph.ainvoke(state, config=config))
                     self._graph_tasks[session_id] = final_state_task
 
                     try:
                         final_state = await final_state_task
+                        logger.info("✅ Agent workflow completed", extra={"session_id": str(session_id), "iterations": final_state.get('iteration_count', 0), "tools_used": len(final_state.get('tool_calls_made', []))})
                     finally:
                         self._graph_tasks.pop(session_id, None)
 
@@ -339,9 +374,9 @@ class LLMOrchestrator:
         except ValidationError:
             raise
         except LangChainException as e:
-            logger.error(f"LangChain error during streaming: {e}", exc_info=True)
+            logger.error("❌ LangChain error during streaming: %s", e, exc_info=True)
             raise LLMServiceError("The AI service is currently unavailable. Please try again in a moment.") from e
         except Exception as e:
-            logger.error(f"Unexpected error during LLM streaming: {e}", exc_info=True)
+            logger.error("❌ Unexpected error during LLM streaming: %s", e, exc_info=True)
             raise LLMServiceError("The AI service encountered an unexpected error. Please try again in a moment.") from e
 

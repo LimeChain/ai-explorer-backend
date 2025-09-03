@@ -9,7 +9,7 @@ import asyncio
 from .logging_config import get_service_logger
 from .exceptions import DatabaseError, SDKError, VectorStoreError, handle_exception
 
-logger = get_service_logger("health_monitor")
+logger = get_service_logger("health_monitor", "mcp")
 
 
 class HealthMonitor:

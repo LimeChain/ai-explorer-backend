@@ -20,9 +20,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Setup logging
-setup_logging(level="INFO", use_json=False)
-logger = get_logger(__name__)
+logger = get_logger(__name__, service_name="mcp")
 
 # Initialize the FastMCP server for Hedera Mirror Node
 mcp = FastMCP("HederaMirrorNode")
@@ -35,9 +33,9 @@ def get_sdk_service(network: str) -> HederaSDKService:
     if network not in network_sdk_service:
       try:
         network_sdk_service[network] = HederaSDKService(network=network)
-        logger.info("SDK service initialized successfully")
+        logger.info("✅ SDK service initialized successfully")
       except Exception as e:
-            logger.error("Failed to initialize SDK service", exc_info=True)
+            logger.error("❌ Failed to initialize SDK service", exc_info=True)
             raise ServiceInitializationError("HederaSDKService", str(e), e)
     return network_sdk_service[network]
     
@@ -47,6 +45,12 @@ def get_vector_services():
     global vector_store_service, document_processor
     
     if vector_store_service is None or document_processor is None:
+        # Initialize variables for exception handler
+        vector_store_url = None
+        collection_name = None
+        embedding_model = None
+        doc_path = None
+        
         try:
             from .services.vector_store_service import VectorStoreService
             from .services.document_processor import DocumentProcessor
@@ -56,6 +60,7 @@ def get_vector_services():
             llm_api_key = settings.llm_api_key.get_secret_value()
             collection_name = settings.collection_name
             embedding_model = settings.embedding_model
+            doc_path = settings.sdk_documentation_path
             
             # Initialize services
             vector_store_service = VectorStoreService(
@@ -68,16 +73,14 @@ def get_vector_services():
             document_processor = DocumentProcessor(vector_store_service)
             
             # Initialize with documentation file
-            doc_path = settings.sdk_documentation_path
-
             if os.path.exists(doc_path):
                 document_processor.initialize_from_file(doc_path)
-                logger.info(f"Vector services initialized with documentation from {doc_path}")
+                logger.info("✅ Vector services initialized with documentation from %s", doc_path)
             else:
                 raise FileNotFoundError(f"SDK documentation file not found: {doc_path}")
                 
         except Exception as e:
-            logger.error("Failed to initialize vector services", exc_info=True, extra={
+            logger.error("❌ Failed to initialize vector services", exc_info=True, extra={
                 "doc_path": doc_path,
                 "vector_store_url": vector_store_url,
                 "collection_name": collection_name,
@@ -117,11 +120,11 @@ async def call_sdk_method(method_name: str, network: str, **kwargs) -> Dict[str,
             ValidationError("Method name is required and must be a string", "method_name", method_name),
             {"correlation_id": correlation_id}
         )
-        logger.warning("Invalid method_name provided", extra={"method_name": method_name, "correlation_id": correlation_id})
+        logger.warning("⚠️ Invalid method_name provided", extra={"method_name": method_name, "correlation_id": correlation_id})
         return error_response
     
     try:
-        logger.info(f"Calling SDK method: {method_name}", extra={
+        logger.info("🚀 Calling SDK method: %s", method_name, extra={
             "method_name": method_name,
             "parameters_count": len(kwargs),
             "correlation_id": correlation_id
@@ -136,14 +139,14 @@ async def call_sdk_method(method_name: str, network: str, **kwargs) -> Dict[str,
         return result
         
     except SDKError as e:
-        logger.error(f"SDK error calling {method_name}", exc_info=True, extra={
+        logger.error("❌ SDK error calling %s", method_name, exc_info=True, extra={
             "method_name": method_name,
             "correlation_id": correlation_id
         })
         return handle_exception(e, {"correlation_id": correlation_id})
     
     except Exception as e:
-        logger.error(f"Unexpected error calling {method_name}", exc_info=True, extra={
+        logger.error("❌ Unexpected error calling %s", method_name, exc_info=True, extra={
             "method_name": method_name,
             "correlation_id": correlation_id
         })
@@ -179,11 +182,11 @@ def retrieve_sdk_method(query: str) -> Dict[str, Any]:
             ValidationError("Query is required and must be a non-empty string", "query", query),
             {"correlation_id": correlation_id}
         )
-        logger.warning("Invalid query provided", extra={"query": query, "correlation_id": correlation_id})
+        logger.warning("⚠️ Invalid query provided", extra={"query": query, "correlation_id": correlation_id})
         return error_response
     
     try:
-        logger.info(f"Retrieving SDK methods for query: {query}", extra={
+        logger.info("🔍 Retrieving SDK methods for query: %s", query, extra={
             "query": query,
             "correlation_id": correlation_id
         })
@@ -201,7 +204,7 @@ def retrieve_sdk_method(query: str) -> Dict[str, Any]:
             "correlation_id": correlation_id
         }
         
-        logger.info(f"Retrieved {len(result['methods'])} methods for query", extra={
+        logger.info("✅ Retrieved %d methods for query", len(result['methods']), extra={
             "query": query,
             "methods_count": len(result['methods']),
             "correlation_id": correlation_id
@@ -210,14 +213,14 @@ def retrieve_sdk_method(query: str) -> Dict[str, Any]:
         return result
 
     except DocumentProcessingError as e:
-        logger.error("Document processing error during method retrieval", exc_info=True, extra={
+        logger.error("❌ Document processing error during method retrieval", exc_info=True, extra={
             "query": query,
             "correlation_id": correlation_id
         })
         return handle_exception(e, {"correlation_id": correlation_id})
     
     except Exception as e:
-        logger.error("Unexpected error during method retrieval", exc_info=True, extra={
+        logger.error("❌ Unexpected error during method retrieval", exc_info=True, extra={
             "query": query,
             "correlation_id": correlation_id
         })
@@ -254,7 +257,7 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
             ValidationError("hbar_amounts is required", "hbar_amounts", hbar_amounts),
             {"correlation_id": correlation_id}
         )
-        logger.warning("Missing hbar_amounts parameter", extra={"correlation_id": correlation_id})
+        logger.warning("⚠️ Missing hbar_amounts parameter", extra={"correlation_id": correlation_id})
         return error_response
     
     # Validate hbar_amounts format
@@ -264,7 +267,7 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
                 ValidationError("hbar_amounts list cannot be empty", "hbar_amounts", hbar_amounts),
                 {"correlation_id": correlation_id}
             )
-            logger.warning("Empty hbar_amounts list provided", extra={"correlation_id": correlation_id})
+            logger.warning("⚠️ Empty hbar_amounts list provided", extra={"correlation_id": correlation_id})
             return error_response
         hbar_amount_list = hbar_amounts
     else:
@@ -279,7 +282,7 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
                 ValidationError("timestamp must be a valid number", "timestamp", timestamp),
                 {"correlation_id": correlation_id}
             )
-            logger.warning("Invalid timestamp provided", extra={"timestamp": timestamp, "correlation_id": correlation_id})
+            logger.warning("⚠️ Invalid timestamp provided", extra={"timestamp": timestamp, "correlation_id": correlation_id})
             return error_response
 
     async def calculate_single_hbar_value(hbar_amount, timestamp, correlation_id):
@@ -368,7 +371,7 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
             }
             
         except Exception as e:
-            logger.error(f"Calculation failed for amount {hbar_amount}", exc_info=True, extra={
+            logger.error("❌ Calculation failed for amount %s", hbar_amount, exc_info=True, extra={
                 "hbar_amount": hbar_amount,
                 "correlation_id": correlation_id
             })
@@ -380,7 +383,7 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
             }
     
     try:
-        logger.info(f"Calculating HBAR value for {len(hbar_amount_list)} amount(s)", extra={
+        logger.info("💰 Calculating HBAR value for %d amount(s)", len(hbar_amount_list), extra={
             "amounts_count": len(hbar_amount_list),
             "has_timestamp": timestamp is not None,
             "correlation_id": correlation_id
@@ -412,7 +415,7 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
             "correlation_id": correlation_id
         }
         
-        logger.info(f"HBAR value calculations completed", extra={
+        logger.info("✅ HBAR value calculations completed", extra={
             "calculations_count": len(calculations),
             "all_successful": all_successful,
             "correlation_id": correlation_id
@@ -421,14 +424,14 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
         return final_result
         
     except SDKError as e:
-        logger.error("SDK error during HBAR value calculation", exc_info=True, extra={
+        logger.error("❌ SDK error during HBAR value calculation", exc_info=True, extra={
             "amounts_count": len(hbar_amount_list),
             "correlation_id": correlation_id
         })
         return handle_exception(e, {"correlation_id": correlation_id})
     
     except Exception as e:
-        logger.error("Unexpected error during HBAR value calculation", exc_info=True, extra={
+        logger.error("❌ Unexpected error during HBAR value calculation", exc_info=True, extra={
             "amounts_count": len(hbar_amount_list),
             "correlation_id": correlation_id
         })
@@ -463,7 +466,7 @@ def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, fl
             ValidationError("timestamps is required", "timestamps", timestamps),
             {"correlation_id": correlation_id}
         )
-        logger.warning("Missing timestamps parameter", extra={"correlation_id": correlation_id})
+        logger.warning("⚠️ Missing timestamps parameter", extra={"correlation_id": correlation_id})
         return error_response
     
     # Validate timestamps format
@@ -473,7 +476,7 @@ def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, fl
                 ValidationError("timestamps list cannot be empty", "timestamps", timestamps),
                 {"correlation_id": correlation_id}
             )
-            logger.warning("Empty timestamps list provided", extra={"correlation_id": correlation_id})
+            logger.warning("⚠️ Empty timestamps list provided", extra={"correlation_id": correlation_id})
             return error_response
         timestamp_list = timestamps
     else:
@@ -562,7 +565,7 @@ def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, fl
             }
             
         except (ValueError, OverflowError) as e:
-            logger.warning(f"Timestamp conversion failed for {timestamp}", extra={
+            logger.warning("⚠️ Timestamp conversion failed for %s", timestamp, extra={
                 "timestamp": timestamp,
                 "error": str(e),
                 "correlation_id": correlation_id
@@ -574,7 +577,7 @@ def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, fl
                 "correlation_id": correlation_id
             }
         except Exception as e:
-            logger.error(f"Unexpected error converting timestamp {timestamp}", exc_info=True, extra={
+            logger.error("❌ Unexpected error converting timestamp %s", timestamp, exc_info=True, extra={
                 "timestamp": timestamp,
                 "correlation_id": correlation_id
             })
@@ -586,7 +589,7 @@ def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, fl
             }
     
     try:
-        logger.info(f"Converting {len(timestamp_list)} timestamp(s)", extra={
+        logger.info("🔄 Converting %d timestamp(s)", len(timestamp_list), extra={
             "timestamps_count": len(timestamp_list),
             "correlation_id": correlation_id
         })
@@ -608,7 +611,7 @@ def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, fl
             "correlation_id": correlation_id
         }
         
-        logger.info(f"Timestamp conversions completed", extra={
+        logger.info("✅ Timestamp conversions completed", extra={
             "conversions_count": len(conversions),
             "all_successful": all_successful,
             "correlation_id": correlation_id
@@ -617,7 +620,7 @@ def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, fl
         return final_result
         
     except Exception as e:
-        logger.error("Unexpected error during timestamp conversion", exc_info=True, extra={
+        logger.error("❌ Unexpected error during timestamp conversion", exc_info=True, extra={
             "timestamps_count": len(timestamp_list),
             "correlation_id": correlation_id
         })

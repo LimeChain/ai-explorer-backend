@@ -1,7 +1,6 @@
 """
 Chat endpoint for the AI Explorer backend service.
 """
-import logging
 import json
 import asyncio
 
@@ -16,9 +15,9 @@ from app.exceptions import ChatServiceError, ValidationError, LLMServiceError, R
 from app.utils.rate_limiter import IPRateLimiter, GlobalRateLimiter, redis_client
 from app.utils.cost_limiter import CostLimiter
 from app.config import settings
+from app.utils.logging_config import get_api_logger
 
-
-logger = logging.getLogger(__name__)
+logger = get_api_logger("chat")
 router = APIRouter()
 llm_orchestrator = LLMOrchestrator()
 
@@ -60,8 +59,24 @@ async def websocket_chat(
         websocket: WebSocket connection
         session_id: Session identifier for conversation persistence
     """
+    import time
+    from app.utils.logging_config import set_correlation_id
+    
+    connection_start = time.time()
+    client_ip = websocket.client.host if websocket.client else "unknown"
+    
+    # Set correlation ID for request tracing
+    correlation_id = set_correlation_id(str(session_id)[:8])
+    
     await websocket.accept()
-    logger.info(f"WebSocket connection established for session: {session_id}")
+    
+    # Log WebSocket connection establishment
+    logger.info("🔗 WebSocket connection established", extra={
+        "session_id": str(session_id),
+        "client_ip": client_ip,
+        "user_agent": websocket.headers.get("user-agent", "unknown"),
+        "connection_timestamp": time.time()
+    })
 
     active_flow_task = None
 
@@ -80,12 +95,28 @@ async def websocket_chat(
         while True:
             # Receive message from client
             data = await websocket.receive_text()
-            logger.info(f"Received WebSocket message for session {session_id}: {data}")
+            logger.info("📩 WebSocket message received", extra={
+                "session_id": str(session_id),
+                "client_ip": client_ip,
+                "operation": "message_received"
+            })
 
             try:
                 # Check rate limit for each message before processing
-                if not ip_rate_limiter.is_allowed(websocket):
-                    logger.warning(f"Rate limit exceeded for message in session {session_id}")
+                rate_limit_result = ip_rate_limiter.is_allowed(websocket)
+                if not rate_limit_result:
+                    # Enhanced rate limit logging with detailed context
+                    logger.warning("🚫 Rate limit exceeded", extra={
+                        "session_id": str(session_id),
+                        "client_ip": client_ip,
+                        "rate_limit_type": "per_ip_or_global",
+                        "per_ip_limit": settings.rate_limit_max_requests,
+                        "per_ip_window_seconds": settings.rate_limit_window_seconds,
+                        "global_limit": settings.global_rate_limit_max_requests,
+                        "global_window_seconds": settings.global_rate_limit_window_seconds,
+                        "violation_timestamp": time.time()
+                    })
+                    
                     await websocket.send_text(json.dumps({
                         "error": f"Rate limit exceeded. Limits: {settings.rate_limit_max_requests} per IP per {settings.rate_limit_window_seconds}s, {settings.global_rate_limit_max_requests} global per {settings.global_rate_limit_window_seconds}s."
                     }))
@@ -93,8 +124,27 @@ async def websocket_chat(
                     return
                 
                 # Check cost limits separately
-                if not cost_limiter.is_allowed(websocket):
-                    logger.warning(f"Cost limit exceeded for message in session {session_id}")
+                cost_limit_result = cost_limiter.is_allowed(websocket)
+                if not cost_limit_result:
+                    # Parse the message to get query preview for logging
+                    try:
+                        message_preview = json.loads(data)
+                        query_preview = message_preview.get("content", "")[:50] + "..." if len(message_preview.get("content", "")) > 50 else message_preview.get("content", "")
+                    except:
+                        query_preview = "invalid_json"
+                    
+                    # Enhanced cost budget logging with detailed context
+                    logger.warning("💰 Cost budget exceeded", extra={
+                        "session_id": str(session_id),
+                        "client_ip": client_ip,
+                        "per_user_cost_limit": settings.per_user_cost_limit,
+                        "per_user_cost_period_seconds": settings.per_user_cost_period_seconds,
+                        "global_cost_limit": settings.global_cost_limit,
+                        "global_cost_period_seconds": settings.global_cost_period_seconds,
+                        "query_preview": query_preview,
+                        "violation_timestamp": time.time()
+                    })
+                    
                     await websocket.send_text(json.dumps({
                         "error": (
                             f"Cost limit exceeded. Limits: "
@@ -163,11 +213,11 @@ async def websocket_chat(
                     return
                 # Log account context for traceability  
                 if chat_request.account_id:
-                    logger.info(f"Processing request with account_id={chat_request.account_id}")
+                    logger.info("Processing request with account_id=%s", chat_request.account_id)
                 
                 # For continue_from_message, query can be empty; for regular queries it's required
                 if not chat_request.query and message_type == "query":
-                    logger.warning(f"No user message found in request for session {session_id}")
+                    logger.warning("No user message found in request for session %s", session_id)
                     await websocket.send_text(json.dumps({
                         "error": "No user message found in request"
                     }))
@@ -175,7 +225,7 @@ async def websocket_chat(
                     return
                 
                 if not chat_request.network:
-                    logger.warning(f"No network found in request for session {session_id}")
+                    logger.warning("No network found in request for session %s", session_id)
                     await websocket.send_text(json.dumps({
                         "error": "No network found in request"
                     }))
@@ -204,7 +254,7 @@ async def websocket_chat(
                         if actual_cost > 0:
                             # Record cost using separate cost limiter
                             cost_limiter.record_cost(websocket, actual_cost)
-                            logger.info(f"Recorded actual cost for session {session_id}: ${actual_cost:.6f}")
+                            logger.info("Recorded actual cost for session %s: $%.6f", session_id, actual_cost)
 
                     try:
                         async for token in llm_orchestrator.stream_llm_response(
@@ -237,25 +287,28 @@ async def websocket_chat(
                             "complete": True
                         }))
 
-                        logger.info(f"Successfully processed query for session {session_id}")
+                        logger.info("✅ Query processing completed", extra={
+                            "session_id": str(session_id),
+                            "operation": "query_completed"
+                        })
                         # Explicit commit for any remaining uncommitted changes
                         db.commit()
                         
                     except asyncio.CancelledError:
-                        logger.info(f"Flow cancelled for session {session_id}")
+                        logger.info("🚫 Flow cancelled for session %s", session_id)
                         raise
                     except (ValidationError, ChatServiceError) as e:
-                        logger.error(f"Service error for session {session_id}: {e}")
+                        logger.error("Service error for session %s: %s", session_id, e)
                         await websocket.send_text(json.dumps({
                             "error": f"Service error: {str(e)}"
                         }))
                     except LLMServiceError as e:
-                        logger.error(f"LLM service error for session {session_id}: {e}")
+                        logger.error("LLM service error for session %s: %s", session_id, e)
                         await websocket.send_text(json.dumps({
                             "error": "AI service temporarily unavailable. Please try again."
                         }))
                     except Exception as e:
-                        logger.error(f"Unexpected error processing message for session {session_id}: {e}")
+                        logger.error("Unexpected error processing message for session %s: %s", session_id, e)
                         await websocket.send_text(json.dumps({
                             "error": "Internal server error"
                         }))
@@ -264,31 +317,44 @@ async def websocket_chat(
                 active_flow_task = asyncio.create_task(run_flow_and_stream())
                 
             except json.JSONDecodeError as e:
-                logger.warning(f"Invalid JSON received for session {session_id}: {e}")
+                logger.warning("Invalid JSON received for session %s: %s", session_id, e)
                 await websocket.send_text(json.dumps({
                     "error": "Invalid JSON format"
                 }))
             except (ValidationError, ChatServiceError) as e:
-                logger.error(f"Service error for session {session_id}: {e}")
+                logger.error("Service error for session %s: %s", session_id, e)
                 await websocket.send_text(json.dumps({
                     "error": f"Service error"
                 }))
             except LLMServiceError as e:
-                logger.error(f"LLM service error for session {session_id}: {e}")
+                logger.error("LLM service error for session %s: %s", session_id, e)
                 await websocket.send_text(json.dumps({
                     "error": "AI service temporarily unavailable. Please try again."
                 }))
             except Exception as e:
-                logger.error(f"Unexpected error processing message for session {session_id}: {e}")
+                logger.error("Unexpected error processing message for session %s: %s", session_id, e)
                 await websocket.send_text(json.dumps({
                     "error": "Internal server error"
                 }))
                 
     except WebSocketDisconnect:
-        logger.info(f"WebSocket client disconnected for session {session_id}")
+        connection_duration = time.time() - connection_start
+        logger.info("🔌 WebSocket connection closed (client disconnect)", extra={
+            "session_id": str(session_id),
+            "client_ip": client_ip,
+            "connection_duration_seconds": round(connection_duration, 2),
+            "close_reason": "client_disconnect"
+        })
         await cancel_active_flow()
     except Exception as e:
-        logger.error(f"WebSocket error for session {session_id}: {e}")
+        connection_duration = time.time() - connection_start
+        logger.error("❌ WebSocket connection closed (server error)", exc_info=True, extra={
+            "session_id": str(session_id),
+            "client_ip": client_ip,
+            "connection_duration_seconds": round(connection_duration, 2),
+            "close_reason": "server_error",
+            "error": str(e)
+        })
         await cancel_active_flow()
         try:
             await websocket.close(code=1011, reason="Internal server error")

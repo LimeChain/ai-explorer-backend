@@ -43,7 +43,7 @@ async def get_orchestrator_response(
         # Use context manager for safe database session handling
         with get_db_session() as db:
             if account_id:
-                logger.info(f"Processing evaluation request with account_id={account_id}")
+                logger.info("Processing evaluation request with account_id=%s", account_id)
             
             async for token in llm_orchestrator.stream_llm_response(
                 query=query,
@@ -58,13 +58,13 @@ async def get_orchestrator_response(
             db.commit()
                 
     except (ValidationError, ChatServiceError) as e:
-        logger.error(f"Service error for session {session_id}: {e}")
+        logger.error("Service error for session %s: %s", session_id, e)
         return f"Service error: {str(e)}"
     except LLMServiceError as e:
-        logger.error(f"LLM service error for session {session_id}: {e}")
+        logger.error("LLM service error for session %s: %s", session_id, e)
         return f"AI service temporarily unavailable. Please try again. Error: {str(e)}"
     except Exception as e:
-        logger.error(f"Unexpected error processing evaluation for session {session_id}: {e}")
+        logger.error("Unexpected error processing evaluation for session %s: %s", session_id, e)
         if response_parts:
             return "".join(response_parts)
         else:
