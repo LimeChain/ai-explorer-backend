@@ -27,7 +27,7 @@ class ChatDBOperations:
                 Conversation.session_id == session_id
             ).first()
         except SQLAlchemyError as e:
-            logger.error(f"Database error finding conversation: {e}")
+            logger.error("Database error finding conversation: %s", e)
             raise ChatServiceError("Database error occurred while finding conversation", e) from e
     
     @staticmethod
@@ -41,14 +41,14 @@ class ChatDBOperations:
             db.add(conversation)
             db.commit()
             db.refresh(conversation)
-            logger.debug(f"Created new conversation (ID: {conversation.id}) with session_id: {session_id}")
+            logger.debug("Created new conversation (ID: %s) with session_id: %s", conversation.id, session_id)
             return conversation
         except IntegrityError as e:
-            logger.error(f"Integrity constraint error creating conversation: {e}")
+            logger.error("Integrity constraint error creating conversation: %s", e)
             db.rollback()
             raise ChatServiceError("Failed to create conversation due to data constraints", e) from e
         except SQLAlchemyError as e:
-            logger.error(f"Database error creating conversation: {e}")
+            logger.error("Database error creating conversation: %s", e)
             db.rollback()
             raise ChatServiceError("Database error occurred while creating conversation", e) from e
     
@@ -58,9 +58,9 @@ class ChatDBOperations:
         try:
             conversation.account_id = account_id
             db.commit()
-            logger.debug(f"Updated account_id for conversation {conversation.id}")
+            logger.debug("Updated account_id for conversation %s", conversation.id)
         except SQLAlchemyError as e:
-            logger.error(f"Database error updating conversation: {e}")
+            logger.error("Database error updating conversation: %s", e)
             db.rollback()
             raise ChatServiceError("Database error occurred while updating conversation", e) from e
     
@@ -76,14 +76,14 @@ class ChatDBOperations:
             db.add(message)
             db.commit()
             db.refresh(message)
-            logger.debug(f"Added {role} message (ID: {message.id}) to conversation {conversation_id}")
+            logger.debug("Added %s message (ID: %s) to conversation %s", role, message.id, conversation_id)
             return message
         except IntegrityError as e:
-            logger.error(f"Integrity constraint error creating message: {e}")
+            logger.error("Integrity constraint error creating message: %s", e)
             db.rollback()
             raise ChatServiceError("Failed to add message due to data constraints", e) from e
         except SQLAlchemyError as e:
-            logger.error(f"Database error creating message: {e}")
+            logger.error("Database error creating message: %s", e)
             db.rollback()
             raise ChatServiceError("Database error occurred while adding message", e) from e
     
@@ -104,7 +104,7 @@ class ChatDBOperations:
             
             return query.limit(limit).all()
         except SQLAlchemyError as e:
-            logger.error(f"Database error retrieving messages: {e}")
+            logger.error("Database error retrieving messages: %s", e)
             raise ChatServiceError("Database error occurred while retrieving messages", e) from e
     
     @staticmethod
@@ -113,7 +113,7 @@ class ChatDBOperations:
         try:
             return db.query(Conversation).filter(Conversation.id == conversation_id).first() is not None
         except SQLAlchemyError as e:
-            logger.error(f"Database error checking conversation existence: {e}")
+            logger.error("Database error checking conversation existence: %s", e)
             raise ChatServiceError("Database error occurred while checking conversation", e) from e
     
     @staticmethod
@@ -143,7 +143,7 @@ class ChatDBOperations:
             db.refresh(message)
             return message, deleted_count
         except SQLAlchemyError as e:
-            logger.error(f"Database error editing message and deleting subsequent: {e}")
+            logger.error("Database error editing message and deleting subsequent: %s", e)
             db.rollback()
             raise ChatServiceError("Database error occurred while editing message", e) from e
     
@@ -153,5 +153,5 @@ class ChatDBOperations:
         try:
             return db.query(Message).filter(Message.id == message_id).first()
         except SQLAlchemyError as e:
-            logger.error(f"Database error retrieving message: {e}")
+            logger.error("Database error retrieving message: %s", e)
             raise ChatServiceError("Database error occurred while retrieving message", e) from e

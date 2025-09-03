@@ -44,7 +44,7 @@ class TextProcessor:
             for param in method["parameters"]:
                 # Skip malformed parameters
                 if not isinstance(param, dict) or 'name' not in param or 'description' not in param:
-                    logger.warning(f"Skipping malformed parameter in method '{method['name']}'")
+                    logger.warning("Skipping malformed parameter in method '%s'", method['name'])
                     continue
                 # Create natural language parameter description
                 param_text = f"{param['name']} parameter {param['description']}"
@@ -65,7 +65,7 @@ class TextProcessor:
         
         # Join with spaces for natural language flow
         searchable_text = " ".join(parts)
-        logger.debug(f"Created searchable text for method '{method['name']}': {len(searchable_text)} characters")
+        logger.debug("Created searchable text for method '%s': %d characters", method['name'], len(searchable_text))
         
         return searchable_text
     
@@ -94,7 +94,7 @@ class TextProcessor:
             "full_data": json.dumps(method)
         }
         
-        logger.debug(f"Prepared metadata for method '{method['name']}'")
+        logger.debug("Prepared metadata for method '%s'", method['name'])
         return metadata
     
     def create_documents(self, methods: List[Dict[str, Any]]) -> List[Document]:
@@ -125,10 +125,10 @@ class TextProcessor:
                 documents.append(doc)
                 
             except Exception as e:
-                logger.error(f"Failed to create document for method '{method.get('name', 'unknown')}': {e}")
+                logger.error("Failed to create document for method '%s': %s", method.get('name', 'unknown'), e)
                 continue
         
-        logger.info(f"Created {len(documents)} documents from {len(methods)} methods")
+        logger.info("Created %d documents from %d methods", len(documents), len(methods))
         return documents
     
     def load_methods_from_file(self, file_path: str) -> List[Dict[str, Any]]:
@@ -155,15 +155,15 @@ class TextProcessor:
             if not isinstance(methods, list):
                 raise ValueError("Documentation file must contain a 'methods' array")
             
-            logger.info(f"Loaded {len(methods)} methods from {file_path}")
+            logger.info("Loaded %d methods from %s", len(methods), file_path)
             return methods
             
         except FileNotFoundError:
-            logger.error(f"Documentation file not found: {file_path}")
+            logger.error("Documentation file not found: %s", file_path)
             raise
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in documentation file {file_path}: {e}")
+            logger.error("Invalid JSON in documentation file %s: %s", file_path, e)
             raise
         except Exception as e:
-            logger.error(f"Error loading methods from {file_path}: {e}")
+            logger.error("Error loading methods from %s: %s", file_path, e)
             raise

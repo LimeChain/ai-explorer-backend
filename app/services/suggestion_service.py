@@ -37,5 +37,5 @@ class SuggestionService:
             )
             
         except ValidationError:
-            logger.warning(f"⚠️ Validation error in get_suggestions_by_context: context={context}, limit={limit}")
+            logger.warning("⚠️ Validation error in get_suggestions_by_context: context=%s, limit=%s", context, limit)
             raise

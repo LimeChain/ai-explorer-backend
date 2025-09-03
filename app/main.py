@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
             yield  # Application runs here
             
     except Exception as e:
-        logger.error(f"❌ Failed to initialize checkpointer: {e}")
+        logger.error("❌ Failed to initialize checkpointer: %s", e)
         raise
 
 

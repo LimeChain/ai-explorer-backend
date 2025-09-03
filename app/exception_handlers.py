@@ -25,7 +25,7 @@ async def llm_service_error_handler(request: Request, exc: LLMServiceError) -> J
     Returns:
         JSONResponse with 503 status and error details
     """
-    logger.error(f"❌ LLM service error: {exc}")
+    logger.error("❌ LLM service error: %s", exc)
     return JSONResponse(
         status_code=503,
         content={"detail": str(exc)}

@@ -96,7 +96,7 @@ class WorkflowBuilder:
                 output_tokens = len(encoding.encode(str(response.content)))
                 total_tokens = input_tokens + output_tokens
                 
-                logger.info(f"Model call tokens: {input_tokens} input + {output_tokens} output = {total_tokens} total")
+                logger.info("Model call tokens: %d input + %d output = %d total", input_tokens, output_tokens, total_tokens)
                 state["total_input_tokens"] = state.get("total_input_tokens", 0) + input_tokens
                 state["total_output_tokens"] = state.get("total_output_tokens", 0) + output_tokens
                 # Update state with new message
@@ -107,7 +107,7 @@ class WorkflowBuilder:
                 
                 if tool_call:
                     state["pending_tool_call"] = tool_call
-                    logger.debug(f"🔍 Parsed tool call: {tool_call['name']}")
+                    logger.debug("🔍 Parsed tool call: %s", tool_call['name'])
                 else:
                     state["final_response"] = response.content
                     logger.debug("✅ Generated final response")
@@ -116,7 +116,7 @@ class WorkflowBuilder:
                 return state
                 
             except Exception as e:
-                logger.error(f"❌ Error in call_model_node: {e}", exc_info=True)
+                logger.error("❌ Error in call_model_node: %s", e, exc_info=True)
                 state["final_response"] = "I apologize, but I encountered an error. Please try again."
                 return state
         
@@ -137,7 +137,7 @@ class WorkflowBuilder:
                 # Find and execute the tool
                 result = await self._execute_tool(tools, tool_name, tool_params, network)
                 
-                logger.info(f"✅ {tool_name} completed", extra={"result_size": len(str(result)) if result else 0})
+                logger.info("✅ %s completed", tool_name, extra={"result_size": len(str(result)) if result else 0})
                 
                 # Store the tool call result
                 tool_call_record = {
@@ -158,7 +158,7 @@ class WorkflowBuilder:
                 return state
                 
             except Exception as e:
-                logger.error(f"❌ Error in call_tool_node: {e}", exc_info=True)
+                logger.error("❌ Error in call_tool_node: %s", e, exc_info=True)
                 error_message = HumanMessage(content=f"Tool execution failed: {str(e)}")
                 state["messages"] = state["messages"] + [error_message]
                 return state
@@ -184,8 +184,8 @@ class WorkflowBuilder:
                 break
         
         if not tool_to_call:
-            error_msg = f"Error: Tool '{tool_name}' not found."
-            logger.warning(f"⚠️ Tool '{tool_name}' not found in available tools")
+            error_msg = "Error: Tool '%s' not found." % tool_name
+            logger.warning("⚠️ Tool '%s' not found in available tools", tool_name)
             return error_msg
         
         try:
@@ -205,9 +205,9 @@ class WorkflowBuilder:
             else:
                 result = await tool_to_call.ainvoke(tool_params)
             
-            logger.info(f"⚙️ Tool '{tool_name}' with parameters: {tool_params} executed successfully")
+            logger.info("⚙️ Tool '%s' with parameters: %s executed successfully", tool_name, tool_params)
             return result
             
         except Exception as tool_error:
-            logger.error(f"❌ Tool '{tool_name}' execution failed: {tool_error}")
-            return f"Error executing tool '{tool_name}': {str(tool_error)}"
+            logger.error("❌ Tool '%s' execution failed: %s", tool_name, tool_error)
+            return "Error executing tool '%s': %s" % (tool_name, str(tool_error))

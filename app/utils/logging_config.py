@@ -211,7 +211,7 @@ def setup_logging(
     level: str = "INFO",
     use_json: bool = False,
     log_file: Optional[str] = None,
-    service_name: str = "ai-explorer",
+    service_name: str = "api",
     use_colors: Optional[bool] = None
 ) -> bool:
     """
@@ -278,7 +278,7 @@ def setup_logging(
             # Use Rich handler for colored console output (only in development)
             console = Console(
                 stderr=False,  # Use stdout
-                force_terminal=True,
+                force_terminal=False, # Avoid performance issues
                 color_system="auto",
                 width=None  # Auto-detect width
             )
@@ -389,11 +389,11 @@ def setup_logging(
             format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
-        logging.error(f"Failed to setup advanced logging configuration: {e}")
+        logging.error("Failed to setup advanced logging configuration: %s", e)
         return False
 
 
-def get_logger(name: str, service_name: str = "ai-explorer") -> logging.Logger:
+def get_logger(name: str, service_name: str = "api") -> logging.Logger:
     """
     Get a logger instance with the specified name.
     
@@ -416,11 +416,11 @@ def get_logger(name: str, service_name: str = "ai-explorer") -> logging.Logger:
 
 
 # Convenience functions for different service types
-def get_service_logger(service_name: str, app_name: str = "ai-explorer") -> logging.Logger:
+def get_service_logger(service_name: str, app_name: str = "api") -> logging.Logger:
     """Get a logger for a service."""
     return logging.getLogger(f"{app_name}.services.{service_name}")
 
 
-def get_api_logger(endpoint_name: str, app_name: str = "ai-explorer") -> logging.Logger:
+def get_api_logger(endpoint_name: str, app_name: str = "api") -> logging.Logger:
     """Get a logger for an API endpoint."""
     return logging.getLogger(f"{app_name}.api.{endpoint_name}")

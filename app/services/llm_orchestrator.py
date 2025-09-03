@@ -120,15 +120,15 @@ class LLMOrchestrator:
         
         if continue_from_message_id:
             # Continue from message case - load conversation history only
-            logger.info(f"➡️ Continue from message {continue_from_message_id} requested for session {session_id}")
+            logger.info("➡️ Continue from message %s requested for session %s", continue_from_message_id, session_id)
             try:
                 chat_history = self.chat_service.get_conversation_history(db, session_id, continue_from_message_id=continue_from_message_id)
                 if chat_history:
                     historical_messages = MessageConverter.chat_messages_to_langgraph_messages(chat_history)
                     messages.extend(historical_messages)
-                    logger.info(f"📜 Loaded {len(historical_messages)} messages from database for continue from message {continue_from_message_id}")
+                    logger.info("📜 Loaded %s messages from database for continue from message %s", len(historical_messages), continue_from_message_id)
             except Exception as e:
-                logger.warning(f"⚠️ Could not load conversation history for continue: {e}")
+                logger.warning("⚠️ Could not load conversation history for continue: %s", e)
         else:
             # Regular query - load conversation history and add new query
             try:
@@ -136,9 +136,9 @@ class LLMOrchestrator:
                 if chat_history:
                     historical_messages = MessageConverter.chat_messages_to_langgraph_messages(chat_history)
                     messages.extend(historical_messages)
-                    logger.info(f"📜 Loaded {len(historical_messages)} messages from database for session {session_id}")
+                    logger.info("📜 Loaded %s messages from database for session %s", len(historical_messages), session_id)
             except Exception as e:
-                logger.warning(f"⚠️ Could not load conversation history for session {session_id}: {e}")
+                logger.warning("⚠️ Could not load conversation history for session %s: %s", session_id, e)
             
             # Add the new query as the latest message
             if query:
@@ -205,12 +205,11 @@ class LLMOrchestrator:
                 state["total_output_cost"] = output_cost
                 state["total_cost"] = total_cost
                 
-                logger.info(f"💰 Cost calculation - Input: {input_tokens} tokens (${input_cost:.6f}), "
-                           f"Output: {output_tokens} tokens (${output_cost:.6f}), "
-                           f"Total: ${total_cost:.6f}")
+                logger.info("💰 Cost calculation - Input: %d tokens ($%.6f), Output: %d tokens ($%.6f), Total: $%.6f", 
+                           input_tokens, input_cost, output_tokens, output_cost, total_cost)
                 
             except Exception as e:
-                logger.error(f"❌ Error calculating token costs: {e}")
+                logger.error("❌ Error calculating token costs: %s", e)
                 # Set costs to 0 if calculation fails
                 state["total_input_cost"] = 0.0
                 state["total_output_cost"] = 0.0
@@ -229,7 +228,7 @@ class LLMOrchestrator:
                 raise ImportError("Checkpointer not initialized. Ensure the application has started properly.")
             return checkpointer
         except ImportError as e :
-            raise ImportError(f"Checkpointer not found: {e}")
+            raise ImportError("Checkpointer not found: %s" % e)
 
     async def stream_llm_response(
         self, 
@@ -316,7 +315,7 @@ class LLMOrchestrator:
                             # Get the actual workflow state from channel_values
                             channel_values = existing_state.checkpoint.get('channel_values', {})
                             if not channel_values or 'messages' not in channel_values:
-                                logger.warning(f"⚠️ No messages found in existing state for session: {session_id}, starting new session")
+                                logger.warning("⚠️ No messages found in existing state for session: %s, starting new session", session_id)
                                 state = self._create_initial_state(query, account_id, session_id, db, continue_from_message_id)
                             else:
                                 state = dict(channel_values)
@@ -375,9 +374,9 @@ class LLMOrchestrator:
         except ValidationError:
             raise
         except LangChainException as e:
-            logger.error(f"❌ LangChain error during streaming: {e}", exc_info=True)
+            logger.error("❌ LangChain error during streaming: %s", e, exc_info=True)
             raise LLMServiceError("The AI service is currently unavailable. Please try again in a moment.") from e
         except Exception as e:
-            logger.error(f"❌ Unexpected error during LLM streaming: {e}", exc_info=True)
+            logger.error("❌ Unexpected error during LLM streaming: %s", e, exc_info=True)
             raise LLMServiceError("The AI service encountered an unexpected error. Please try again in a moment.") from e
 

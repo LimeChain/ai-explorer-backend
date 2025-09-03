@@ -20,7 +20,7 @@ try:
     redis_client.ping()
     logger.info("✅ Redis connection established successfully")
 except redis.ConnectionError as e:
-    logger.error(f"❌ Failed to connect to Redis: {e}")
+    logger.error("❌ Failed to connect to Redis: %s", e)
     raise
 
 
@@ -72,7 +72,7 @@ class GlobalRateLimiter:
             )
             
             if result == 0:
-                logger.warning(f"🚨 Global rate limit exceeded: {self.max_requests} requests per {self.window_seconds}s")
+                logger.warning("🚨 Global rate limit exceeded: %s requests per %ss", self.max_requests, self.window_seconds)
                 return False
             
             return True
@@ -138,7 +138,7 @@ class IPRateLimiter:
         # Normalize IP address (handle IPv4 and IPv6)
         normalized_ip = real_ip[:45] if real_ip else "unknown"
         
-        logger.info(f"🔍 Rate limiting based on IP: {normalized_ip}")
+        logger.info("🔍 Rate limiting based on IP: %s", normalized_ip)
         
         # Create secure IP-only hash
         return hashlib.sha256(normalized_ip.encode()).hexdigest()[:32]
@@ -165,7 +165,7 @@ class IPRateLimiter:
             )
             
             if result == 0:
-                logger.warning(f"🚨 Per-IP rate limit exceeded for {identifier[:8]}...")
+                logger.warning("🚨 Per-IP rate limit exceeded for %s...", identifier[:8])
                 return False
             
             return True

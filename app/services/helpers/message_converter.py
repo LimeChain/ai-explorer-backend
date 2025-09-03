@@ -33,6 +33,6 @@ class MessageConverter:
                 # Log warning but skip unknown roles
                 import logging
                 logger = logging.getLogger(__name__)
-                logger.warning(f"⚠️ Unknown message role: {chat_msg.role}, skipping message")
+                logger.warning("⚠️ Unknown message role: %s, skipping message", chat_msg.role)
         
         return langgraph_messages

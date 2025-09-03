@@ -26,7 +26,7 @@ class SuggestionDBOperations:
     ) -> List[SuggestedQueryModel]:
         """Retrieve suggested queries by context from database."""
         try:
-            logger.info(f"Retrieving suggestions for context: {context}, limit: {limit}")
+            logger.info("Retrieving suggestions for context: %s, limit: %s", context, limit)
             
             suggestions = db.query(SuggestedQueryModel)\
                            .filter(SuggestedQueryModel.context == context)\
@@ -34,12 +34,12 @@ class SuggestionDBOperations:
                            .limit(limit)\
                            .all()
             
-            logger.info(f"✅ Retrieved {len(suggestions)} suggestions for context: {context}")
+            logger.info("✅ Retrieved %s suggestions for context: %s", len(suggestions), context)
             return suggestions
             
         except SQLAlchemyError as e:
-            logger.error(f"❌ Database error retrieving suggestions: {e}")
+            logger.error("❌ Database error retrieving suggestions: %s", e)
             raise SuggestionServiceError("Database error occurred while retrieving suggestions", e) from e
         except Exception as e:
-            logger.error(f"❌ Unexpected error retrieving suggestions: {e}")
+            logger.error("❌ Unexpected error retrieving suggestions: %s", e)
             raise SuggestionServiceError("Unexpected error occurred while retrieving suggestions", e) from e

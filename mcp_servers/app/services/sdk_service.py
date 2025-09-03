@@ -25,7 +25,7 @@ class HederaSDKService:
         """Initialize the SDK service with configuration."""
         try:
             self.client = MirrorNodeClient.for_network(network)
-            logger.info(f"Initialized Hedera SDK service for {network}")
+            logger.info("Initialized Hedera SDK service for %s", network)
         except Exception as e:
             logger.error("❌ Failed to initialize Hedera SDK service", exc_info=True, extra={
                 "network": network
@@ -45,7 +45,7 @@ class HederaSDKService:
         """
         import time
         start_time = time.time()
-        logger.info(f"🌐 Mirror API: {method_name}", extra={"params": list(kwargs.keys())})
+        logger.info("🌐 Mirror API: %s", method_name, extra={"params": list(kwargs.keys())})
         
         try:
             # Validate method exists
@@ -69,17 +69,17 @@ class HederaSDKService:
             
             # Process and filter parameters
             filtered_kwargs = self._process_parameters(kwargs)
-            logger.debug(f"⚙️ Processed parameters: {filtered_kwargs}")
+            logger.debug("⚙️ Processed parameters: %s", filtered_kwargs)
             
             # Execute method
-            logger.debug(f"🚀 Executing {method_name} with parameters: {filtered_kwargs}")
+            logger.debug("🚀 Executing %s with parameters: %s", method_name, filtered_kwargs)
             if inspect.iscoroutinefunction(method):
                 result = await method(**filtered_kwargs)
             else:
                 result = method(**filtered_kwargs)
             
             response_time = round((time.time() - start_time) * 1000, 2)
-            logger.info(f"✅ {method_name}", extra={"response_time_ms": response_time, "result_size": len(str(result)) if result else 0})
+            logger.info("✅ %s", method_name, extra={"response_time_ms": response_time, "result_size": len(str(result)) if result else 0})
             
             return {
                 "success": True,
@@ -133,9 +133,9 @@ class HederaSDKService:
                         if isinstance(parsed_kwargs, dict):
                             filtered_kwargs.update(parsed_kwargs)
                         else:
-                            logger.warning(f"⚠️ Parsed kwargs is not a dict: {parsed_kwargs}")
+                            logger.warning("⚠️ Parsed kwargs is not a dict: %s", parsed_kwargs)
                     except json.JSONDecodeError as e:
-                        logger.error(f"❌ Failed to parse kwargs JSON '{v}': {e}")
+                        logger.error("❌ Failed to parse kwargs JSON '%s': %s", v, e)
                         raise
             elif k != "kwargs" and v is not None and v != "":
                 filtered_kwargs[k] = v

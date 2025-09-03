@@ -31,7 +31,7 @@ class DocumentProcessor:
             collection_exists = self.vector_store.check_index_exists()
             
             if not collection_exists:
-                logger.info(f"Building vector collection from {documentation_path}")
+                logger.info("Building vector collection from %s", documentation_path)
                 
                 self.vector_store.load_methods_from_documentation(documentation_path)
             else:
@@ -41,7 +41,7 @@ class DocumentProcessor:
             logger.info("Document processor initialization completed")
             
         except Exception as e:
-            logger.error(f"Failed to initialize document processor: {e}")
+            logger.error("Failed to initialize document processor: %s", e)
             raise
     
     def search_methods(self, query: str, k: int = 3, category_filter: Optional[str] = None) -> Dict[str, Any]:
@@ -70,7 +70,7 @@ class DocumentProcessor:
             }
             
         except Exception as e:
-            logger.error(f"Method search failed for query '{query}': {e}")
+            logger.error("Method search failed for query '%s': %s", query, e)
             return {
                 "query": query,
                 "error": str(e),

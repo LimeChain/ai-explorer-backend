@@ -278,7 +278,7 @@ def setup_logging(
             # Use Rich handler for colored console output (only in development)
             console = Console(
                 stderr=False,  # Use stdout
-                force_terminal=True,
+                force_terminal=False, # Avoid performance issues
                 color_system="auto",
                 width=None  # Auto-detect width
             )
@@ -389,7 +389,7 @@ def setup_logging(
             format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
-        logging.error(f"Failed to setup advanced logging configuration: {e}")
+        logging.error("Failed to setup advanced logging configuration: %s", e)
         return False
 
 

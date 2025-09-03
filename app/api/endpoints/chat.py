@@ -213,11 +213,11 @@ async def websocket_chat(
                     return
                 # Log account context for traceability  
                 if chat_request.account_id:
-                    logger.info(f"Processing request with account_id={chat_request.account_id}")
+                    logger.info("Processing request with account_id=%s", chat_request.account_id)
                 
                 # For continue_from_message, query can be empty; for regular queries it's required
                 if not chat_request.query and message_type == "query":
-                    logger.warning(f"No user message found in request for session {session_id}")
+                    logger.warning("No user message found in request for session %s", session_id)
                     await websocket.send_text(json.dumps({
                         "error": "No user message found in request"
                     }))
@@ -225,7 +225,7 @@ async def websocket_chat(
                     return
                 
                 if not chat_request.network:
-                    logger.warning(f"No network found in request for session {session_id}")
+                    logger.warning("No network found in request for session %s", session_id)
                     await websocket.send_text(json.dumps({
                         "error": "No network found in request"
                     }))
@@ -254,7 +254,7 @@ async def websocket_chat(
                         if actual_cost > 0:
                             # Record cost using separate cost limiter
                             cost_limiter.record_cost(websocket, actual_cost)
-                            logger.info(f"Recorded actual cost for session {session_id}: ${actual_cost:.6f}")
+                            logger.info("Recorded actual cost for session %s: $%.6f", session_id, actual_cost)
 
                     try:
                         async for token in llm_orchestrator.stream_llm_response(
@@ -295,20 +295,20 @@ async def websocket_chat(
                         db.commit()
                         
                     except asyncio.CancelledError:
-                        logger.info(f"🚫 Flow cancelled for session {session_id}")
+                        logger.info("🚫 Flow cancelled for session %s", session_id)
                         raise
                     except (ValidationError, ChatServiceError) as e:
-                        logger.error(f"Service error for session {session_id}: {e}")
+                        logger.error("Service error for session %s: %s", session_id, e)
                         await websocket.send_text(json.dumps({
                             "error": f"Service error: {str(e)}"
                         }))
                     except LLMServiceError as e:
-                        logger.error(f"LLM service error for session {session_id}: {e}")
+                        logger.error("LLM service error for session %s: %s", session_id, e)
                         await websocket.send_text(json.dumps({
                             "error": "AI service temporarily unavailable. Please try again."
                         }))
                     except Exception as e:
-                        logger.error(f"Unexpected error processing message for session {session_id}: {e}")
+                        logger.error("Unexpected error processing message for session %s: %s", session_id, e)
                         await websocket.send_text(json.dumps({
                             "error": "Internal server error"
                         }))
@@ -317,22 +317,22 @@ async def websocket_chat(
                 active_flow_task = asyncio.create_task(run_flow_and_stream())
                 
             except json.JSONDecodeError as e:
-                logger.warning(f"Invalid JSON received for session {session_id}: {e}")
+                logger.warning("Invalid JSON received for session %s: %s", session_id, e)
                 await websocket.send_text(json.dumps({
                     "error": "Invalid JSON format"
                 }))
             except (ValidationError, ChatServiceError) as e:
-                logger.error(f"Service error for session {session_id}: {e}")
+                logger.error("Service error for session %s: %s", session_id, e)
                 await websocket.send_text(json.dumps({
                     "error": f"Service error"
                 }))
             except LLMServiceError as e:
-                logger.error(f"LLM service error for session {session_id}: {e}")
+                logger.error("LLM service error for session %s: %s", session_id, e)
                 await websocket.send_text(json.dumps({
                     "error": "AI service temporarily unavailable. Please try again."
                 }))
             except Exception as e:
-                logger.error(f"Unexpected error processing message for session {session_id}: {e}")
+                logger.error("Unexpected error processing message for session %s: %s", session_id, e)
                 await websocket.send_text(json.dumps({
                     "error": "Internal server error"
                 }))

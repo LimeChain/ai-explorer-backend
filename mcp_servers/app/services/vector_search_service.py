@@ -61,14 +61,14 @@ class VectorSearchService:
                     "pool_timeout": settings.database_pool_timeout,
                 }
             )
-            logger.info(f"Vector store initialized with collection: {self.collection_name}")
+            logger.info("Vector store initialized with collection: %s", self.collection_name)
             
         except RuntimeError:
             # Re-raise RuntimeError with pgVector installation message
             logger.error("RuntimeError during vector store initialization - check pgVector installation")
             raise
         except Exception as e:
-            logger.error(f"Failed to initialize vector store: {e}")
+            logger.error("Failed to initialize vector store: %s", e)
             raise RuntimeError(f"Vector store initialization failed: {e}") from e
     
     def add_documents(self, documents: List[Document]):
@@ -83,9 +83,9 @@ class VectorSearchService:
         
         try:
             self.vector_store.add_documents(documents)
-            logger.info(f"Successfully added {len(documents)} documents to vector store")
+            logger.info("Successfully added %d documents to vector store", len(documents))
         except Exception as e:
-            logger.error(f"Failed to add documents to vector store: {e}")
+            logger.error("Failed to add documents to vector store: %s", e)
             raise
     
     def load_documentation(self, documentation_path: str):
@@ -99,7 +99,7 @@ class VectorSearchService:
             # Load methods from file using text processor
             methods = self.text_processor.load_methods_from_file(documentation_path)
             
-            logger.info(f"Loading {len(methods)} methods into vector store")
+            logger.info("Loading %d methods into vector store", len(methods))
             
             # Create documents using text processor
             documents = self.text_processor.create_documents(methods)
@@ -107,10 +107,10 @@ class VectorSearchService:
             # Add documents to vector store
             self.add_documents(documents)
             
-            logger.info(f"Successfully loaded {len(documents)} methods into vector store")
+            logger.info("Successfully loaded %d methods into vector store", len(documents))
             
         except Exception as e:
-            logger.error(f"Failed to load methods from documentation: {e}")
+            logger.error("Failed to load methods from documentation: %s", e)
             raise
     
     def similarity_search(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
@@ -149,11 +149,11 @@ class VectorSearchService:
                 }
                 retrieved_methods.append(method_info)
             
-            logger.info(f"Retrieved {len(retrieved_methods)} methods for query: '{query}'")
+            logger.info("Retrieved %d methods for query: '%s'", len(retrieved_methods), query)
             return retrieved_methods
             
         except Exception as e:
-            logger.error(f"Failed to retrieve methods for query '{query}': {e}")
+            logger.error("Failed to retrieve methods for query '%s': %s", query, e)
             raise
     
     def check_collection_exists(self) -> bool:

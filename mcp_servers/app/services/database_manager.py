@@ -127,9 +127,9 @@ class DatabaseManager:
             # Collection creation is typically handled by PGVector
             # during vector store initialization. This method is a placeholder
             # for future manual collection management if needed.
-            logger.info(f"Collection creation for '{collection_name}' delegated to PGVector")
+            logger.info("Collection creation for '%s' delegated to PGVector", collection_name)
             return True
             
         except Exception as e:
-            logger.error(f"Error creating collection '{collection_name}': {e}")
+            logger.error("Error creating collection '%s': %s", collection_name, e)
             return False

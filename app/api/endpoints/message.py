@@ -136,7 +136,7 @@ def feedback(
         # Re-raise HTTPExceptions (like 404) without modification
         raise
     except Exception as e:
-        logger.error(f"❌ Unexpected error saving feedback: {e}", exc_info=True)
+        logger.error("❌ Unexpected error saving feedback: %s", e, exc_info=True)
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -218,19 +218,19 @@ async def edit_message(
         )
         
     except ValidationError as e:
-        logger.warning(f"⚠️ Validation error editing message {message_id}: {e}")
+        logger.warning("⚠️ Validation error editing message %s: %s", message_id, e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except ChatServiceError as e:
-        logger.error(f"❌ Service error editing message {message_id}: {e}")
+        logger.error("❌ Service error editing message %s: %s", message_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to edit message"
         )
     except Exception as e:
-        logger.error(f"❌ Unexpected error editing message {message_id}: {e}", exc_info=True)
+        logger.error("❌ Unexpected error editing message %s: %s", message_id, e, exc_info=True)
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

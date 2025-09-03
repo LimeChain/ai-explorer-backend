@@ -12,7 +12,7 @@ if __name__ == "__main__":
         logger.info("🚀 Starting MCP server")
         mcp.settings.port = 8001
         mcp.settings.host = "0.0.0.0"  # Bind to all interfaces for Docker
-        logger.info(f"⚙️ Server configured to run on {mcp.settings.host}:{mcp.settings.port}")
+        logger.info("⚙️ Server configured to run on %s:%s", mcp.settings.host, mcp.settings.port)
         mcp.run(transport="streamable-http")
     except Exception as e:
         logger.error("❌ Failed to start MCP server", exc_info=True)

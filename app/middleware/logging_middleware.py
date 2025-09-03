@@ -51,16 +51,23 @@ async def correlation_id_middleware(request: Request, call_next: Callable) -> Re
     if hasattr(response, 'headers'):
         response.headers["x-correlation-id"] = get_correlation_id()
     
-    # Log response
-    logger.info(
-        "Request completed",
-        extra={
-            "method": request.method,
-            "path": str(request.url.path),
-            "status_code": response.status_code if hasattr(response, 'status_code') else None,
-            "process_time_seconds": round(process_time, 4),
-            "response_size_bytes": len(response.body) if hasattr(response, 'body') and response.body else None,
-        }
-    )
+    response_info = {
+        "method": request.method,
+        "path": str(request.url.path),
+        "status_code": response.status_code if hasattr(response, 'status_code') else None,
+        "process_time_seconds": round(process_time, 4),
+    }
+    
+    # Add response size info only if available without loading body
+    if hasattr(response, 'headers'):
+        content_length = response.headers.get("content-length")
+        if content_length:
+            response_info["response_size_bytes"] = int(content_length)
+    
+    # Identify streaming responses
+    if isinstance(response, StreamingResponse):
+        response_info["response_type"] = "streaming"
+    
+    logger.info("Request completed", extra=response_info)
     
     return response
