@@ -1,6 +1,11 @@
 """Asynchronous client for Hiero Mirror Node REST API."""
 
 import asyncio
+import logging
+import time
+
+from timeit import default_timer as timer
+
 from typing import Dict, List, Optional, AsyncIterator, Any
 from urllib.parse import parse_qs
 import httpx
@@ -16,6 +21,12 @@ from .utils import (
     extract_next_link,
 )
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+FULL_PAGE_SIZE = 100
+FALLBACK_DAYS = 60
+SECONDS_PER_DAY = 24 * 60 * 60
 
 class AsyncMirrorNodeClient:
     """Asynchronous client for Hiero Mirror Node REST API."""
@@ -23,6 +34,7 @@ class AsyncMirrorNodeClient:
     def __init__(
         self,
         base_url: str,
+        request_timeout: int,
         timeout: float = 30.0,
         retry_attempts: int = 3,
         retry_delay: float = 1.0,
@@ -42,6 +54,7 @@ class AsyncMirrorNodeClient:
             headers: Additional headers to include in requests
         """
         self.base_url = base_url.rstrip("/")
+        self.request_timeout = request_timeout
         self.timeout = timeout
         self.retry_attempts = retry_attempts
         self.retry_delay = retry_delay
@@ -71,6 +84,12 @@ class AsyncMirrorNodeClient:
     async def close(self) -> None:
         """Close the HTTP client."""
         await self._client.aclose()
+
+
+    @classmethod
+    def for_network(cls, network: str, **kwargs) -> "AsyncMirrorNodeClient":
+        """Create an async client for a specific network."""
+        return cls(get_network_urls()[network], **kwargs)
 
     @classmethod
     def for_mainnet(cls, **kwargs) -> "AsyncMirrorNodeClient":
@@ -745,7 +764,7 @@ class AsyncMirrorNodeClient:
 
     async def get_transactions(
         self,
-        account_id: Optional[str] = None,
+        account_id: str,
         limit: Optional[int] = None,
         order: Optional[str] = None,
         timestamp: Optional[str] = None,
@@ -753,32 +772,82 @@ class AsyncMirrorNodeClient:
         result: Optional[str] = None,
         type: Optional[str] = None,
     ) -> TransactionsResponse:
-        """Get transactions.
-
-        Args:
-            account_id: Filter by account ID
-            limit: Maximum number of results
-            order: Sort order (asc/desc)
-            timestamp: Filter by timestamp
-            transaction_type: Filter by transaction type
-            result: Filter by result (success/fail)
-            type: Filter by type (credit/debit)
-
-        Returns:
-            TransactionsResponse with transaction information
-        """
+        """Get all transactions of an account with manual timestamp-based pagination."""
         params = build_query_params(
             account_id=account_id,
-            limit=validate_limit(limit),
+            limit=limit,
             order=normalize_order(order),
             timestamp=timestamp,
             transactiontype=transaction_type,
             result=result,
             type=type,
         )
+        # Get first page
+        response = await self._get(f"/api/v1/transactions", params)
+        all_transactions = response.get('transactions', [])
         
-        response = await self._get("/api/v1/transactions", params)
-        return self._parse_response(response, TransactionsResponse)
+        # Manual pagination using consensus_timestamp
+        start_time = timer()
+        timeout_seconds = self.request_timeout
+        page_count = 1
+        last_used_timestamp = None  # Track the last timestamp we used
+
+        
+        # Continue while there are transactions in the response
+        while response.get('links', {}).get('next'):
+            # Check timeout
+            elapsed_time = timer() - start_time
+            if elapsed_time >= timeout_seconds:
+                logger.warning(f"Pagination timeout reached after {elapsed_time:.2f} seconds")
+                break
+            
+            current_transaction_count = len(response.get('transactions', []))
+            
+            if current_transaction_count == FULL_PAGE_SIZE:
+                # Full page - use last transaction's timestamp
+                last_transaction = response['transactions'][-1]
+                last_timestamp = last_transaction['consensus_timestamp']
+                next_timestamp = f"lt:{last_timestamp}"
+                logger.info(f"Page {page_count}: Full page ({current_transaction_count} results), using timestamp: {last_timestamp}")
+            else:
+                if last_used_timestamp is None:
+                    # First time - use current time as fallback
+                    current_epoch = time.time()
+                    fallback_seconds = FALLBACK_DAYS * SECONDS_PER_DAY
+                    fallback_epoch = current_epoch - fallback_seconds
+                    logger.info(f"Page {page_count}: First partial page, using current time - {FALLBACK_DAYS} days: {fallback_epoch}")
+                else:
+                    # Subsequent times - use last used timestamp - 60 days
+                    last_timestamp = float(last_used_timestamp)
+                    fallback_seconds = FALLBACK_DAYS * SECONDS_PER_DAY
+                    fallback_epoch = last_timestamp - fallback_seconds
+                    logger.info(f"Page {page_count}: Subsequent partial page, using last timestamp - {FALLBACK_DAYS} days: {fallback_epoch}")
+                
+                fallback_timestamp = f"{fallback_epoch:.9f}"
+                next_timestamp = f"lt:{fallback_timestamp}"
+                last_used_timestamp = fallback_timestamp  # Update our tracker
+                logger.info(f"Page {page_count}: Partial page ({current_transaction_count} results), using {FALLBACK_DAYS}-day fallback: {fallback_timestamp}")
+            
+            # Construct next page parameters
+            next_params = params.copy()
+            next_params['timestamp'] = next_timestamp
+            
+            # Get next page
+            next_response = await self._get(f"/api/v1/transactions", next_params)
+            next_transactions = next_response.get('transactions', [])
+            
+            # Append transactions from this page
+            all_transactions.extend(next_transactions)
+            # Update response for next iteration
+            response = next_response
+            page_count += 1
+        
+        # Create final response with all transactions
+        final_response = response.copy()
+        final_response['transactions'] = all_transactions
+        
+        logger.info(f"Total transactions collected: {len(all_transactions)} from {page_count} pages")
+        return self._parse_response(final_response, TransactionsResponse)
 
     async def get_transaction(
         self,

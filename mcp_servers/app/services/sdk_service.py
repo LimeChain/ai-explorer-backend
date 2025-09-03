@@ -6,6 +6,7 @@ import inspect
 from typing import Any, Dict
 
 from hiero_mirror import MirrorNodeClient
+from hiero_mirror.async_client import AsyncMirrorNodeClient
 from ..logging_config import get_service_logger
 from ..exceptions import (
     SDKError, 
@@ -21,16 +22,9 @@ logger = get_service_logger("sdk_service", "mcp")
 class HederaSDKService:
     """Service wrapper for dynamic Hedera Mirror Node SDK method calling."""
     
-    def __init__(self, network: str):
+    def __init__(self, client: AsyncMirrorNodeClient | MirrorNodeClient):
         """Initialize the SDK service with configuration."""
-        try:
-            self.client = MirrorNodeClient.for_network(network)
-            logger.info("Initialized Hedera SDK service for %s", network)
-        except Exception as e:
-            logger.error("❌ Failed to initialize Hedera SDK service", exc_info=True, extra={
-                "network": network
-            })
-            raise ConfigurationError(f"Failed to initialize Hedera SDK service: {e}", "hedera_network") from e
+        self.client = client
     
     async def call_method(self, method_name: str, **kwargs) -> Dict[str, Any]:
         """

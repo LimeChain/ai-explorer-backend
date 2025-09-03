@@ -111,5 +111,8 @@ class Settings(BaseSettings):
     global_cost_limit: float = Field(..., ge=0, description="Max total cost across all users per period in USD")
     global_cost_period_seconds: int = Field(..., ge=1, description="Global cost limit period in seconds (31536000 = 1 year)")
 
+    # Global
+    request_timeout: int = Field(default=5, description="Request timeout in seconds")
+
 # Global settings instance
 settings = Settings()
