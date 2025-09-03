@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ai-explorer-postgres
+    environment:
+      POSTGRES_DB: ai_explorer
+      POSTGRES_USER: ai_explorer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ai_explorer}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_explorer -d ai_explorer"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-explorer-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  api:
+    build: .
+    container_name: ai-explorer-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mcp-server:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT}
+      LOG_LEVEL: ${LOG_LEVEL}
+      LLM_PROVIDER: ${LLM_PROVIDER}
+      LLM_MODEL: ${LLM_MODEL}
+      LLM_API_KEY: ${LLM_API_KEY}
+      MCP_ENDPOINT: ${MCP_ENDPOINT}
+      DATABASE_URL: ${DATABASE_URL}
+      COLLECTION_NAME: ${COLLECTION_NAME}
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING}
+      LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    working_dir: /app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: mcp_servers/Dockerfile
+    container_name: ai-explorer-mcp-server
+    environment:
+      ENVIRONMENT: development
+    ports:
+      - "8001:8001"
+    volumes:
+      - .:/app
+    working_dir: /app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(5); s.connect(('127.0.0.1', 8001)); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: ai-explorer-network
