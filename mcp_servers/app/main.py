@@ -48,9 +48,9 @@ def get_async_sdk_service(network: str) -> HederaSDKService:
     if network not in async_network_sdk_service:
       try:
         async_network_sdk_service[network] = HederaSDKService(client=AsyncMirrorNodeClient.for_network(network, request_timeout=settings.request_timeout))
-        logger.info("Async SDK service initialized successfully")
+        logger.info("✅ Async SDK service initialized successfully")
       except Exception as e:
-            logger.error("Failed to initialize SDK service", exc_info=True)
+            logger.error("❌ Failed to initialize async SDK service", exc_info=True)
             raise ServiceInitializationError("HederaSDKService", str(e), e)
     return async_network_sdk_service[network]
     

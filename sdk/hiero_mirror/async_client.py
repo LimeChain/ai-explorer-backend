@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 
 from timeit import default_timer as timer
 
@@ -22,6 +23,10 @@ from .utils import (
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+FULL_PAGE_SIZE = 100
+FALLBACK_DAYS = 60
+SECONDS_PER_DAY = 24 * 60 * 60
 
 class AsyncMirrorNodeClient:
     """Asynchronous client for Hiero Mirror Node REST API."""
@@ -798,7 +803,7 @@ class AsyncMirrorNodeClient:
             
             current_transaction_count = len(response.get('transactions', []))
             
-            if current_transaction_count == 100:
+            if current_transaction_count == FULL_PAGE_SIZE:
                 # Full page - use last transaction's timestamp
                 last_transaction = response['transactions'][-1]
                 last_timestamp = last_transaction['consensus_timestamp']
@@ -807,22 +812,21 @@ class AsyncMirrorNodeClient:
             else:
                 if last_used_timestamp is None:
                     # First time - use current time as fallback
-                    import time
                     current_epoch = time.time()
-                    sixty_days_in_seconds = 60 * 24 * 60 * 60
-                    fallback_epoch = current_epoch - sixty_days_in_seconds
-                    logger.info(f"Page {page_count}: First partial page, using current time - 60 days: {fallback_epoch}")
+                    fallback_seconds = FALLBACK_DAYS * SECONDS_PER_DAY
+                    fallback_epoch = current_epoch - fallback_seconds
+                    logger.info(f"Page {page_count}: First partial page, using current time - {FALLBACK_DAYS} days: {fallback_epoch}")
                 else:
                     # Subsequent times - use last used timestamp - 60 days
                     last_timestamp = float(last_used_timestamp)
-                    sixty_days_in_seconds = 60 * 24 * 60 * 60
-                    fallback_epoch = last_timestamp - sixty_days_in_seconds
-                    logger.info(f"Page {page_count}: Subsequent partial page, using last timestamp - 60 days: {fallback_epoch}")
+                    fallback_seconds = FALLBACK_DAYS * SECONDS_PER_DAY
+                    fallback_epoch = last_timestamp - fallback_seconds
+                    logger.info(f"Page {page_count}: Subsequent partial page, using last timestamp - {FALLBACK_DAYS} days: {fallback_epoch}")
                 
                 fallback_timestamp = f"{fallback_epoch:.9f}"
                 next_timestamp = f"lt:{fallback_timestamp}"
                 last_used_timestamp = fallback_timestamp  # Update our tracker
-                logger.info(f"Page {page_count}: Partial page ({current_transaction_count} results), using 60-day fallback: {fallback_timestamp}")
+                logger.info(f"Page {page_count}: Partial page ({current_transaction_count} results), using {FALLBACK_DAYS}-day fallback: {fallback_timestamp}")
             
             # Construct next page parameters
             next_params = params.copy()
