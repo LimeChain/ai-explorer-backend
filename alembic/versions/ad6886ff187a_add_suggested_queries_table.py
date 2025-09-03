@@ -58,6 +58,12 @@ def upgrade() -> None:
         {'id': '550e8400-e29b-41d4-a716-446655440003', 'query': 'Show me the last 3 transactions for account 0.0.5947117', 'context': 'ANONYMOUS', 'display_order': 3},
         {'id': '550e8400-e29b-41d4-a716-446655440004', 'query': 'Summarize the assets of 0.0.4904246', 'context': 'ANONYMOUS', 'display_order': 4},
         {'id': '550e8400-e29b-41d4-a716-446655440005', 'query': 'Did transaction 0.0.995584@1750920389.856235105 go through?', 'context': 'ANONYMOUS', 'display_order': 5},
+        # Connected queries
+        {'id': '550e8400-e29b-41d4-a716-446655440006', 'query': 'What tokens do I currently hold?', 'context': 'CONNECTED', 'display_order': 1},
+        {'id': '550e8400-e29b-41d4-a716-446655440007', 'query': 'Show me my last 3 transactions', 'context': 'CONNECTED', 'display_order': 2},
+        {'id': '550e8400-e29b-41d4-a716-446655440008', 'query': 'What is my last incoming crypto transfer?', 'context': 'CONNECTED', 'display_order': 3},
+        {'id': '550e8400-e29b-41d4-a716-446655440009', 'query': 'What is the total HBAR value of my wallet?', 'context': 'CONNECTED', 'display_order': 4},
+        {'id': '550e8400-e29b-41d4-a716-446655440010', 'query': 'Do I hold any NFTs?', 'context': 'CONNECTED', 'display_order': 5},
     ]
     
     op.bulk_insert(suggested_queries_table, seed_data)
