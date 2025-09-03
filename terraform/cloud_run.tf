@@ -178,7 +178,7 @@ resource "google_cloud_run_v2_service" "backend_api" {
 
       env {
         name  = "LANGSMITH_PROJECT"
-        value = var.app_name
+        value = "ai-explorer"
       }
 
       env {

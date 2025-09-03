@@ -17,6 +17,7 @@ resource "google_sql_database_instance" "postgres" {
     disk_size             = var.database_disk_size
     disk_autoresize       = true
     disk_autoresize_limit = 500
+    edition               = "ENTERPRISE"
 
     backup_configuration {
       enabled                        = true
