@@ -319,6 +319,10 @@ class LLMOrchestrator:
                                 state = self._create_initial_state(query, account_id, session_id, db, continue_from_message_id)
                             else:
                                 state = dict(channel_values)
+                                # If wallet address changes, update account_id to the new account_id
+                                if account_id and state.get("account_id") != account_id:
+                                    state["account_id"] = account_id
+                                    logger.info("Updated account_id in existing session", extra={"session_id": str(session_id), "new_account_id": account_id, "old_account_id": channel_values.get("account_id")})
                                 logger.info("🔄 Resuming session", extra={"session_id": str(session_id), "msgs": len(state.get('messages', [])), "tools": len(state.get('tool_calls_made', [])), "flow": "continue"})
                                 if query and not continue_from_message_id:  # Only add query if not continuing
                                     state["messages"].append(HumanMessage(content=query))
