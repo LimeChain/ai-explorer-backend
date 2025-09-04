@@ -8,6 +8,7 @@ from hiero_mirror.client import MirrorNodeClient
 from mcp.server.fastmcp import FastMCP
 
 from .services.sdk_service import HederaSDKService
+from .services.saucerswap_service import SaucerSwapService
 from .settings import settings
 from .logging_config import setup_logging, get_logger, set_correlation_id
 from .exceptions import (
@@ -243,18 +244,193 @@ def retrieve_sdk_method(query: str) -> Dict[str, Any]:
         })
         return handle_exception(e, {"correlation_id": correlation_id})
 
+
+# Helper functions for HBAR value calculations
+
+def normalize_hbar_amounts(hbar_amounts: Union[str, int, float, List[Union[str, int, float]]]) -> List[Union[str, int, float]]:
+    """
+    Normalize input to always return a list of amounts.
+    
+    Args:
+        hbar_amounts: Single amount or list of amounts
+        
+    Returns:
+        List of amounts
+        
+    Raises:
+        ValidationError: If input is invalid
+    """
+    if hbar_amounts is None:
+        raise ValidationError("hbar_amounts is required", "hbar_amounts", hbar_amounts)
+    
+    if isinstance(hbar_amounts, list):
+        if not hbar_amounts:
+            raise ValidationError("hbar_amounts list cannot be empty", "hbar_amounts", hbar_amounts)
+        return hbar_amounts
+    else:
+        return [hbar_amounts]
+
+
+def validate_hbar_amount(hbar_amount: Union[str, int, float]) -> int:
+    """
+    Validate and convert a single HBAR amount to tinybars.
+    
+    Args:
+        hbar_amount: Amount in tinybars (string, int, or float)
+        
+    Returns:
+        Validated amount as integer (tinybars)
+        
+    Raises:
+        ValidationError: If amount is invalid
+    """
+    try:
+        if isinstance(hbar_amount, str):
+            tinybar_amount = int(hbar_amount)
+        else:
+            tinybar_amount = int(hbar_amount)
+        
+        if tinybar_amount < 0:
+            raise ValidationError("HBAR amount cannot be negative", "hbar_amount", hbar_amount)
+            
+        return tinybar_amount
+        
+    except (ValueError, TypeError) as e:
+        raise ValidationError(f"Invalid HBAR amount format: {hbar_amount}", "hbar_amount", hbar_amount) from e
+
+
+def build_error_response(error_msg: str, hbar_amount: Union[str, int, float], correlation_id: str) -> Dict[str, Any]:
+    """
+    Build a standardized error response for a single calculation.
+    
+    Args:
+        error_msg: Error message
+        hbar_amount: Original amount that failed
+        correlation_id: Request correlation ID
+        
+    Returns:
+        Standardized error response dictionary
+    """
+    return {
+        "error": error_msg,
+        "hbar_amount": hbar_amount,
+        "success": False,
+        "correlation_id": correlation_id
+    }
+
+
+def build_success_response(
+    tinybar_amount: int, 
+    hbar_amount_actual: float, 
+    price_per_hbar: float, 
+    price_data: Dict[str, Any], 
+    correlation_id: str
+) -> Dict[str, Any]:
+    """
+    Build a standardized success response for a single calculation.
+    
+    Args:
+        tinybar_amount: Amount in tinybars (integer)
+        hbar_amount_actual: Amount in HBAR (float)
+        price_per_hbar: Current HBAR price in USD
+        price_data: Price data from SaucerSwap
+        correlation_id: Request correlation ID
+        
+    Returns:
+        Standardized success response dictionary
+    """
+    total_usd_value = hbar_amount_actual * price_per_hbar
+    
+    return {
+        "success": True,
+        "tinybar_amount": tinybar_amount,
+        "hbar_amount": round(hbar_amount_actual, 8),
+        "usd_value": round(total_usd_value, 2),
+        "price_per_hbar": round(price_per_hbar, 6),
+        "price_source_info": {
+            "source": price_data.get("source", "saucerswap"),
+            "token_info": price_data.get("token_info", {}),
+            "timestamp": price_data.get("timestamp")
+        },
+        "calculation_timestamp": price_data.get("timestamp"),
+        "correlation_id": correlation_id
+    }
+
+
+async def calculate_single_hbar_value(
+    hbar_amount: Union[str, int, float], 
+    price_data: Dict[str, Any], 
+    correlation_id: str
+) -> Dict[str, Any]:
+    """
+    Calculate USD value for a single HBAR amount.
+    
+    Args:
+        hbar_amount: Amount in tinybars
+        price_data: Price data from SaucerSwap API
+        correlation_id: Request correlation ID
+        
+    Returns:
+        Calculation result dictionary with success/error info
+    """
+    try:
+        # Validate the amount
+        tinybar_amount = validate_hbar_amount(hbar_amount)
+        
+        # Check if price data is valid
+        if not price_data.get("success", False):
+            return build_error_response(
+                f"Failed to fetch HBAR price: {price_data.get('error', 'Unknown error')}",
+                hbar_amount,
+                correlation_id
+            )
+        
+        # Extract price from SaucerSwap response
+        price_per_hbar = price_data.get("price_usd", 0)
+        if price_per_hbar <= 0:
+            return build_error_response(
+                "Invalid price data: price_usd is zero or negative",
+                hbar_amount,
+                correlation_id
+            )
+        
+        # Convert tinybars to HBAR (1 HBAR = 100,000,000 tinybars)
+        TINYBARS_PER_HBAR = 100000000
+        hbar_amount_actual = tinybar_amount / TINYBARS_PER_HBAR
+        
+        # Build success response
+        return build_success_response(
+            tinybar_amount, 
+            hbar_amount_actual, 
+            price_per_hbar, 
+            price_data, 
+            correlation_id
+        )
+        
+    except ValidationError as e:
+        return build_error_response(str(e), hbar_amount, correlation_id)
+        
+    except Exception as e:
+        logger.error("❌ Calculation failed for amount %s", hbar_amount, exc_info=True, extra={
+            "hbar_amount": hbar_amount,
+            "correlation_id": correlation_id
+        })
+        return build_error_response(f"Calculation failed: {str(e)}", hbar_amount, correlation_id)
+
+
 @mcp.tool()
 async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[str, int, float]]], network: str, timestamp: Union[str, int, float] = None) -> Dict[str, Any]:
     """
-    Calculate the USD value of HBAR tokens using current exchange rates.
+    Calculate the USD value of HBAR tokens using real-time SaucerSwap pricing.
     
-    This tool fetches the current HBAR exchange rate and calculates the equivalent
+    This tool fetches the current HBAR price from SaucerSwap API and calculates the equivalent
     USD value for the specified amount(s) in tinybars. 1 HBAR = 100,000,000 tinybars.
-    Accepts single amount or list of amounts.
+    Accepts single amount or list of amounts. Provides more up-to-date pricing than network exchange rates.
     
     Args:
         hbar_amounts: Single amount or list of amounts in tinybars to calculate USD values for (supports large integers)
-        timestamp: Optional Unix timestamp (epoch) to get historical exchange rates
+        network: Network parameter (maintained for compatibility, not used with SaucerSwap)
+        timestamp: Optional Unix timestamp (ignored - SaucerSwap provides real-time data only)
         
     Returns:
         Dict with "calculations" key mapping original amounts to calculation details,
@@ -263,168 +439,35 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
     Example usage:
         - calculate_hbar_value(hbar_amounts=150000000000) -> {"calculations": {"150000000000": {...}}, "count": 1, "success": True}
         - calculate_hbar_value(hbar_amounts=["1000000000000", 3000000000000]) -> {"calculations": {"1000000000000": {...}, "3000000000000": {...}}, "count": 2, "success": True}
-        - calculate_hbar_value(hbar_amounts=3000000000000, timestamp=1705276800) -> historical calculation for epoch timestamp
+        - calculate_hbar_value(hbar_amounts=3000000000000, timestamp=1705276800) -> timestamp ignored, uses current SaucerSwap price
     """
-    # Set correlation ID for request tracking
+    # Setup correlation ID for request tracking
     correlation_id = set_correlation_id()
     
-    # Input validation (defensive check even though parameter is required)
-    if hbar_amounts is None:
-        error_response = handle_exception(
-            ValidationError("hbar_amounts is required", "hbar_amounts", hbar_amounts),
-            {"correlation_id": correlation_id}
-        )
-        logger.warning("⚠️ Missing hbar_amounts parameter", extra={"correlation_id": correlation_id})
-        return error_response
-    
-    # Validate hbar_amounts format
-    if isinstance(hbar_amounts, list):
-        if not hbar_amounts:
-            error_response = handle_exception(
-                ValidationError("hbar_amounts list cannot be empty", "hbar_amounts", hbar_amounts),
-                {"correlation_id": correlation_id}
-            )
-            logger.warning("⚠️ Empty hbar_amounts list provided", extra={"correlation_id": correlation_id})
-            return error_response
-        hbar_amount_list = hbar_amounts
-    else:
-        hbar_amount_list = [hbar_amounts]
-    
-    # Validate timestamp if provided
-    if timestamp is not None:
-        try:
-            float(timestamp)
-        except (ValueError, TypeError):
-            error_response = handle_exception(
-                ValidationError("timestamp must be a valid number", "timestamp", timestamp),
-                {"correlation_id": correlation_id}
-            )
-            logger.warning("⚠️ Invalid timestamp provided", extra={"timestamp": timestamp, "correlation_id": correlation_id})
-            return error_response
-
-    async def calculate_single_hbar_value(hbar_amount, timestamp, correlation_id):
-        try:
-            # Validate individual hbar_amount
-            try:
-                if isinstance(hbar_amount, str):
-                    tinybar_amount = int(hbar_amount)
-                else:
-                    tinybar_amount = int(hbar_amount)
-                
-                if tinybar_amount < 0:
-                    return {
-                        "error": "HBAR amount cannot be negative",
-                        "hbar_amount": hbar_amount,
-                        "success": False,
-                        "correlation_id": correlation_id
-                    }
-                    
-            except (ValueError, TypeError):
-                return {
-                    "error": f"Invalid HBAR amount format: {hbar_amount}",
-                    "hbar_amount": hbar_amount,
-                    "success": False,
-                    "correlation_id": correlation_id
-                }
-            
-            if not exchange_rate_result.get("success", False):
-                return {
-                    "error": f"Failed to fetch exchange rate: {exchange_rate_result.get('error', 'Unknown error')}",
-                    "hbar_amount": hbar_amount,
-                    "success": False,
-                    "correlation_id": correlation_id
-                }
-            
-            # Extract exchange rate data from Pydantic model
-            data = exchange_rate_result.get("data")
-            if not data:
-                return {
-                    "error": "No exchange rate data available",
-                    "hbar_amount": hbar_amount,
-                    "success": False,
-                    "correlation_id": correlation_id
-                }
-            
-            # Access Pydantic model attributes directly
-            current_rate = data.current_rate
-            cent_equivalent = current_rate.cent_equivalent
-            hbar_equivalent = current_rate.hbar_equivalent
-            expiration_time = current_rate.expiration_time
-            
-            if hbar_equivalent == 0:
-                return {
-                    "error": "Invalid exchange rate data: hbar_equivalent is zero",
-                    "hbar_amount": hbar_amount,
-                    "success": False,
-                    "correlation_id": correlation_id
-                }
-            
-            # Convert tinybars to HBAR (1 HBAR = 100,000,000 tinybars)
-            TINYBARS_PER_HBAR = 100000000
-            hbar_amount_actual = tinybar_amount / TINYBARS_PER_HBAR
-            
-            # cent_equivalent is in cents, so divide by 100 to get dollars
-            rate_usd_value = cent_equivalent / 100
-            # Price per HBAR = (cent_equivalent / hbar_equivalent) / 100
-            price_per_hbar = (cent_equivalent / hbar_equivalent) / 100
-            # Total USD value = hbar_amount_actual * price_per_hbar
-            total_usd_value = hbar_amount_actual * price_per_hbar
-            
-            return {
-                "success": True,
-                "tinybar_amount": tinybar_amount,
-                "hbar_amount": round(hbar_amount_actual, 8),
-                "usd_value": round(total_usd_value, 2),
-                "price_per_hbar": round(price_per_hbar, 4),
-                "exchange_rate_info": {
-                    "cent_equivalent": cent_equivalent,
-                    "hbar_equivalent": hbar_equivalent,
-                    "rate_usd_value": round(rate_usd_value, 2),
-                    "expiration_time": expiration_time
-                },
-                "calculation_timestamp": data.timestamp,
-                "requested_timestamp": timestamp,
-                "correlation_id": correlation_id
-            }
-            
-        except Exception as e:
-            logger.error("❌ Calculation failed for amount %s", hbar_amount, exc_info=True, extra={
-                "hbar_amount": hbar_amount,
-                "correlation_id": correlation_id
-            })
-            return {
-                "error": f"Calculation failed: {str(e)}",
-                "hbar_amount": hbar_amount,
-                "success": False,
-                "correlation_id": correlation_id
-            }
-    
     try:
+        # 1. Normalize inputs (single amount -> list)
+        hbar_amount_list = normalize_hbar_amounts(hbar_amounts)
+        
         logger.info("💰 Calculating HBAR value for %d amount(s)", len(hbar_amount_list), extra={
             "amounts_count": len(hbar_amount_list),
-            "has_timestamp": timestamp is not None,
             "correlation_id": correlation_id
         })
         
+        # 2. Fetch current HBAR price from SaucerSwap (once for all calculations)
+        async with SaucerSwapService() as saucerswap:
+            hbar_price_result = await saucerswap.get_hbar_price(correlation_id)
+        
+        # 3. Calculate values for all amounts
         calculations = {}
         all_successful = True
-        exchange_rate_params = {}
-
-        if timestamp:
-            exchange_rate_params["timestamp"] = str(timestamp)
-
-        # Fetch exchange rate using SDK service
-        exchange_rate_result = await get_sdk_service(network).call_method(
-            "get_network_exchange_rate", **exchange_rate_params
-        )
-
+        
         for hbar_amount in hbar_amount_list:
-            result = await calculate_single_hbar_value(hbar_amount, timestamp, correlation_id)
-            key = str(hbar_amount)
-            calculations[key] = result
+            result = await calculate_single_hbar_value(hbar_amount, hbar_price_result, correlation_id)
+            calculations[str(hbar_amount)] = result
             if not result.get("success", False):
                 all_successful = False
-
+        
+        # 4. Build and return response
         final_result = {
             "calculations": calculations,
             "count": len(calculations),
@@ -440,16 +483,21 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
         
         return final_result
         
+    except ValidationError as e:
+        logger.warning("⚠️ Validation error in calculate_hbar_value", extra={
+            "error": str(e),
+            "correlation_id": correlation_id
+        })
+        return handle_exception(e, {"correlation_id": correlation_id})
+    
     except SDKError as e:
-        logger.error("❌ SDK error during HBAR value calculation", exc_info=True, extra={
-            "amounts_count": len(hbar_amount_list),
+        logger.error("❌ SaucerSwap API error during HBAR value calculation", exc_info=True, extra={
             "correlation_id": correlation_id
         })
         return handle_exception(e, {"correlation_id": correlation_id})
     
     except Exception as e:
         logger.error("❌ Unexpected error during HBAR value calculation", exc_info=True, extra={
-            "amounts_count": len(hbar_amount_list),
             "correlation_id": correlation_id
         })
         return handle_exception(e, {"correlation_id": correlation_id})

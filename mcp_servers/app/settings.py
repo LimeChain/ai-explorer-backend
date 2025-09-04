@@ -44,6 +44,19 @@ class MCPSettings(BaseSettings):
     )
 
     request_timeout: int = Field(default=5, description="Request timeout in seconds")
+    
+    # SaucerSwap API configuration
+    saucerswap_api_key: SecretStr = Field(
+        description="SaucerSwap API key for real-time token pricing"
+    )
+    saucerswap_base_url: str = Field(
+        default="https://api.saucerswap.finance",
+        description="Base URL for SaucerSwap API"
+    )
+    hbar_token_id: str = Field(
+        default="0.0.1456986",
+        description="HBAR token ID for SaucerSwap API calls"
+    )
 
 
 # Global settings instance
