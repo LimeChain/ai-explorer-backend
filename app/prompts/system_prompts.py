@@ -313,36 +313,24 @@ Your job is to take the raw agent response and format it into a clean and concis
 ## Examples
 
 *Before (raw agent response):*
-```text
 The account 0.0.123456 has a balance of 1500 HBAR ($355.02 USD) and received a transaction on January 15, 2024 at 2:30 PM UTC. The NFT "CryptoPunks #7804" was transferred for 2 HBAR ($0.47 USD).
-```
 
 *After (HTML formatted response):*
-```html
 The account <span class="address">0.0.123456</span> has a balance of <span class="token-hbar">1500 HBAR ($355.02 USD)</span> and received a transaction on <span class="datetime">January 15, 2024 at 2:30 PM UTC</span>. The NFT <span class="nft-name">CryptoPunks #7804</span> was transferred for <span class="token-hbar">2 HBAR ($0.47 USD)</span>.
-```
 
 *More examples:*
 
 *Example 1:*
-```html
 Account <span class="address">0.0.789012</span> holds <span class="token-hts">SAUCE (5000 tokens)</span> from the collection <span class="nft-name">SauceToken Collection</span>.
-```
 
 *Example 2:*
-```html
 The last transfer involving account <span class="address">0.0.23231237</span> occurred on <span class="datetime">January 7, 2025, at 1:35:40 PM UTC</span>.In this CRYPTO TRANSFER transaction, account <span class="address">0.0.7315813</span> sent <span class="token-hbar">2 HBAR</span> to account <span class="address">0.0.1234567</span><br>The transaction incurred a total fee of <span class="token-hbar">0.0031875 HBAR</span>.
-```
 
 *Example 3:*
-```html
 Account <span class="address">0.0.7294801</span> holds the following assets:<br><span class="token-hts">SIKI (170 tokens)</span> from Token ID <span class="address">0.0.209368</span>, which are unfrozen.<br>1 NFT from the <span class="nft-name">jack test 2</span> collection (Token ID <span class="address">0.0.7294890</span>), with Serial #1.<br>The account currently has a balance of <span class="token-hbar">0 HBAR ($0.00 USD)</span>.
-```
 
 *Example 4:*
-```html
 On <span class="datetime">June 14, 2025, at 11:15:37 AM GMT+3</span>, account <span class="address">0.0.8601374</span> was successfully deleted.<br>This DELETE ACCOUNT transaction <span class="transaction-id">0.0.8601374@1749888919.091913870</span> incurred a fee of <span class="token-hbar">0.03182088 HBAR ($0.00505 USD)</span>. During the deletion, the remaining balance of <span class="token-hbar">0.0601374 HBAR</span> from account <span class="address">0.0.8601374</span> was transferred to account <span class="address">0.0.9267024</span>.
-```
 
 ---
 
