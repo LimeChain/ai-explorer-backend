@@ -4,22 +4,24 @@ Hederion AI Explorer is a next-generation block explorer for the Hedera network 
 
 ## Status
 
-- REST API
-  - ✅ Chat endpoint for real-time user queries and token-by-token streaming responses over WebSockets.
+- API endpoints
+  - ✅ Chat endpoint for real-time user queries and token-by-token streaming responses over WebSockets
   - ✅ Suggested queries endpoint for list of pre-defined queries
-  - ✅ IP and global rate limiting for protecting the API
-  - [ ] Cost-based limits
-  - [ ] Chat history retrieval endpoint for retrieving previous conversations
+  - ✅ IP and global rate/cost limiting
 - AI Agent
-  - ✅ LLM agentic reasoning
-  - ✅ Multi-turn conversation
+  - ✅ LLM agentic reasoning and tool use
+  - ✅ Multi-turn conversation with context retention
   - ✅ Session-based conversations (anonymous and pseudonymous sessions)
   - ✅ Contextual user data (wallet account ID)
-- Storage
-  - ✅ GDPR-compliant chat history with database persistence
-- MCP Servers
-  - ✅ Hedera's REST API for real-time data
-  - [ ] Hedera's BigQuery for historical data
+- Relational Database
+  - ✅ Chat history with database persistence
+- Vector Database
+  - ✅ Semantic search with embeddings
+- MCP tools
+  - ✅ Hedera's Mirror Node REST API
+  - ❌ Hedera's BigQuery
+  - ✅ Timestamp conversion tool
+  - ✅ Money value conversion tool
 - Benchmarking
   - ✅ Tracing
   - ✅ Evaluations
@@ -36,6 +38,7 @@ Hederion AI Explorer is a next-generation block explorer for the Hedera network 
 - [uv](https://docs.astral.sh/uv/) package manager
 - Python 3.13+
 - PostgreSQL
+- Redis
 - LLM API (OpenAI, Google, etc.)
 
 
@@ -147,6 +150,7 @@ Once running, visit:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 
+
 ## Deployment
 Prod and dev environments are running in the same GCP project. 
 
@@ -156,12 +160,14 @@ Before deploying check the Terraform workspace:
 ```sh
 terraform workspace list
 ```
+
 If needed change the workspace:
 ```sh
 terraform workspace select <workspace>
 ```
+
 ### tfvars used for prod
-```
+```sh
 project_id        = "<PROJECT_ID>>"
 llm_api_key       = "<API_KEY>"
 langsmith_api_key = ""
