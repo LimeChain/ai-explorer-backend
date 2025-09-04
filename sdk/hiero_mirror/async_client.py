@@ -175,6 +175,94 @@ class AsyncMirrorNodeClient:
         except ValidationError as e:
             raise MirrorNodeException(f"Response validation error: {e}") from e
 
+    async def _paginate_with_transactions(
+        self, 
+        endpoint_path: str, 
+        params: Dict[str, Any], 
+        model_class,
+        entity_name: str = "transactions"
+    ) -> Any:
+        """Paginate through all pages and collect transactions using timestamp-based pagination.
+        
+        Args:
+            endpoint_path: The API endpoint path
+            params: Query parameters for the request
+            model_class: The Pydantic model class to parse the response
+            entity_name: Name of the entity for logging (e.g., "transactions", "transactions for account X")
+            
+        Returns:
+            Parsed response with all transactions from all pages
+        """
+        # Get first page
+        response = await self._get(endpoint_path, params)
+        all_transactions = response.get('transactions', [])
+        
+        # Manual pagination using consensus_timestamp
+        start_time = timer()
+        timeout_seconds = self.request_timeout
+        page_count = 1
+        last_used_timestamp = None  # Track the last timestamp we used
+        
+        # Continue while there are transactions in the response
+        while response.get('links', {}).get('next'):
+            # Check timeout
+            elapsed_time = timer() - start_time
+            if elapsed_time >= timeout_seconds:
+                logger.warning(f"Pagination timeout reached after {elapsed_time:.2f} seconds")
+                break
+            
+            current_transaction_count = len(response.get('transactions', []))
+            
+            if current_transaction_count == FULL_PAGE_SIZE:
+                # Full page - use last transaction's timestamp
+                last_transaction = response['transactions'][-1]
+                last_timestamp = last_transaction['consensus_timestamp']
+                next_timestamp = f"lt:{last_timestamp}"
+                logger.info(f"Page {page_count}: Full page ({current_transaction_count} results), using timestamp: {last_timestamp}")
+            else:
+                if last_used_timestamp is None:
+                    # First time - use current time as fallback
+                    current_epoch = time.time()
+                    fallback_seconds = FALLBACK_DAYS * SECONDS_PER_DAY
+                    fallback_epoch = current_epoch - fallback_seconds
+                    logger.info(f"Page {page_count}: First partial page, using current time - {FALLBACK_DAYS} days: {fallback_epoch}")
+                else:
+                    # Subsequent times - use last used timestamp - 60 days
+                    last_timestamp = float(last_used_timestamp)
+                    fallback_seconds = FALLBACK_DAYS * SECONDS_PER_DAY
+                    fallback_epoch = last_timestamp - fallback_seconds
+                    logger.info(f"Page {page_count}: Subsequent partial page, using last timestamp - {FALLBACK_DAYS} days: {fallback_epoch}")
+                
+                fallback_timestamp = f"{fallback_epoch:.9f}"
+                next_timestamp = f"lt:{fallback_timestamp}"
+                last_used_timestamp = fallback_timestamp  # Update our tracker
+                logger.info(f"Page {page_count}: Partial page ({current_transaction_count} results), using {FALLBACK_DAYS}-day fallback: {fallback_timestamp}")
+            
+            # Construct next page parameters
+            next_params = params.copy()
+            next_params['timestamp'] = next_timestamp
+            
+            # Get next page
+            try:
+                next_response = await self._get(endpoint_path, next_params)
+                next_transactions = next_response.get('transactions', [])
+                
+                # Append transactions from this page
+                all_transactions.extend(next_transactions)
+                # Update response for next iteration
+                response = next_response
+                page_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to fetch next page for {endpoint_path}: {e}")
+                break
+        
+        # Create final response with all transactions
+        final_response = response.copy()
+        final_response['transactions'] = all_transactions
+        
+        logger.info(f"Total {entity_name} collected: {len(all_transactions)} from {page_count} pages")
+        return self._parse_response(final_response, model_class)
+
     # Account endpoints
 
     async def get_accounts(
@@ -241,6 +329,16 @@ class AsyncMirrorNodeClient:
             transactions=transactions,
         )
         
+        # If transactions is True, use pagination to collect all transactions
+        if transactions:
+            return await self._paginate_with_transactions(
+                f"/api/v1/accounts/{account_id}",
+                params,
+                AccountBalanceTransactions,
+                f"transactions for account {account_id}"
+            )
+        
+        # Default behavior for transactions=False or None
         response = await self._get(f"/api/v1/accounts/{account_id}", params)
         return self._parse_response(response, AccountBalanceTransactions)
 
@@ -782,72 +880,13 @@ class AsyncMirrorNodeClient:
             result=result,
             type=type,
         )
-        # Get first page
-        response = await self._get(f"/api/v1/transactions", params)
-        all_transactions = response.get('transactions', [])
         
-        # Manual pagination using consensus_timestamp
-        start_time = timer()
-        timeout_seconds = self.request_timeout
-        page_count = 1
-        last_used_timestamp = None  # Track the last timestamp we used
-
-        
-        # Continue while there are transactions in the response
-        while response.get('links', {}).get('next'):
-            # Check timeout
-            elapsed_time = timer() - start_time
-            if elapsed_time >= timeout_seconds:
-                logger.warning(f"Pagination timeout reached after {elapsed_time:.2f} seconds")
-                break
-            
-            current_transaction_count = len(response.get('transactions', []))
-            
-            if current_transaction_count == FULL_PAGE_SIZE:
-                # Full page - use last transaction's timestamp
-                last_transaction = response['transactions'][-1]
-                last_timestamp = last_transaction['consensus_timestamp']
-                next_timestamp = f"lt:{last_timestamp}"
-                logger.info(f"Page {page_count}: Full page ({current_transaction_count} results), using timestamp: {last_timestamp}")
-            else:
-                if last_used_timestamp is None:
-                    # First time - use current time as fallback
-                    current_epoch = time.time()
-                    fallback_seconds = FALLBACK_DAYS * SECONDS_PER_DAY
-                    fallback_epoch = current_epoch - fallback_seconds
-                    logger.info(f"Page {page_count}: First partial page, using current time - {FALLBACK_DAYS} days: {fallback_epoch}")
-                else:
-                    # Subsequent times - use last used timestamp - 60 days
-                    last_timestamp = float(last_used_timestamp)
-                    fallback_seconds = FALLBACK_DAYS * SECONDS_PER_DAY
-                    fallback_epoch = last_timestamp - fallback_seconds
-                    logger.info(f"Page {page_count}: Subsequent partial page, using last timestamp - {FALLBACK_DAYS} days: {fallback_epoch}")
-                
-                fallback_timestamp = f"{fallback_epoch:.9f}"
-                next_timestamp = f"lt:{fallback_timestamp}"
-                last_used_timestamp = fallback_timestamp  # Update our tracker
-                logger.info(f"Page {page_count}: Partial page ({current_transaction_count} results), using {FALLBACK_DAYS}-day fallback: {fallback_timestamp}")
-            
-            # Construct next page parameters
-            next_params = params.copy()
-            next_params['timestamp'] = next_timestamp
-            
-            # Get next page
-            next_response = await self._get(f"/api/v1/transactions", next_params)
-            next_transactions = next_response.get('transactions', [])
-            
-            # Append transactions from this page
-            all_transactions.extend(next_transactions)
-            # Update response for next iteration
-            response = next_response
-            page_count += 1
-        
-        # Create final response with all transactions
-        final_response = response.copy()
-        final_response['transactions'] = all_transactions
-        
-        logger.info(f"Total transactions collected: {len(all_transactions)} from {page_count} pages")
-        return self._parse_response(final_response, TransactionsResponse)
+        return await self._paginate_with_transactions(
+            "/api/v1/transactions",
+            params,
+            TransactionsResponse,
+            "transactions"
+        )
 
     async def get_transaction(
         self,
