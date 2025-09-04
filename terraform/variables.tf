@@ -79,7 +79,7 @@ variable "cloud_run_cpu" {
 variable "rate_limit_max_requests" {
   description = "Maximum requests per IP per window"
   type        = number
-  default     = 10
+  default     = 5
 }
 
 variable "rate_limit_window_seconds" {
@@ -91,7 +91,7 @@ variable "rate_limit_window_seconds" {
 variable "global_rate_limit_max_requests" {
   description = "Maximum global requests per window"
   type        = number
-  default     = 100
+  default     = 50
 }
 
 variable "global_rate_limit_window_seconds" {
@@ -104,7 +104,7 @@ variable "global_rate_limit_window_seconds" {
 variable "per_user_cost_limit" {
   description = "Per user cost limit in USD"
   type        = number
-  default     = 10
+  default     = 2
 }
 
 variable "per_user_cost_period_seconds" {
@@ -145,7 +145,7 @@ variable "llm_provider" {
 variable "llm_model" {
   description = "LLM model to use"
   type        = string
-  default     = "gpt-4.1-mini"
+  default     = "gpt-4.1"
 }
 
 variable "embedding_model" {
