@@ -285,6 +285,8 @@ def validate_hbar_amount(hbar_amount: Union[str, int, float]) -> int:
         ValidationError: If amount is invalid
     """
     try:
+        if isinstance(hbar_amount, float):
+            raise ValidationError("HBAR amount must be an integer of tinybars; floats are not supported", "hbar_amount", hbar_amount)
         if isinstance(hbar_amount, str):
             tinybar_amount = int(hbar_amount)
         else:
@@ -339,19 +341,16 @@ def build_success_response(
     Returns:
         Standardized success response dictionary
     """
-    total_usd_value = hbar_amount_actual * price_per_hbar
+    from decimal import Decimal, ROUND_HALF_UP
+    hbar_dec = (Decimal(tinybar_amount) / Decimal(100_000_000))
+    usd_dec = (hbar_dec * Decimal(str(price_per_hbar))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     
     return {
         "success": True,
         "tinybar_amount": tinybar_amount,
-        "hbar_amount": round(hbar_amount_actual, 8),
-        "usd_value": round(total_usd_value, 2),
-        "price_per_hbar": round(price_per_hbar, 6),
-        "price_source_info": {
-            "source": price_data.get("source", "saucerswap"),
-            "token_info": price_data.get("token_info", {}),
-            "timestamp": price_data.get("timestamp")
-        },
+        "hbar_amount": float(hbar_dec.quantize(Decimal('0.00000001'), rounding=ROUND_HALF_UP)),
+        "usd_value": float(usd_dec),
+        "price_per_hbar": float(Decimal(str(price_per_hbar)).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)),
         "calculation_timestamp": price_data.get("timestamp"),
         "correlation_id": correlation_id
     }

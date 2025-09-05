@@ -64,7 +64,6 @@ class SaucerSwapService:
             Dict containing:
             - success: Boolean indicating if the request was successful
             - price_usd: Float USD price per token
-            - token_info: Dict with token details (name, symbol, decimals, etc.)
             - timestamp: ISO timestamp of when the price was fetched
             - correlation_id: Request correlation ID
             
@@ -86,7 +85,7 @@ class SaucerSwapService:
             # Validate response structure
             if "priceUsd" not in data:
                 raise SDKError(
-                    f"Invalid SaucerSwap response: missing priceUsd field",
+                    "Invalid SaucerSwap response: missing priceUsd field",
                     {"token_id": token_id, "response_keys": list(data.keys())}
                 )
             
@@ -97,7 +96,6 @@ class SaucerSwapService:
                 "success": True,
                 "price_usd": price_usd,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "source": "saucerswap",
                 "correlation_id": correlation_id
             }
             
