@@ -224,6 +224,42 @@ def is_valid_transaction_hash(hash_str: str) -> bool:
     )
 
 
+def convert_timestamp_parameter(timestamp_value: str) -> str:
+    """Convert ISO timestamp parameters to Unix timestamps for Mirror Node API.
+    
+    Args:
+        timestamp_value: Timestamp parameter string (e.g., "gte:2025-07-01T00:00:00Z,lte:2025-07-31T23:59:59Z")
+        
+    Returns:
+        Converted timestamp parameter string with Unix timestamps
+    """
+    # Check if it contains ISO format timestamps (contains T and Z)
+    if 'T' not in timestamp_value or 'Z' not in timestamp_value:
+        return timestamp_value
+    
+    # Pattern to match timestamp conditions: (operator):(timestamp)
+    pattern = r'(gte|lte|gt|lt):([^,]+)'
+    matches = re.findall(pattern, timestamp_value)
+    
+    if not matches:
+        return timestamp_value
+    
+    converted_parts = []
+    
+    for operator, date_str in matches:
+        try:
+            # Convert Z to +00:00 for proper ISO format parsing
+            iso_date = date_str.replace('Z', '+00:00')
+            dt = datetime.fromisoformat(iso_date)
+            unix_timestamp = int(dt.timestamp())
+            converted_parts.append(f"{operator}:{unix_timestamp}")
+        except ValueError:
+            # Keep original if parsing fails
+            converted_parts.append(f"{operator}:{date_str}")
+    
+    return ','.join(converted_parts)
+
+
 def parse_transaction_id(transaction_id: str) -> Dict[str, Union[str, int]]:
     """Parse a transaction ID string into its components.
     
@@ -251,14 +287,15 @@ def parse_transaction_id(transaction_id: str) -> Dict[str, Union[str, int]]:
     }
 
 
-def build_query_params(**kwargs: Any) -> Dict[str, str]:
+def build_query_params(**kwargs: Any) -> Dict[str, Any]:
     """Build query parameters, filtering out None values.
     
     Args:
         **kwargs: Query parameters
         
     Returns:
-        Dictionary of query parameters with None values removed
+        Dictionary of query parameters with None values removed.
+        For timestamp parameters with multiple conditions, returns a list of values.
     """
     params = {}
     for key, value in kwargs.items():
@@ -285,7 +322,20 @@ def build_query_params(**kwargs: Any) -> Dict[str, str]:
             elif key == "sequence_number":
                 key = "sequencenumber"
             
-            params[key] = str(value)
+            # Handle timestamp parameters specially for multiple conditions
+            if key == "timestamp" and isinstance(value, str):
+                # Convert ISO to Unix format first
+                converted_value = convert_timestamp_parameter(value)
+                
+                # Split multiple timestamp conditions into separate parameters
+                if ',' in converted_value:
+                    # Multiple conditions - return as list for httpx to handle
+                    params[key] = converted_value.split(',')
+                else:
+                    # Single condition
+                    params[key] = converted_value
+            else:
+                params[key] = str(value)
     
     return params
 
