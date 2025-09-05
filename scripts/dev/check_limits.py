@@ -13,9 +13,9 @@ from datetime import datetime, timezone
 
 # Redis configuration (should match your app settings)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-RATE_LIMIT_PREFIX = "rate_limit:ip:"
-IP_COST_PREFIX = "cost_limit:ip:"
-GLOBAL_COST_KEY = "cost_limit:global"
+RATE_LIMIT_PREFIX = "rate:ip:"
+IP_COST_PREFIX = "cost:ip:"
+GLOBAL_COST_KEY = "cost:global"
 
 
 def connect_to_redis() -> redis.Redis:

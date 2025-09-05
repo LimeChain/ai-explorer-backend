@@ -4,7 +4,7 @@ import csv
 import os
 
 
-DATASET_NAME = "AI Explorer Dataset"
+DATASET_NAME = "Dataset - V1"
 
 
 def load_examples_from_csv(csv_file: str = "examples.csv") -> List[Dict]:
@@ -19,7 +19,7 @@ def load_examples_from_csv(csv_file: str = "examples.csv") -> List[Dict]:
     
     try:
         with open(csv_path, 'r', encoding='utf-8') as file:
-            reader = csv.DictReader(file)
+            reader = csv.DictReader(file, delimiter=';')
             for row in reader:
                 # Skip rows with empty questions
                 if not row.get("Question", "").strip():
@@ -27,7 +27,7 @@ def load_examples_from_csv(csv_file: str = "examples.csv") -> List[Dict]:
                     
                 example = {
                     "inputs": {"question": row["Question"]},
-                    "outputs": {"answer": row["Example answer"]}
+                    "outputs": {"answer": row["Answer"]}
                 }
                 examples.append(example)
         
