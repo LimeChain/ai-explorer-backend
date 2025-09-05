@@ -15,7 +15,9 @@ import re
 import uuid
 from typing import List, Optional
 
-EXPERIMENT_PREFIX = "ai-explorer-eval"
+EXPERIMENT_PREFIX = "gpt-4.1-mini"
+
+NETWORK = "testnet"
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -47,7 +49,7 @@ async def get_orchestrator_response(
             
             async for token in llm_orchestrator.stream_llm_response(
                 query=query,
-                network='testnet',
+                network=NETWORK,
                 account_id=account_id,
                 session_id=session_id,
                 db=db
@@ -74,21 +76,27 @@ async def get_orchestrator_response(
 
 # Define the logic you want to evaluate inside a target function. 
 # The SDK will automatically send the inputs from the dataset to your target function
+def get_account_id(inputs: dict) -> Optional[str]:
+    """Extract account_id from inputs, supporting both direct and regex extraction methods."""
+    # First try direct account_id field (production style)
+    if "account_id" in inputs and inputs["account_id"]:
+        return inputs["account_id"]
+    
+    # Fall back to regex extraction for backward compatibility
+    question = inputs.get("question", "")
+    wallet_pattern = r'0\.0\.\d+'
+    match = re.search(wallet_pattern, question)
+    return match.group(0) if match else None
+
+
 def target(inputs: dict) -> dict:
     """
     Target function that mimics the exact flow of the chat endpoint.
     This ensures evaluations measure the agent's performance accurately.
+    Supports both direct account_id and regex extraction for flexibility.
     """
     question = inputs["question"]
-    
-    # Extract account_id from the question if it contains a wallet address
-    account_id = None
-    wallet_pattern = r'0\.0\.\d+'
-    match = re.search(wallet_pattern, question)
-    if match:
-        account_id = match.group(0)
-    
-    # Generate a unique session_id for each evaluation
+    account_id = get_account_id(inputs)
     session_id = uuid.uuid4()
     
     response = asyncio.run(get_orchestrator_response(
@@ -96,7 +104,6 @@ def target(inputs: dict) -> dict:
         account_id=account_id,
         session_id=session_id,
     ))
-    
     return {"answer": response}
 
 experiment_results = client.evaluate(
@@ -108,6 +115,7 @@ experiment_results = client.evaluate(
     ],
     experiment_prefix=EXPERIMENT_PREFIX,
     max_concurrency=1,
+    num_repetitions=1,
 )
 
 # link will be provided to view the results in langsmith
