@@ -323,7 +323,7 @@ class TokenRelationshipResponse(BaseModel):
 
 class TokenAirdrop(BaseModel):
     """Token airdrop information."""
-    amount: int
+    amount: Optional[int] = None
     receiver_id: str
     sender_id: str
     serial_number: Optional[int] = None

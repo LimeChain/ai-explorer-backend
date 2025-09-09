@@ -141,11 +141,7 @@ class VectorSearchService:
                 
                 method_info = {
                     "method_name": doc.metadata["method_name"],
-                    "description": doc.metadata["description"],
-                    "parameters": full_method_data.get("parameters", []),
-                    "returns": full_method_data.get("returns", {}),
-                    "use_cases": full_method_data.get("use_cases", []),
-                    "category": doc.metadata["category"],
+                    "parameters": full_method_data.get("parameters", [])
                 }
                 retrieved_methods.append(method_info)
             

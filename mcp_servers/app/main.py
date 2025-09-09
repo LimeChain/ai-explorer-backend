@@ -212,7 +212,7 @@ def retrieve_sdk_method(query: str) -> Dict[str, Any]:
         _, document_processor = get_vector_services()
 
         # Search for methods
-        search_result = document_processor.search_methods(query=query, k=3)
+        search_result = document_processor.search_methods(query=query, k=1)
         
         result = {
             "query": query,
@@ -376,14 +376,6 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
                 "hbar_amount": round(hbar_amount_actual, 8),
                 "usd_value": round(total_usd_value, 2),
                 "price_per_hbar": round(price_per_hbar, 4),
-                "exchange_rate_info": {
-                    "cent_equivalent": cent_equivalent,
-                    "hbar_equivalent": hbar_equivalent,
-                    "rate_usd_value": round(rate_usd_value, 2),
-                    "expiration_time": expiration_time
-                },
-                "calculation_timestamp": data.timestamp,
-                "requested_timestamp": timestamp,
                 "correlation_id": correlation_id
             }
             
