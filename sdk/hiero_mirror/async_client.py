@@ -197,18 +197,27 @@ class AsyncMirrorNodeClient:
             if elapsed_time >= timeout_seconds:
                 logger.warning(f"Pagination timeout reached after {elapsed_time:.2f} seconds")
                 break
-            
+
             if next_link:
-                next_params = dict(parse_qs(next_link))
+                query = dict(parse_qs(next_link))
+                # Flatten single-valued entries returned by parse_qs
+                next_params = {k: (v[0] if isinstance(v, list) and len(v) == 1 else v) for k, v in query.items()}
                 next_response = await self._get(endpoint_path, next_params)
                 next_data = next_response.get(data_key, [])
+                if not isinstance(next_data, list):
+                    logger.warning(f"Unexpected {data_key} type in paginated response; expected list, got {type(next_data).__name__}")
+                    break
                 data.extend(next_data)
                 page_count += 1
                 response = next_response
         
-        # Update the final response with all collected data
-        final_response[data_key] = data
-        final_response['count'] = len(data)
+        # Build the final response with all collected data
+        final_response = {
+            data_key: data,
+            'links': response.get('links', {}),
+            'timestamp': response.get('timestamp'),
+            'count': len(data)
+        }
 
         logger.info(f"Total {entity_name} collected: {len(data)} from {page_count} pages")
         return self._parse_response(final_response, model_class)
