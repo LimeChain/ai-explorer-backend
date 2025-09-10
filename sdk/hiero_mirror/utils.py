@@ -323,10 +323,10 @@ def validate_limit(limit: Optional[int]) -> Optional[int]:
         raise ValueError("Limit must be an integer")
     
     if limit < 1:
-        raise ValueError("Limit must be greater than 0")
+        return 1
     
     if limit > 100:
-        raise ValueError("Limit must be 100 or less")
+        return 100
     
     return limit
 

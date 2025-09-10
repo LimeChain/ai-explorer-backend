@@ -778,6 +778,7 @@ class TokenBalancesResponse(BaseModel):
     timestamp: Optional[str] = None
     balances: List[TokenDistribution]
     links: Links
+    count: Optional[int] = None
 
 
 class NftTransactionTransfer(BaseModel):

@@ -26,7 +26,7 @@ logger = get_logger(__name__, service_name="mcp")
 
 # Initialize the FastMCP server for Hedera Mirror Node
 mcp = FastMCP("HederaMirrorNode")
-ASYNC_METHODS = ["get_transactions", "get_account"]
+ASYNC_METHODS = ["get_transactions", "get_account", "get_token_balances"]
 network_sdk_service = {}
 async_network_sdk_service = {}
 vector_store_service = None
