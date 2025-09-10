@@ -175,6 +175,53 @@ class AsyncMirrorNodeClient:
         except ValidationError as e:
             raise MirrorNodeException(f"Response validation error: {e}") from e
 
+    async def _handle_pagination(self, endpoint_path: str, params: Dict[str, Any], model_class, entity_name: str, data_key: str) -> Any:
+        """Handle pagination for an API endpoint."""
+        response = await self._get(endpoint_path, params)
+        data = response.get(data_key, [])
+        start_time = timer()
+        timeout_seconds = self.request_timeout
+        page_count = 1
+        
+        # Preserve the original response structure
+        final_response = {
+            data_key: data,
+            'links': response.get('links', {}),
+            'timestamp': response.get('timestamp'),
+            'count': 0
+        }
+        
+        while response.get('links', {}).get('next'):
+            next_link = extract_next_link(response.get('links', {}))
+            elapsed_time = timer() - start_time
+            if elapsed_time >= timeout_seconds:
+                logger.warning(f"Pagination timeout reached after {elapsed_time:.2f} seconds")
+                break
+
+            if next_link:
+                query = dict(parse_qs(next_link))
+                # Flatten single-valued entries returned by parse_qs
+                next_params = {k: (v[0] if isinstance(v, list) and len(v) == 1 else v) for k, v in query.items()}
+                next_response = await self._get(endpoint_path, next_params)
+                next_data = next_response.get(data_key, [])
+                if not isinstance(next_data, list):
+                    logger.warning(f"Unexpected {data_key} type in paginated response; expected list, got {type(next_data).__name__}")
+                    break
+                data.extend(next_data)
+                page_count += 1
+                response = next_response
+        
+        # Build the final response with all collected data
+        final_response = {
+            data_key: data,
+            'links': response.get('links', {}),
+            'timestamp': response.get('timestamp'),
+            'count': len(data)
+        }
+
+        logger.info(f"Total {entity_name} collected: {len(data)} from {page_count} pages")
+        return self._parse_response(final_response, model_class)
+
     async def _paginate_with_transactions(
         self, 
         endpoint_path: str, 
@@ -1078,9 +1125,13 @@ class AsyncMirrorNodeClient:
             order=normalize_order(order),
             timestamp=timestamp,
         )
-        
-        response = await self._get(f"/api/v1/tokens/{token_id}/balances", params)
-        return self._parse_response(response, TokenBalancesResponse)
+        return await self._handle_pagination(
+            f"/api/v1/tokens/{token_id}/balances",
+            params,
+            TokenBalancesResponse,
+            "token balances",
+            "balances"
+        )
 
     async def get_token_nfts(
         self,
