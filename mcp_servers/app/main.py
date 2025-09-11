@@ -455,6 +455,260 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
         return handle_exception(e, {"correlation_id": correlation_id})
 
 @mcp.tool()
+async def process_tokens_with_balances(token_data: List[Dict[str, Any]], network: str) -> Dict[str, Any]:
+    """
+    Process a list of tokens with their balances, fetch token details, and convert amounts using proper decimals.
+    
+    This tool takes token data with raw balances (in tinybars) and fetches the corresponding token 
+    details to perform proper decimal conversion. It eliminates the need for multiple get_token calls
+    and prevents decimal conversion errors in the agent.
+    
+    Args:
+        token_data: List of token data with format [{"token_id": "0.0.456858", "balance": 353156}]
+        network: Network to use for API calls
+        
+    Returns:
+        Dict containing:
+        - tokens: List of processed token data with converted balances
+        - count: Number of tokens processed
+        - success: Whether all processing succeeded
+        
+    Example usage:
+        - process_tokens_with_balances([{"token_id": "0.0.456858", "balance": 353156}], "mainnet")
+    """
+    # Set correlation ID for request tracking
+    correlation_id = set_correlation_id()
+    
+    # Input validation
+    if not token_data or not isinstance(token_data, list):
+        error_response = handle_exception(
+            ValidationError("token_data is required and must be a non-empty list", "token_data", token_data),
+            {"correlation_id": correlation_id}
+        )
+        logger.warning("⚠️ Invalid token_data provided", extra={"token_data": token_data, "correlation_id": correlation_id})
+        return error_response
+    # Validate token data structure
+    for idx, item in enumerate(token_data):
+        if not isinstance(item, dict):
+            error_response = handle_exception(
+                ValidationError(f"token_data[{idx}] must be a dictionary", "token_data", item),
+                {"correlation_id": correlation_id}
+            )
+            logger.warning("⚠️ Invalid token data structure", extra={"item": item, "index": idx, "correlation_id": correlation_id})
+            return error_response
+        
+        if "token_id" not in item:
+            error_response = handle_exception(
+                ValidationError(f"token_data[{idx}] missing required field 'token_id'", "token_data", item),
+                {"correlation_id": correlation_id}
+            )
+            logger.warning("⚠️ Missing token_id", extra={"item": item, "index": idx, "correlation_id": correlation_id})
+            return error_response
+        
+        if "balance" not in item:
+            error_response = handle_exception(
+                ValidationError(f"token_data[{idx}] missing required field 'balance'", "token_data", item),
+                {"correlation_id": correlation_id}
+            )
+            logger.warning("⚠️ Missing balance", extra={"item": item, "index": idx, "correlation_id": correlation_id})
+            return error_response
+
+    
+    if not network or not isinstance(network, str):
+        error_response = handle_exception(
+            ValidationError("network is required and must be a string", "network", network),
+            {"correlation_id": correlation_id}
+        )
+        logger.warning("⚠️ Invalid network provided", extra={"network": network, "correlation_id": correlation_id})
+        return error_response
+
+    async def process_single_token(token_info, balance, correlation_id):
+        try:
+            # Validate balance
+            try:
+                raw_balance = int(balance)
+                if raw_balance < 0:
+                    return {
+                        "error": "Token balance cannot be negative",
+                        "token_id": token_info.get("token_id", "unknown"),
+                        "success": False,
+                        "correlation_id": correlation_id
+                    }
+            except (ValueError, TypeError):
+                return {
+                    "error": f"Invalid balance format: {balance}",
+                    "token_id": token_info.get("token_id", "unknown"),
+                    "success": False,
+                    "correlation_id": correlation_id
+                }
+            
+            # Extract token details from the fetched token info
+            token_id = token_info.get("token_id", "")
+            name = token_info.get("name", "Unknown Token")
+            symbol = token_info.get("symbol", "")
+            decimals = token_info.get("decimals", 0)
+            
+            # Convert balance using decimals
+            if decimals > 0:
+                converted_balance = raw_balance / (10 ** decimals)
+            else:
+                converted_balance = raw_balance
+            
+            # Format the balance for display
+            if decimals > 0:
+                # Format to reasonable precision, removing trailing zeros
+                formatted_balance = f"{converted_balance:.{decimals}f}".rstrip('0').rstrip('.')
+            else:
+                formatted_balance = str(raw_balance)
+            
+            # Include symbol in formatted display if available
+            display_balance = f"{formatted_balance} {symbol}".strip() if symbol else formatted_balance
+            
+            return {
+                "token_id": token_id,
+                "name": name,
+                "symbol": symbol,
+                "decimals": decimals,
+                "raw_balance": raw_balance,
+                "converted_balance": str(converted_balance),
+                "formatted_balance": display_balance,
+                "success": True,
+                "correlation_id": correlation_id
+            }
+            
+        except Exception as e:
+            logger.error("❌ Processing failed for token %s", token_info.get("token_id", "unknown"), exc_info=True, extra={
+                "token_id": token_info.get("token_id", "unknown"),
+                "balance": balance,
+                "correlation_id": correlation_id
+            })
+            return {
+                "error": f"Processing failed: {str(e)}",
+                "token_id": token_info.get("token_id", "unknown"),
+                "success": False,
+                "correlation_id": correlation_id
+            }
+
+    try:
+        logger.info("🪙 Processing %d token(s) with balances", len(token_data), extra={
+            "tokens_count": len(token_data),
+            "correlation_id": correlation_id
+        })
+        
+        # Extract unique token IDs for batch fetching
+        token_ids = []
+        balance_map = {}
+        
+        for item in token_data:
+            if not isinstance(item, dict) or "token_id" not in item or "balance" not in item:
+                logger.warning("⚠️ Invalid token data item skipped", extra={
+                    "item": item,
+                    "correlation_id": correlation_id
+                })
+                continue
+            
+            token_id = item["token_id"]
+            balance = item["balance"]
+            
+            if token_id not in balance_map:
+                token_ids.append(token_id)
+            balance_map[token_id] = balance
+        
+        if not token_ids:
+            error_response = handle_exception(
+                ValidationError("No valid token data found", "token_data", token_data),
+                {"correlation_id": correlation_id}
+            )
+            logger.warning("⚠️ No valid token IDs found", extra={"correlation_id": correlation_id})
+            return error_response
+        
+        # Batch fetch token details using get_tokens with multiple calls if needed
+        # Since get_tokens doesn't support multiple token_ids in one call, we'll call get_token for each
+        # But we can optimize this by calling them concurrently
+        token_details = {}
+        
+        for token_id in token_ids:
+            try:
+                result = await get_sdk_service(network).call_method("get_token", token_id=token_id)
+                if result.get("success", False) and "data" in result:
+                    # Extract token info from the SDK response
+                    token_info = result["data"]
+                    token_details[token_id] = {
+                        "token_id": token_id,
+                        "name": getattr(token_info, "name", "Unknown Token"),
+                        "symbol": getattr(token_info, "symbol", ""),
+                        "decimals": int(getattr(token_info, "decimals", 0))
+                    }
+                else:
+                    logger.warning("⚠️ Failed to fetch token details for %s", token_id, extra={
+                        "token_id": token_id,
+                        "result": result,
+                        "correlation_id": correlation_id
+                    })
+                    token_details[token_id] = {
+                        "token_id": token_id,
+                        "name": "Unknown Token",
+                        "symbol": "",
+                        "decimals": 0,
+                        "error": result.get("error", "Failed to fetch token details")
+                    }
+            except Exception as e:
+                logger.error("❌ Error fetching token details for %s", token_id, exc_info=True, extra={
+                    "token_id": token_id,
+                    "correlation_id": correlation_id
+                })
+                token_details[token_id] = {
+                    "token_id": token_id,
+                    "name": "Unknown Token", 
+                    "symbol": "",
+                    "decimals": 0,
+                    "error": f"Fetch failed: {str(e)}"
+                }
+        
+        # Process each token with its balance
+        processed_tokens = []
+        all_successful = True
+        
+        for token_id in token_ids:
+            token_info = token_details[token_id]
+            balance = balance_map[token_id]
+            
+            result = await process_single_token(token_info, balance, correlation_id)
+            processed_tokens.append(result)
+            
+            if not result.get("success", False):
+                all_successful = False
+
+        final_result = {
+            "tokens": processed_tokens,
+            "count": len(processed_tokens),
+            "success": all_successful,
+            "correlation_id": correlation_id
+        }
+        
+        logger.info("✅ Token processing completed", extra={
+            "tokens_count": len(processed_tokens),
+            "all_successful": all_successful,
+            "correlation_id": correlation_id
+        })
+        
+        return final_result
+        
+    except SDKError as e:
+        logger.error("❌ SDK error during token processing", exc_info=True, extra={
+            "tokens_count": len(token_data),
+            "correlation_id": correlation_id
+        })
+        return handle_exception(e, {"correlation_id": correlation_id})
+    
+    except Exception as e:
+        logger.error("❌ Unexpected error during token processing", exc_info=True, extra={
+            "tokens_count": len(token_data),
+            "correlation_id": correlation_id
+        })
+        return handle_exception(e, {"correlation_id": correlation_id})
+
+@mcp.tool()
 def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, float]]]) -> Dict[str, Any]:
     """
     Convert Unix timestamp(s) to human-readable date format.
