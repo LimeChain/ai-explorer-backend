@@ -487,6 +487,32 @@ async def process_tokens_with_balances(token_data: List[Dict[str, Any]], network
         )
         logger.warning("⚠️ Invalid token_data provided", extra={"token_data": token_data, "correlation_id": correlation_id})
         return error_response
+    # Validate token data structure
+    for idx, item in enumerate(token_data):
+        if not isinstance(item, dict):
+            error_response = handle_exception(
+                ValidationError(f"token_data[{idx}] must be a dictionary", "token_data", item),
+                {"correlation_id": correlation_id}
+            )
+            logger.warning("⚠️ Invalid token data structure", extra={"item": item, "index": idx, "correlation_id": correlation_id})
+            return error_response
+        
+        if "token_id" not in item:
+            error_response = handle_exception(
+                ValidationError(f"token_data[{idx}] missing required field 'token_id'", "token_data", item),
+                {"correlation_id": correlation_id}
+            )
+            logger.warning("⚠️ Missing token_id", extra={"item": item, "index": idx, "correlation_id": correlation_id})
+            return error_response
+        
+        if "balance" not in item:
+            error_response = handle_exception(
+                ValidationError(f"token_data[{idx}] missing required field 'balance'", "token_data", item),
+                {"correlation_id": correlation_id}
+            )
+            logger.warning("⚠️ Missing balance", extra={"item": item, "index": idx, "correlation_id": correlation_id})
+            return error_response
+
     
     if not network or not isinstance(network, str):
         error_response = handle_exception(
