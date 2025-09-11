@@ -114,5 +114,10 @@ class Settings(BaseSettings):
     # Global
     request_timeout: int = Field(default=5, description="Request timeout in seconds")
 
+    # SaucerSwap settings
+    saucerswap_base_url: str = Field(default="https://api.saucerswap.finance", description="SaucerSwap API base URL")
+    saucerswap_api_key: SecretStr = Field(..., description="SaucerSwap API key")
+    hbar_token_id: str = Field(default="0.0.1456986", description="HBAR token ID for SaucerSwap API calls")
+
 # Global settings instance
 settings = Settings()
