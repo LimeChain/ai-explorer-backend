@@ -221,6 +221,13 @@ variable "langsmith_api_key" {
   nullable    = false
 }
 
+variable "saucerswap_api_key" {
+  description = "Saucerswap API key"
+  type        = string
+  sensitive   = true
+  nullable    = false
+}
+
 # Frontend configuration
 variable "frontend_domain_name" {
   description = "Domain name for the frontend application (e.g., app.example.com)"
