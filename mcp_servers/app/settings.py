@@ -35,7 +35,7 @@ class MCPSettings(BaseSettings):
     )
     
     llm_model: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-4.1",
         description="The LLM model to use (e.g., gpt-4o, gpt-4o-mini for OpenAI)"
     )
     
@@ -74,8 +74,7 @@ class MCPSettings(BaseSettings):
         description="Hgraph GraphQL endpoint URL"
     )
     
-    hgraph_api_key: str = Field(
-        default="your-api-key-here",
+    hgraph_api_key: SecretStr = Field(
         description="API key for Hgraph authentication"
     )
     

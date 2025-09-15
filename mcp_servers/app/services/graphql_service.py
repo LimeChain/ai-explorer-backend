@@ -14,9 +14,10 @@ from .vector_store_service import VectorStoreService
 
 logger = logging.getLogger(__name__)
 
+COLLECTION_NAME = "graphql_schemas_hgraph"
 class GraphQLService:
-    """Service wrapper for GraphQL text-to-GraphQL operations using Hgraph API."""
-    
+    """Service wrapper for text-to-GraphQL operations using Hgraph API."""
+
     def __init__(
         self, 
         hgraph_endpoint: str,
@@ -50,11 +51,11 @@ class GraphQLService:
             # Initialize LLM for GraphQL generation
             self.llm = init_chat_model(llm_model, model_provider=llm_provider, api_key=llm_api_key)
             
-            # Initialize schema vector store (required)
+            # Initialize schema vector store
             self.schema_vector_store = VectorStoreService(
                 connection_string=connection_string,
                 llm_api_key=llm_api_key,
-                collection_name=f"graphql_schemas_hgraph",
+                collection_name=COLLECTION_NAME,
                 embedding_model=embedding_model
             )
 
@@ -76,11 +77,25 @@ class GraphQLService:
             Tuple of (formatted schema string, raw schema data)
         """
         try:
+            logger.info(f"🔍 SCHEMA SEARCH: Searching for {k} relevant schema types for question")
+            logger.info(f"❓ SCHEMA SEARCH: Query: '{question[:100]}{'...' if len(question) > 100 else ''}'")
+            
             # Use vector store for intelligent schema retrieval
             relevant_schemas = self.schema_vector_store.retrieve_graphql_schemas(question, k=k)
             
+            logger.info(f"📊 SCHEMA SEARCH: Retrieved {len(relevant_schemas)} schema types")
+            
             if not relevant_schemas:
+                logger.error("❌ SCHEMA SEARCH: No relevant schemas found for the query")
                 raise RuntimeError("No relevant schemas found for the query")
+            
+            # Log the retrieved schema types
+            for i, schema_data in enumerate(relevant_schemas, 1):
+                type_name = schema_data.get("name", "unknown")
+                kind = schema_data.get("kind", "unknown")
+                description = schema_data.get("description", "No description")[:50]
+                logger.info(f"  {i}. {kind} '{type_name}': {description}{'...' if len(description) == 50 else ''}")
+            
             
             # Format schemas for prompt
             formatted_schemas = []
@@ -123,8 +138,12 @@ class GraphQLService:
                 schema_lines.append("")  # Add blank line for separation
                 formatted_schemas.extend(schema_lines)
             
-            logger.info(f"Retrieved {len(relevant_schemas)} relevant GraphQL schema types using vector search")
-            return "\n".join(formatted_schemas), relevant_schemas
+            formatted_schema_text = "\n".join(formatted_schemas)
+            logger.info(f"✅ SCHEMA SEARCH: Formatted {len(relevant_schemas)} schema types into {len(formatted_schema_text)} character prompt")
+            logger.info(f"📝 SCHEMA SEARCH: Schema context preview (first 200 chars):")
+            logger.info(f"    {formatted_schema_text[:200]}{'...' if len(formatted_schema_text) > 200 else ''}")
+            
+            return formatted_schema_text, relevant_schemas
             
         except Exception as e:
             logger.error(f"Failed to retrieve relevant schemas: {e}")
@@ -145,7 +164,7 @@ class GraphQLService:
         """Initialize and load GraphQL schemas into the vector store."""
         try:
             # Check if collection already exists
-            if not self.schema_vector_store.check_collection_exists():
+            if not self.schema_vector_store.vector_search_service.check_collection_exists():
                 logger.info("GraphQL schema vector store collection not found, loading schemas from JSON")
                 self.schema_vector_store.load_graphql_schemas(self.schema_path)
                 logger.info("GraphQL schema vector store initialized successfully")
@@ -179,6 +198,8 @@ class GraphQLService:
                 CRITICAL: Write a valid GraphQL query that fixes the above error.
                 CRITICAL: Use proper GraphQL syntax with correct field names and types.
                 CRITICAL: Only return clean GraphQL that can be executed directly.
+                CRITICAL: Do NOT include any explanation, notes, or comments.
+                CRITICAL: Return ONLY the GraphQL query, nothing else.
                 CRITICAL: Ensure all required fields and arguments are included.
                 CRITICAL: Use appropriate filters and pagination if needed.
                 CRITICAL: Analyze the previous error and fix the specific issue mentioned.
@@ -197,6 +218,8 @@ class GraphQLService:
                 CRITICAL: Write a valid GraphQL query using proper syntax.
                 CRITICAL: Use correct field names and types from the schema.
                 CRITICAL: Only return clean GraphQL that can be executed directly.
+                CRITICAL: Do NOT include any explanation, notes, or comments.
+                CRITICAL: Return ONLY the GraphQL query, nothing else.
                 CRITICAL: Include appropriate filters, sorting, and pagination if needed.
                 CRITICAL: Focus on the most relevant data for the question.
 
@@ -220,7 +243,7 @@ class GraphQLService:
         """
         try:
             # Ensure schema vector store is initialized
-            if not self.schema_vector_store.check_collection_exists():
+            if not self.schema_vector_store.vector_search_service.check_collection_exists():
                 logger.info("GraphQL schema vector store not initialized, initializing now...")
                 self.initialize_schema_vector_store()
             
@@ -255,14 +278,35 @@ class GraphQLService:
             # Generate GraphQL
             graphql_query = await graphql_chain.ainvoke(prompt_params)
             
-            # Clean up GraphQL query
+            # Clean up GraphQL query - extract only the actual GraphQL query
             graphql_query = graphql_query.strip()
+            
+            # Remove code block markers
             if graphql_query.startswith("```graphql"):
                 graphql_query = graphql_query[10:]
             elif graphql_query.startswith("```"):
                 graphql_query = graphql_query[3:]
-            if graphql_query.endswith("```"):
-                graphql_query = graphql_query[:-3]
+            
+            # Find the end of the GraphQL query (before any explanations)
+            # Look for patterns that indicate the end of the query
+            end_markers = [
+                "```",
+                "**Explanation:",
+                "**Note:",
+                "*If you need",
+                "Explanation:",
+                "Note:",
+                "\n\n**",
+                "\n\n*",
+                "\n\nExplanation",
+                "\n\nNote"
+            ]
+            
+            for marker in end_markers:
+                if marker in graphql_query:
+                    graphql_query = graphql_query.split(marker)[0]
+                    break
+            
             graphql_query = graphql_query.strip()
             
             attempt_log = f" (attempt {attempt_number})" if attempt_number > 1 else ""
@@ -296,8 +340,12 @@ class GraphQLService:
             Dict containing query results or error information
         """
         try:
-            logger.info("Executing GraphQL query against Hgraph API")
-            logger.debug(f"GraphQL Query: {graphql_query}")
+            logger.info(f"🌐 GRAPHQL EXECUTION: Sending query to Hgraph API Endpoint: {self.hgraph_endpoint}, query length: {len(graphql_query)} characters")
+            
+            # Log the actual query being sent
+            logger.info("📤 GRAPHQL EXECUTION: Sending GraphQL query:")
+            for i, line in enumerate(graphql_query.strip().split('\n'), 1):
+                logger.info(f"    {i:2d}: {line}")
             
             headers = {
                 "Content-Type": "application/json",
@@ -308,47 +356,79 @@ class GraphQLService:
                 "query": graphql_query
             }
             
+            logger.info("⏳ GRAPHQL EXECUTION: Making HTTP request...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     self.hgraph_endpoint,
                     headers=headers,
                     json=payload
                 )
+                logger.info(f"📡 GRAPHQL EXECUTION: Received HTTP {response.status_code} response")
                 response.raise_for_status()
                 
                 result_data = response.json()
+                logger.info(f"📦 GRAPHQL EXECUTION: Response JSON parsed successfully")
                 
                 # Check for GraphQL errors
                 if "errors" in result_data:
-                    error_messages = [error.get("message", "Unknown error") for error in result_data["errors"]]
+                    errors = result_data["errors"]
+                    error_messages = [error.get("message", "Unknown error") for error in errors]
+                    logger.error(f"❌ GRAPHQL EXECUTION: GraphQL API returned errors:")
+                    for i, error in enumerate(errors, 1):
+                        logger.error(f"  {i}. {error.get('message', 'Unknown error')}")
+                        if 'locations' in error:
+                            logger.error(f"     Location: {error['locations']}")
+                        if 'path' in error:
+                            logger.error(f"     Path: {error['path']}")
+                    
                     return {
                         "success": False,
                         "error": f"GraphQL errors: {'; '.join(error_messages)}",
                         "graphql_query": graphql_query,
-                        "errors": result_data["errors"]
+                        "errors": errors
                     }
                 
                 # Extract data
                 data = result_data.get("data", {})
+                data_size = len(str(data))
                 
-                logger.info(f"GraphQL query executed successfully")
+                logger.info(f"✅ GRAPHQL EXECUTION: Query executed successfully")
+                logger.info(f"📊 GRAPHQL EXECUTION: Response data size: {data_size} characters")
+                
+                # Log data structure summary
+                if isinstance(data, dict) and data:
+                    top_keys = list(data.keys())[:3]
+                    logger.info(f"🗂️ GRAPHQL EXECUTION: Top-level response keys: {top_keys}")
+                    
+                    # Log sample of first key's data if it's a list
+                    if top_keys and isinstance(data[top_keys[0]], list):
+                        first_key_count = len(data[top_keys[0]])
+                        logger.info(f"📝 GRAPHQL EXECUTION: '{top_keys[0]}' contains {first_key_count} items")
                 
                 return {
                     "success": True,
                     "data": data,
                     "graphql_query": graphql_query,
-                    "response_size": len(str(data))
+                    "response_size": data_size
                 }
                 
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error executing GraphQL query: {e}")
+            logger.error(f"🚫 GRAPHQL EXECUTION: HTTP {e.response.status_code} error: {e}")
+            logger.error(f"🚫 GRAPHQL EXECUTION: Response text: {e.response.text[:500]}{'...' if len(e.response.text) > 500 else ''}")
             return {
                 "success": False,
                 "error": f"HTTP error {e.response.status_code}: {e.response.text}",
                 "graphql_query": graphql_query
             }
+        except httpx.TimeoutException:
+            logger.error(f"⏰ GRAPHQL EXECUTION: Request timed out after 30 seconds")
+            return {
+                "success": False,
+                "error": "GraphQL query timed out after 30 seconds",
+                "graphql_query": graphql_query
+            }
         except Exception as e:
-            logger.error(f"Failed to execute GraphQL query: {e}")
+            logger.error(f"💥 GRAPHQL EXECUTION: Unexpected error: {str(e)}", exc_info=True)
             return {
                 "success": False,
                 "error": f"Failed to execute query: {str(e)}",
@@ -371,9 +451,16 @@ class GraphQLService:
         
         for attempt in range(1, max_retries + 1):
             try:
-                logger.info(f"Starting text-to-GraphQL pipeline attempt {attempt} for question: {question[:100]}...")
+                logger.info(f"🔄 GRAPHQL SERVICE: Starting pipeline attempt {attempt}/{max_retries}")
+                logger.info(f"❓ GRAPHQL SERVICE: Question: '{question[:150]}{'...' if len(question) > 150 else ''}'")
+                
+                if attempt > 1:
+                    logger.info(f"🔁 GRAPHQL SERVICE: Retry attempt - previous error: {last_error}")
+                    if previous_query:
+                        logger.info(f"📋 GRAPHQL SERVICE: Previous failed query will be provided for context")
                 
                 # Generate GraphQL with error context if this is a retry
+                logger.info(f"⚙️ GRAPHQL SERVICE: Generating GraphQL query (attempt {attempt})")
                 graphql_result = await self.generate_graphql(
                     question=question,
                     previous_query=previous_query,
@@ -383,12 +470,14 @@ class GraphQLService:
                 
                 if not graphql_result.get("success"):
                     last_error = graphql_result.get("error", "Unknown GraphQL generation error")
-                    logger.warning(f"GraphQL generation failed on attempt {attempt}: {last_error}")
+                    logger.warning(f"❌ GRAPHQL SERVICE: Query generation failed on attempt {attempt}: {last_error}")
                     
                     # Continue to next attempt if we haven't reached max retries
                     if attempt < max_retries:
+                        logger.info(f"🔄 GRAPHQL SERVICE: Retrying... ({attempt + 1}/{max_retries})")
                         continue
                     else:
+                        logger.error(f"💥 GRAPHQL SERVICE: Query generation failed after all {max_retries} attempts")
                         return {
                             "success": False,
                             "error": f"Failed to generate GraphQL after {max_retries} attempts. Last error: {last_error}",
@@ -399,18 +488,31 @@ class GraphQLService:
                 graphql_query = graphql_result["graphql_query"]
                 previous_query = graphql_query  # Store for potential retry
                 
+                logger.info(f"✅ GRAPHQL SERVICE: Query generated successfully on attempt {attempt}")
+                logger.info(f"📝 GRAPHQL SERVICE: Generated query:")
+                # Log the generated query with line numbers for debugging
+                for i, line in enumerate(graphql_query.strip().split('\n'), 1):
+                    logger.info(f"    {i:2d}: {line}")
+                
                 # Execute GraphQL query
+                logger.info(f"🌐 GRAPHQL SERVICE: Executing GraphQL query against Hgraph API")
                 execution_result = await self.execute_graphql(graphql_query)
                 
                 if not execution_result.get("success"):
                     execution_error = execution_result.get("error", "Query execution failed")
-                    logger.error(f"GraphQL execution failed on attempt {attempt}: {execution_error}")
+                    logger.error(f"❌ GRAPHQL SERVICE: Query execution failed on attempt {attempt}: {execution_error}")
+                    
+                    # Log additional execution details if available
+                    if "errors" in execution_result:
+                        logger.error(f"🔍 GRAPHQL SERVICE: GraphQL API errors: {execution_result['errors']}")
                     
                     # For execution failures, we can retry with the execution error
                     if attempt < max_retries:
                         last_error = f"Query execution failed: {execution_error}"
+                        logger.info(f"🔄 GRAPHQL SERVICE: Will retry with execution error context ({attempt + 1}/{max_retries})")
                         continue
                     else:
+                        logger.error(f"💥 GRAPHQL SERVICE: Query execution failed after all {max_retries} attempts")
                         return {
                             "success": False,
                             "error": f"Query execution failed after {max_retries} attempts. Last error: {execution_error}",
@@ -420,24 +522,37 @@ class GraphQLService:
                         }
                 
                 # Success! Return combined results
-                logger.info(f"Text-to-GraphQL pipeline successful on attempt {attempt}")
+                data = execution_result.get("data", {})
+                response_size = execution_result.get("response_size", 0)
+                
+                logger.info(f"🎉 GRAPHQL SERVICE: Pipeline completed successfully on attempt {attempt}")
+                logger.info(f"📊 GRAPHQL SERVICE: Retrieved data with {response_size} response size")
+                logger.info(f"📈 GRAPHQL SERVICE: Data summary: {len(str(data))} characters")
+                
+                # Log a brief summary of the returned data structure
+                if isinstance(data, dict):
+                    top_level_keys = list(data.keys())[:5]  # Show first 5 keys
+                    logger.info(f"🗂️ GRAPHQL SERVICE: Top-level data keys: {top_level_keys}")
+                
                 return {
                     "success": True,
                     "question": question,
                     "graphql_query": graphql_query,
-                    "data": execution_result.get("data", {}),
-                    "response_size": execution_result.get("response_size", 0),
+                    "data": data,
+                    "response_size": response_size,
                     "total_attempts": attempt
                 }
                 
             except Exception as e:
                 last_error = f"Pipeline error: {str(e)}"
-                logger.error(f"Text-to-GraphQL pipeline error on attempt {attempt}: {e}")
+                logger.error(f"💥 GRAPHQL SERVICE: Pipeline exception on attempt {attempt}: {str(e)}", exc_info=True)
                 
                 # Continue to next attempt if we haven't reached max retries
                 if attempt < max_retries:
+                    logger.info(f"🔄 GRAPHQL SERVICE: Retrying after exception... ({attempt + 1}/{max_retries})")
                     continue
                 else:
+                    logger.error(f"💥 GRAPHQL SERVICE: Pipeline failed after all {max_retries} attempts due to exceptions")
                     return {
                         "success": False,
                         "error": f"Text-to-GraphQL pipeline failed after {max_retries} attempts. Last error: {last_error}",
