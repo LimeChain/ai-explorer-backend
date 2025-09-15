@@ -9,6 +9,8 @@ from mcp.server.fastmcp import FastMCP
 
 from .services.sdk_service import HederaSDKService
 from .services.saucerswap_service import SaucerSwapService
+# from .services.bigquery_service import BigQueryService
+from .services.graphql_service import GraphQLService
 from .settings import settings
 from .logging_config import setup_logging, get_logger, set_correlation_id
 from .exceptions import (
@@ -32,6 +34,8 @@ network_sdk_service = {}
 async_network_sdk_service = {}
 vector_store_service = None
 document_processor = None
+bigquery_service = None
+graphql_service = None
 
 def get_sdk_service(network: str) -> HederaSDKService:
     global network_sdk_service
@@ -105,6 +109,69 @@ def get_vector_services():
             raise ServiceInitializationError("VectorServices", str(e), e)
     
     return vector_store_service, document_processor
+
+# def get_bigquery_service() -> BigQueryService:
+#     """Initialize and return BigQuery service."""
+#     global bigquery_service
+    
+#     if bigquery_service is None:
+#         try:
+#             # Get configuration from settings
+#             credentials_path = settings.bigquery_credentials_path
+#             dataset_id = settings.bigquery_dataset_id
+#             llm_api_key = settings.llm_api_key.get_secret_value()
+#             llm_model = settings.llm_model
+#             llm_provider = settings.llm_provider
+#             embedding_model = settings.embedding_model
+#             connection_string = settings.database_url
+#             # Initialize BigQuery service
+#             bigquery_service = BigQueryService(
+#                 credentials_path=credentials_path,
+#                 dataset_id=dataset_id,
+#                 llm_api_key=llm_api_key,
+#                 connection_string=connection_string,
+#                 llm_model=llm_model,
+#                 llm_provider=llm_provider,
+#                 embedding_model=embedding_model
+#             )
+            
+#         except Exception as e:
+#             raise RuntimeError(f"Failed to initialize BigQuery service: {e}") from e
+    
+#     return bigquery_service
+
+def get_graphql_service() -> GraphQLService:
+    """Initialize and return GraphQL service."""
+    global graphql_service
+    
+    if graphql_service is None:
+        try:
+            # Get configuration from settings
+            hgraph_endpoint = settings.hgraph_endpoint
+            hgraph_api_key = settings.hgraph_api_key
+            llm_api_key = settings.llm_api_key.get_secret_value()
+            llm_model = settings.llm_model
+            llm_provider = settings.llm_provider
+            embedding_model = settings.embedding_model
+            connection_string = settings.database_url
+            schema_path = settings.graphql_schema_path
+            
+            # Initialize GraphQL service
+            graphql_service = GraphQLService(
+                hgraph_endpoint=hgraph_endpoint,
+                hgraph_api_key=hgraph_api_key,
+                llm_api_key=llm_api_key,
+                connection_string=connection_string,
+                llm_model=llm_model,
+                llm_provider=llm_provider,
+                embedding_model=embedding_model,
+                schema_path=schema_path
+            )
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize GraphQL service: {e}") from e
+    
+    return graphql_service
 
 @mcp.tool()
 async def call_sdk_method(method_name: str, network: str, **kwargs) -> Dict[str, Any]:
@@ -943,5 +1010,122 @@ def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, fl
             "correlation_id": correlation_id
         })
         return handle_exception(e, {"correlation_id": correlation_id})
+
+@mcp.tool()
+async def text_to_sql_query(question: str) -> Dict[str, Any]:
+    """
+    Execute natural language queries against historical Hedera data using BigQuery.
+    
+    This tool automatically detects time-based/historical queries and generates SQL
+    to query historical Hedera blockchain data. It should be used for questions about
+    trends, historical data, time periods, and analytical queries.
+    
+    The tool will:
+    1. Detect if the question is historical/time-based
+    2. Generate appropriate BigQuery SQL based on the Hedera schema
+    3. Execute the query and return results
+    
+    Args:
+        question: Natural language question about historical Hedera data
+        
+    Returns:
+        Dict containing:
+        - success: Whether the query was successful
+        - question: The original question
+        - sql_query: The generated SQL query
+        - data: Query results as list of dictionaries
+        - row_count: Number of rows returned
+        - is_historical: Whether this was classified as a historical query
+        - error: Error message if something went wrong
+        
+    Example usage:
+        - text_to_sql_query(question="Who are the biggest token holders of 0.0.731861 as of 2025?")
+        - text_to_sql_query(question="Show me transaction trends for the last month")
+        - text_to_sql_query(question="What are the top 10 accounts by HBAR balance in 2024?")
+    """
+    cost_threshold = settings.cost_threshold
+
+    try:
+        # Get BigQuery service
+        bq_service = get_bigquery_service()
+        
+        # Execute text-to-SQL pipeline
+        result = await bq_service.text_to_sql_query(question, cost_threshold)
+        
+        return {
+            "success": result.get("success", False),
+            "question": question,
+            "sql_query": result.get("sql_query", ""),
+            "data": result.get("data", []),
+            "row_count": result.get("row_count", 0),
+            "error": result.get("error", ""),
+            "cost": result.get("cost", 0),
+            "bytes_to_process": result.get("bytes_to_process", 0),
+            "total_attempts": result.get("total_attempts", 0)
+        }
+        
+    except Exception as e:
+        print(f"Text-to-SQL tool failed: {e}")
+        return {
+            "success": False,
+            "question": question,
+            "error": f"Text-to-SQL tool failed: {str(e)}",
+        }
+
+@mcp.tool()
+async def text_to_graphql_query(question: str) -> Dict[str, Any]:
+    """
+    Execute natural language queries against Hedera data using GraphQL through Hgraph API.
+    
+    This tool translates natural language questions into GraphQL queries and executes them
+    against the Hgraph API, which provides access to current Hedera network state and data.
+    It should be used for questions about current network state, live data, and real-time queries.
+    
+    The tool will:
+    1. Generate appropriate GraphQL based on the Hedera schema from Hgraph
+    2. Execute the query against the Hgraph API
+    3. Return formatted results
+    
+    Args:
+        question: Natural language question about Hedera network data
+        
+    Returns:
+        Dict containing:
+        - success: Whether the query was successful
+        - question: The original question
+        - graphql_query: The generated GraphQL query
+        - data: Query results as nested dictionaries
+        - response_size: Size of the response data
+        - error: Error message if something went wrong
+        
+    Example usage:
+        - text_to_graphql_query(question="What are the latest transactions for account 0.0.123?")
+        - text_to_graphql_query(question="Show me token information for token ID 0.0.456789")
+        - text_to_graphql_query(question="Get account balance for 0.0.98?")
+    """
+    try:
+        # Get GraphQL service
+        gql_service = get_graphql_service()
+        
+        # Execute text-to-GraphQL pipeline
+        result = await gql_service.text_to_graphql_query(question)
+        
+        return {
+            "success": result.get("success", False),
+            "question": question,
+            "graphql_query": result.get("graphql_query", ""),
+            "data": result.get("data", {}),
+            "response_size": result.get("response_size", 0),
+            "error": result.get("error", ""),
+            "total_attempts": result.get("total_attempts", 0)
+        }
+        
+    except Exception as e:
+        print(f"Text-to-GraphQL tool failed: {e}")
+        return {
+            "success": False,
+            "question": question,
+            "error": f"Text-to-GraphQL tool failed: {str(e)}",
+        }
 
 

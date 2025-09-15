@@ -119,5 +119,10 @@ class Settings(BaseSettings):
     saucerswap_api_key: SecretStr = Field(..., description="SaucerSwap API key")
     hbar_token_id: str = Field(default="0.0.1456986", description="HBAR token ID for SaucerSwap API calls")
 
+    # GraphQL (Hgraph) settings for text-to-GraphQL functionality
+    hgraph_endpoint: str = Field(..., description="Hgraph GraphQL endpoint URL")
+    hgraph_api_key: str = Field(..., description="API key for Hgraph authentication")
+    graphql_schema_path: str = Field(default="hgraph_graphql_schema.json", description="Path to the GraphQL schema introspection JSON file")
+    
 # Global settings instance
 settings = Settings()

@@ -34,6 +34,16 @@ class MCPSettings(BaseSettings):
         description="LLM API key (required)"
     )
     
+    llm_model: str = Field(
+        default="gpt-4o-mini",
+        description="The LLM model to use (e.g., gpt-4o, gpt-4o-mini for OpenAI)"
+    )
+    
+    llm_provider: str = Field(
+        default="openai",
+        description="The LLM provider to use (e.g., openai, google)"
+    )
+    
     collection_name: str = Field(..., description="Vector store collection name")
     
     embedding_model: str = Field(..., description="The model to use for embeddings")
@@ -56,6 +66,22 @@ class MCPSettings(BaseSettings):
     hbar_token_id: str = Field(
         default="0.0.1456986",
         description="HBAR token ID for SaucerSwap API calls"
+    )
+
+    # GraphQL (Hgraph) settings for text-to-GraphQL functionality
+    hgraph_endpoint: str = Field(
+        default="https://mainnet.hedera.api.hgraph.io/v1/graphql",
+        description="Hgraph GraphQL endpoint URL"
+    )
+    
+    hgraph_api_key: str = Field(
+        default="your-api-key-here",
+        description="API key for Hgraph authentication"
+    )
+    
+    graphql_schema_path: str = Field(
+        default="hgraph_graphql_schema.json",
+        description="Path to the GraphQL schema introspection JSON file"
     )
 
 
