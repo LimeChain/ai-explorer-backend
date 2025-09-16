@@ -45,7 +45,7 @@ CRITICAL: You can ONLY call these 5 specific tools. Any other tool name will res
 
 6. **text_to_graphql_query**: Execute natural language queries against Hedera network data using GraphQL
    - Parameters: question (string with natural language question)
-   - Returns: {"success": true/false, "data": {...}, "graphql_query": "...", "response_size": X}
+   - Returns: {"success": true/false, "data": {...}, "graphql_query": "..."}
    - Use for blockchain data queries (account balances, transactions, token info, historical data, etc.)
 
 FORBIDDEN TOOL NAMES: get_transactions, get_account, get_token, get_balance, or any other SDK method names. These must be called via call_sdk_method.

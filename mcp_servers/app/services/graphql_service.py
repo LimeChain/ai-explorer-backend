@@ -4,7 +4,7 @@ import logging
 import json
 import httpx
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from pydantic import SecretStr
 
 from langchain.chat_models import init_chat_model
 from langchain_core.prompts import ChatPromptTemplate
@@ -15,13 +15,15 @@ from .vector_store_service import VectorStoreService
 logger = logging.getLogger(__name__)
 
 COLLECTION_NAME = "graphql_schemas_hgraph"
+MAX_RETRIES = 3
+
 class GraphQLService:
     """Service wrapper for text-to-GraphQL operations using Hgraph API."""
 
     def __init__(
         self, 
         hgraph_endpoint: str,
-        hgraph_api_key: str,
+        hgraph_api_key: SecretStr,
         llm_api_key: str,
         connection_string: str,
         llm_model: str,
@@ -34,7 +36,7 @@ class GraphQLService:
         
         Args:
             hgraph_endpoint: Hgraph GraphQL endpoint URL
-            hgraph_api_key: API key for Hgraph authentication
+            hgraph_api_key: SecretStr API key for Hgraph authentication
             llm_api_key: API key for LLM
             connection_string: PostgreSQL connection string for vector store (required)
             llm_model: LLM model name for GraphQL generation
@@ -208,7 +210,7 @@ class GraphQLService:
             """
         else:
             template = """
-                Based on the GraphQL schema below, write a GraphQL query that answers the user's question.
+                Based on the GraphQL schema and the instructions below, write a GraphQL query that answers the user's question.
                 
                 Available Schema Types:
                 {schema}
@@ -220,8 +222,86 @@ class GraphQLService:
                 CRITICAL: Only return clean GraphQL that can be executed directly.
                 CRITICAL: Do NOT include any explanation, notes, or comments.
                 CRITICAL: Return ONLY the GraphQL query, nothing else.
-                CRITICAL: Include appropriate filters, sorting, and pagination if needed.
+                CRITICAL: Always start queries at the correct root field.
+                CRITICAL: Include appropriate filters (where, order_by, limit, offset), sorting, and pagination if needed.
+                CRITICAL: Use the correct period for where clauses.
                 CRITICAL: Focus on the most relevant data for the question.
+
+                Examples of different types of queries:
+                
+                ------------------------------------------------------------
+                EXAMPLE 1:
+                
+                Naural language query:
+                'How many transactions are there for account 0.0.123456 between August 19th and August 20th 2025?' 
+
+                GraphQL query:
+                query {{ 
+                    sent: transaction_aggregate(
+                        where: {{ payer_account_id: {{ _eq: 123456 }} 
+                        consensus_timestamp: {{ _gte: 1755561600000000000, _lte: 1755734400000000000 }} }} 
+                    ) {{ 
+                        aggregate {{ count(columns: consensus_timestamp) }} 
+                    }} 
+                        
+                    hbar: crypto_transfer_aggregate(
+                        where: {{ entity_id: {{ _eq: 123456 }} 
+                        consensus_timestamp: {{ _gte: 1755561600000000000, _lte: 1755734400000000000 }} }}
+                    ) {{ 
+                        aggregate {{ count(columns: consensus_timestamp) }} 
+                    }} 
+                    
+                    token: token_transfer_aggregate(
+                        where: {{ account_id: {{ _eq: 123456 }}
+                        consensus_timestamp: {{ _gte: 1755561600000000000, _lte: 1755734400000000000 }} }}
+                    ) {{ 
+                        aggregate {{ count(columns: consensus_timestamp) }} 
+                    }} 
+                    
+                    nft: nft_transfer_aggregate(
+                        where: {{ _or: [ {{ sender_account_id: {{ _eq: 123456 }} }} {{ receiver_account_id: {{ _eq: 123456 }} }} ] 
+                        consensus_timestamp: {{ _gte: 1755561600000000000, _lte: 1755734400000000000 }} }}
+                    ) {{ 
+                        aggregate {{ count(columns: consensus_timestamp) }}
+                    }} 
+                }}
+
+                ------------------------------------------------------------
+                EXAMPLE 2:
+                
+                Naural language query:
+                'How many transactions in total are there for account 0.0.123456 for July 2025?'
+
+                GraphQL query:
+                Similar to EXAMPLE 1, but with different period for where clauses.
+                
+
+                ------------------------------------------------------------
+                EXAMPLE 3:
+                
+                Naural language query:
+                'Which was the most expensive transaction for 0.0.123456?'
+
+                GraphQL query:
+
+                query {{
+                    transaction(
+                        where: {{ payer_account_id: {{ _eq: 9432776 }} }}
+                        order_by: {{ charged_tx_fee: desc }}
+                        limit: 1
+                    ) {{
+                        consensus_timestamp
+                        transaction_hash
+                        type
+                        result
+                        charged_tx_fee
+                        entity_id
+                        node_account_id
+                    }}
+                }}
+                
+                ------------------------------------------------------------
+
 
                 GraphQL Query:
             """
@@ -249,8 +329,8 @@ class GraphQLService:
             
             # Get relevant schema using vector search
             schema, relevant_schema_data = self._get_relevant_schemas(question)
-            
-            # Create GraphQL generation chain with error context if this is a retry
+
+            # Create GraphQL generation with error context for retry attempts
             is_retry = previous_query is not None and error_message is not None
             prompt_template = self._create_graphql_prompt_template(include_error_context=is_retry)
             
@@ -278,7 +358,7 @@ class GraphQLService:
             # Generate GraphQL
             graphql_query = await graphql_chain.ainvoke(prompt_params)
             
-            # Clean up GraphQL query - extract only the actual GraphQL query
+            # Extract only the actual GraphQL query
             graphql_query = graphql_query.strip()
             
             # Remove code block markers
@@ -287,8 +367,7 @@ class GraphQLService:
             elif graphql_query.startswith("```"):
                 graphql_query = graphql_query[3:]
             
-            # Find the end of the GraphQL query (before any explanations)
-            # Look for patterns that indicate the end of the query
+            # Find the end of the GraphQL query
             end_markers = [
                 "```",
                 "**Explanation:",
@@ -349,14 +428,13 @@ class GraphQLService:
             
             headers = {
                 "Content-Type": "application/json",
-                "x-api-key": self.hgraph_api_key
+                "x-api-key": self.hgraph_api_key.get_secret_value()
             }
             
             payload = {
                 "query": graphql_query
             }
             
-            logger.info("⏳ GRAPHQL EXECUTION: Making HTTP request...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     self.hgraph_endpoint,
@@ -390,10 +468,7 @@ class GraphQLService:
                 
                 # Extract data
                 data = result_data.get("data", {})
-                data_size = len(str(data))
-                
                 logger.info(f"✅ GRAPHQL EXECUTION: Query executed successfully")
-                logger.info(f"📊 GRAPHQL EXECUTION: Response data size: {data_size} characters")
                 
                 # Log data structure summary
                 if isinstance(data, dict) and data:
@@ -409,7 +484,6 @@ class GraphQLService:
                     "success": True,
                     "data": data,
                     "graphql_query": graphql_query,
-                    "response_size": data_size
                 }
                 
         except httpx.HTTPStatusError as e:
@@ -435,13 +509,13 @@ class GraphQLService:
                 "graphql_query": graphql_query
             }
     
-    async def text_to_graphql_query(self, question: str, max_retries: int = 3) -> Dict[str, Any]:
+    async def text_to_graphql_query(self, question: str, max_retries: int = MAX_RETRIES) -> Dict[str, Any]:
         """
-        Complete text-to-GraphQL pipeline with retry logic: generate GraphQL and execute.
+        Complete text-to-GraphQL pipeline with retry logic that generates GraphQL and executes it.
         
         Args:
-            question: Natural language question
-            max_retries: Maximum number of retry attempts for GraphQL generation
+            question: Question to convert to GraphQL
+            max_retries: Maximum number of retry attempts for GraphQL generation and execution
             
         Returns:
             Dict containing query results or error information
@@ -472,7 +546,6 @@ class GraphQLService:
                     last_error = graphql_result.get("error", "Unknown GraphQL generation error")
                     logger.warning(f"❌ GRAPHQL SERVICE: Query generation failed on attempt {attempt}: {last_error}")
                     
-                    # Continue to next attempt if we haven't reached max retries
                     if attempt < max_retries:
                         logger.info(f"🔄 GRAPHQL SERVICE: Retrying... ({attempt + 1}/{max_retries})")
                         continue
@@ -486,16 +559,15 @@ class GraphQLService:
                         }
                 
                 graphql_query = graphql_result["graphql_query"]
-                previous_query = graphql_query  # Store for potential retry
+                previous_query = graphql_query
                 
                 logger.info(f"✅ GRAPHQL SERVICE: Query generated successfully on attempt {attempt}")
-                logger.info(f"📝 GRAPHQL SERVICE: Generated query:")
+
                 # Log the generated query with line numbers for debugging
                 for i, line in enumerate(graphql_query.strip().split('\n'), 1):
                     logger.info(f"    {i:2d}: {line}")
                 
                 # Execute GraphQL query
-                logger.info(f"🌐 GRAPHQL SERVICE: Executing GraphQL query against Hgraph API")
                 execution_result = await self.execute_graphql(graphql_query)
                 
                 if not execution_result.get("success"):
@@ -521,15 +593,11 @@ class GraphQLService:
                             "total_attempts": attempt
                         }
                 
-                # Success! Return combined results
                 data = execution_result.get("data", {})
-                response_size = execution_result.get("response_size", 0)
                 
                 logger.info(f"🎉 GRAPHQL SERVICE: Pipeline completed successfully on attempt {attempt}")
-                logger.info(f"📊 GRAPHQL SERVICE: Retrieved data with {response_size} response size")
-                logger.info(f"📈 GRAPHQL SERVICE: Data summary: {len(str(data))} characters")
                 
-                # Log a brief summary of the returned data structure
+                # Log a summary of the returned data structure
                 if isinstance(data, dict):
                     top_level_keys = list(data.keys())[:5]  # Show first 5 keys
                     logger.info(f"🗂️ GRAPHQL SERVICE: Top-level data keys: {top_level_keys}")
@@ -539,7 +607,6 @@ class GraphQLService:
                     "question": question,
                     "graphql_query": graphql_query,
                     "data": data,
-                    "response_size": response_size,
                     "total_attempts": attempt
                 }
                 
@@ -560,7 +627,7 @@ class GraphQLService:
                         "total_attempts": attempt
                     }
         
-        # This should not be reached, but just in case
+        # This should not be reached
         return {
             "success": False,
             "error": f"Text-to-GraphQL pipeline failed after {max_retries} attempts",

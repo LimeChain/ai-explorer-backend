@@ -46,10 +46,7 @@ class VectorSearchService:
     def initialize_vector_store(self):
         """Initialize the PostgreSQL pgVector store."""
         try:       
-            # Get database engine from manager
-            engine = self.database_manager.get_engine()
-            
-            # Initialize PGVector following langchain-postgres documentation
+            # Initialize PGVector (following langchain-postgres documentation)
             self.vector_store = PGVector(
                 embeddings=self.embeddings,
                 collection_name=self.collection_name,
