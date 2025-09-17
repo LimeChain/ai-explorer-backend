@@ -74,9 +74,14 @@ class MCPSettings(BaseSettings):
     )
 
     # GraphQL (Hgraph) settings for text-to-GraphQL functionality
-    hgraph_endpoint: str = Field(
+    hgraph_mainnet_endpoint: str = Field(
         default="https://mainnet.hedera.api.hgraph.io/v1/graphql",
-        description="Hgraph GraphQL endpoint URL"
+        description="Hgraph GraphQL endpoint URL for Hedera mainnet"
+    )
+    
+    hgraph_testnet_endpoint: str = Field(
+        default="https://testnet.hedera.api.hgraph.io/v1/graphql", 
+        description="Hgraph GraphQL endpoint URL for Hedera testnet"
     )
     
     hgraph_api_key: SecretStr = Field(

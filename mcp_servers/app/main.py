@@ -114,7 +114,8 @@ def get_graphql_service() -> GraphQLService:
     if graphql_service is None:
         try:
             graphql_service = GraphQLService(
-                hgraph_endpoint=settings.hgraph_endpoint,
+                hgraph_mainnet_endpoint=settings.hgraph_mainnet_endpoint,
+                hgraph_testnet_endpoint=settings.hgraph_testnet_endpoint,
                 hgraph_api_key=settings.hgraph_api_key.get_secret_value(),
                 llm_api_key=settings.llm_api_key.get_secret_value(),
                 connection_string=settings.database_url,
@@ -966,7 +967,7 @@ def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, fl
         return handle_exception(e, {"correlation_id": correlation_id})
 
 @mcp.tool()
-async def text_to_graphql_query(question: str) -> Dict[str, Any]:
+async def text_to_graphql_query(question: str, network: str = "mainnet") -> Dict[str, Any]:
     """
     Execute natural language queries against Hedera data using GraphQL through Hgraph API.
     
@@ -980,6 +981,7 @@ async def text_to_graphql_query(question: str) -> Dict[str, Any]:
     
     Args:
         question: Question to convert to GraphQL
+        network: Network to query ("mainnet" or "testnet", defaults to "mainnet")
         
     Returns:
         Dict containing:
@@ -988,18 +990,19 @@ async def text_to_graphql_query(question: str) -> Dict[str, Any]:
         - graphql_query: The generated GraphQL query
         - data: Query results as nested dictionaries
         - error: Error message if something went wrong
+        - network: The network that was queried
         
     Example usage:
-        - text_to_graphql_query(question="What is the most expensive transaction for account 0.0.123?")
-        - text_to_graphql_query(question="Show me token information for token ID 0.0.456789")
+        - text_to_graphql_query(question="What is the most expensive transaction for account 0.0.123?", network="mainnet")
+        - text_to_graphql_query(question="Show me token information for token ID 0.0.456789", network="testnet")
     """
     try:
-        logger.info(f"🔍 TEXT-TO-GRAPHQL TOOL: Question: '{question[:100]}{'...' if len(question) > 100 else ''}'")
+        logger.info(f"🔍 TEXT-TO-GRAPHQL TOOL: Question: '{question[:100]}{'...' if len(question) > 100 else ''}' (Network: {network})")
         
         gql_service = get_graphql_service()
         
-        logger.info("🚀 TEXT-TO-GRAPHQL TOOL: Starting text-to-GraphQL pipeline")
-        result = await gql_service.text_to_graphql_query(question)
+        logger.info(f"🚀 TEXT-TO-GRAPHQL TOOL: Starting text-to-GraphQL pipeline for {network}")
+        result = await gql_service.text_to_graphql_query(question, network)
         
         # Log the results
         success = result.get("success", False)
@@ -1033,6 +1036,7 @@ async def text_to_graphql_query(question: str) -> Dict[str, Any]:
         return {
             "success": success,
             "question": question,
+            "network": network,
             "graphql_query": graphql_query,
             "data": result.get("data", {}),
             "error": result.get("error", ""),
@@ -1044,6 +1048,7 @@ async def text_to_graphql_query(question: str) -> Dict[str, Any]:
         return {
             "success": False,
             "question": question,
+            "network": network,
             "error": f"Text-to-GraphQL tool failed: {str(e)}",
         }
 

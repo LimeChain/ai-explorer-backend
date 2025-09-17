@@ -14,8 +14,7 @@
     "rules": [
       "Use numeric account IDs (123456) not 0.0.X format in queries",
       "consensus_timestamp should be in nanoseconds since epoch for time filters",
-      "Use _gte and _lte for time range queries with consensus_timestamp",
-      "Use transaction_aggregate for counting transactions",
+      "When not explicitly stated, use _gte and _lte for time range queries with consensus_timestamp (inclusive)",
       "Include charged_tx_fee for transaction cost analysis",
       "Filter by result field for successful/failed transactions"
     ],

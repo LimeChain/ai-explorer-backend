@@ -22,7 +22,8 @@ class GraphQLService:
 
     def __init__(
         self, 
-        hgraph_endpoint: str,
+        hgraph_mainnet_endpoint: str,
+        hgraph_testnet_endpoint: str,
         hgraph_api_key: SecretStr,
         llm_api_key: str,
         connection_string: str,
@@ -35,7 +36,8 @@ class GraphQLService:
         Initialize the GraphQL service with configuration.
         
         Args:
-            hgraph_endpoint: Hgraph GraphQL endpoint URL
+            hgraph_mainnet_endpoint: Hgraph GraphQL endpoint URL for mainnet
+            hgraph_testnet_endpoint: Hgraph GraphQL endpoint URL for testnet
             hgraph_api_key: SecretStr API key for Hgraph authentication
             llm_api_key: API key for LLM
             connection_string: PostgreSQL connection string for vector store (required)
@@ -46,7 +48,10 @@ class GraphQLService:
         """
         try:
             # Initialize Hgraph client configuration
-            self.hgraph_endpoint = hgraph_endpoint
+            self.hgraph_endpoints = {
+                "mainnet": hgraph_mainnet_endpoint,
+                "testnet": hgraph_testnet_endpoint
+            }
             self.hgraph_api_key = hgraph_api_key
             self.schema_path = schema_path
             
@@ -61,11 +66,29 @@ class GraphQLService:
                 embedding_model=embedding_model
             )
 
-            logger.info(f"Successfully initialized GraphQL service for endpoint: {hgraph_endpoint}")
+            logger.info(f"Successfully initialized GraphQL service for endpoints: {self.hgraph_endpoints}")
             
         except Exception as e:
             logger.error(f"Failed to initialize GraphQL service: {e}")
             raise RuntimeError(f"Failed to initialize GraphQL service: {e}") from e
+    
+    def _get_endpoint_for_network(self, network: str) -> str:
+        """
+        Get the appropriate endpoint URL based on the network.
+        
+        Args:
+            network: Network name ("mainnet" or "testnet")
+            
+        Returns:
+            The endpoint URL for the specified network
+            
+        Raises:
+            ValueError: If network is not supported
+        """
+        network_lower = network.lower()
+        if network_lower not in self.hgraph_endpoints:
+            raise ValueError(f"Unsupported network: {network}. Supported networks: {list(self.hgraph_endpoints.keys())}")
+        return self.hgraph_endpoints[network_lower]
     
     def _format_schema_for_prompt(self, schema_data: Dict[str, Any]) -> str:
         """Simple schema formatting for LLM prompt."""
@@ -246,18 +269,20 @@ class GraphQLService:
                 "attempt_number": attempt_number
             }
     
-    async def execute_graphql(self, graphql_query: str) -> Dict[str, Any]:
+    async def execute_graphql(self, graphql_query: str, network: str = "mainnet") -> Dict[str, Any]:
         """
         Execute a GraphQL query against the Hgraph API.
         
         Args:
             graphql_query: GraphQL query to execute
+            network: Network to query ("mainnet" or "testnet", defaults to "mainnet")
             
         Returns:
             Dict containing query results or error information
         """
         try:
-            logger.info(f"🌐 GRAPHQL EXECUTION: Sending query to Hgraph API Endpoint: {self.hgraph_endpoint}, query length: {len(graphql_query)} characters")
+            endpoint = self._get_endpoint_for_network(network)
+            logger.info(f"🌐 GRAPHQL EXECUTION: Sending query to Hgraph API Endpoint: {endpoint} (network: {network}), query length: {len(graphql_query)} characters")
             
             # Log the actual query being sent
             logger.info("📤 GRAPHQL EXECUTION: Sending GraphQL query:")
@@ -275,7 +300,7 @@ class GraphQLService:
             
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
-                    self.hgraph_endpoint,
+                    endpoint,
                     headers=headers,
                     json=payload,
                 )
@@ -347,12 +372,13 @@ class GraphQLService:
                 "graphql_query": graphql_query
             }
     
-    async def text_to_graphql_query(self, question: str, max_retries: int = MAX_RETRIES) -> Dict[str, Any]:
+    async def text_to_graphql_query(self, question: str, network: str = "mainnet", max_retries: int = MAX_RETRIES) -> Dict[str, Any]:
         """
         Complete text-to-GraphQL pipeline with retry logic that generates GraphQL and executes it.
         
         Args:
             question: Question to convert to GraphQL
+            network: Network to query ("mainnet" or "testnet", defaults to "mainnet")
             max_retries: Maximum number of retry attempts for GraphQL generation and execution
             
         Returns:
@@ -406,7 +432,7 @@ class GraphQLService:
                     logger.info(f"    {i:2d}: {line}")
                 
                 # Execute GraphQL query
-                execution_result = await self.execute_graphql(graphql_query)
+                execution_result = await self.execute_graphql(graphql_query, network)
                 
                 if not execution_result.get("success"):
                     execution_error = execution_result.get("error", "Query execution failed")
