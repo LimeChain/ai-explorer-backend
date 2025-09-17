@@ -101,22 +101,6 @@ class VectorStoreService:
             logger.error(f"Failed to load schema metadata from {metadata_path}: {e}")
             return {}
     
-    def get_schema_metadata(self, schema_name: str, metadata_path: str = None) -> Dict[str, Any]:
-        """
-        Get metadata for a specific GraphQL schema type.
-        
-        Args:
-            schema_name: Name of the GraphQL schema type
-            metadata_path: Path to metadata file (uses default if not provided)
-            
-        Returns:
-            Dictionary containing use cases and rules for the schema type
-        """
-        if metadata_path is None:
-            metadata_path = METADATA_PATH
-            
-        metadata = self._load_schema_metadata(metadata_path)
-        return metadata.get(schema_name, {"use_cases": [], "rules": []})
     
     def get_relevant_rules(self, relevant_schemas: List[Dict[str, Any]], metadata_path: str = None) -> str:
         """
@@ -225,28 +209,6 @@ class VectorStoreService:
         
         return formatted_text
     
-    def force_rebuild_collection(self, schema_path: str):
-        """
-        Force rebuild the vector store collection with enhanced embeddings.
-        This deletes the existing collection and recreates it.
-        """
-        try:
-            logger.info("🔄 FORCE REBUILD: Starting collection rebuild with enhanced embeddings")
-            
-            # Delete existing collection if it exists
-            if self.vector_search_service.check_collection_exists():
-                logger.info("🗑️ FORCE REBUILD: Deleting existing collection")
-                self.vector_search_service.delete_collection()
-            
-            # Load with enhanced embeddings
-            logger.info("🔄 FORCE REBUILD: Loading schemas with enhanced embeddings")
-            self.load_graphql_schemas(schema_path)
-            
-            logger.info("✅ FORCE REBUILD: Collection rebuild completed")
-            
-        except Exception as e:
-            logger.error(f"❌ FORCE REBUILD: Failed to rebuild collection: {e}")
-            raise
 
     def initialize_vector_store(self):
         """Initialize the PostgreSQL pgVector store - delegates to VectorSearchService."""
@@ -489,7 +451,7 @@ class VectorStoreService:
             logger.info(f"🎯 Force including core schemas based on keywords: {force_include_core}")
             
             # Get search results
-            search_k = max(k * 5, 50)  # Get more results to capture everything
+            search_k = max(k * 5, 50) # Get more results to capture everything
             results = self.vector_store.similarity_search(query=query, k=search_k)
             
             logger.info(f"📊 Found {len(results)} candidate schemas")
