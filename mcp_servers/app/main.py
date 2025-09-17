@@ -9,8 +9,9 @@ from mcp.server.fastmcp import FastMCP
 
 from .services.sdk_service import HederaSDKService
 from .services.saucerswap_service import SaucerSwapService
+from .services.graphql_service import GraphQLService
 from .settings import settings
-from .logging_config import setup_logging, get_logger, set_correlation_id
+from .logging_config import get_logger, set_correlation_id
 from .exceptions import (
     ServiceInitializationError, 
     DocumentProcessingError, 
@@ -32,6 +33,7 @@ network_sdk_service = {}
 async_network_sdk_service = {}
 vector_store_service = None
 document_processor = None
+graphql_service = None
 
 def get_sdk_service(network: str) -> HederaSDKService:
     global network_sdk_service
@@ -55,7 +57,6 @@ def get_async_sdk_service(network: str) -> HederaSDKService:
             raise ServiceInitializationError("HederaSDKService", str(e), e)
     return async_network_sdk_service[network]
     
-
 def get_vector_services():
     """Initialize and return vector store services."""
     global vector_store_service, document_processor
@@ -105,6 +106,30 @@ def get_vector_services():
             raise ServiceInitializationError("VectorServices", str(e), e)
     
     return vector_store_service, document_processor
+
+def get_graphql_service() -> GraphQLService:
+    """Initialize GraphQL service."""
+    global graphql_service
+    
+    if graphql_service is None:
+        try:
+            graphql_service = GraphQLService(
+                hgraph_endpoint=settings.hgraph_endpoint,
+                hgraph_api_key=settings.hgraph_api_key.get_secret_value(),
+                llm_api_key=settings.llm_api_key.get_secret_value(),
+                connection_string=settings.database_url,
+                llm_model=settings.llm_model,
+                llm_provider=settings.llm_provider,
+                embedding_model=settings.embedding_model,
+                schema_path=settings.graphql_schema_path
+            )
+            logger.info("✅ GraphQL service initialized successfully")
+        except Exception as e:
+            logger.error("❌ Failed to initialize GraphQL service", exc_info=True)
+            raise ServiceInitializationError("GraphQLService", str(e), e)
+
+    return graphql_service
+
 
 @mcp.tool()
 async def call_sdk_method(method_name: str, network: str, **kwargs) -> Dict[str, Any]:
@@ -169,6 +194,7 @@ async def call_sdk_method(method_name: str, network: str, **kwargs) -> Dict[str,
             "correlation_id": correlation_id
         })
         return handle_exception(e, {"correlation_id": correlation_id})
+
 
 @mcp.tool()
 def retrieve_sdk_method(query: str) -> Dict[str, Any]:
@@ -245,8 +271,6 @@ def retrieve_sdk_method(query: str) -> Dict[str, Any]:
         return handle_exception(e, {"correlation_id": correlation_id})
 
 
-# Helper functions for HBAR value calculations
-
 def normalize_hbar_amounts(hbar_amounts: Union[str, int, float, List[Union[str, int, float]]]) -> List[Union[str, int, float]]:
     """
     Normalize input to always return a list of amounts.
@@ -269,7 +293,6 @@ def normalize_hbar_amounts(hbar_amounts: Union[str, int, float, List[Union[str, 
         return hbar_amounts
     else:
         return [hbar_amounts]
-
 
 def validate_hbar_amount(hbar_amount: Union[str, int, float]) -> int:
     """
@@ -300,7 +323,6 @@ def validate_hbar_amount(hbar_amount: Union[str, int, float]) -> int:
     except (ValueError, TypeError) as e:
         raise ValidationError(f"Invalid HBAR amount format: {hbar_amount}", "hbar_amount", hbar_amount) from e
 
-
 def build_error_response(error_msg: str, hbar_amount: Union[str, int, float], correlation_id: str) -> Dict[str, Any]:
     """
     Build a standardized error response for a single calculation.
@@ -319,7 +341,6 @@ def build_error_response(error_msg: str, hbar_amount: Union[str, int, float], co
         "success": False,
         "correlation_id": correlation_id
     }
-
 
 def build_success_response(
     tinybar_amount: int, 
@@ -354,7 +375,6 @@ def build_success_response(
         "calculation_timestamp": price_data.get("timestamp"),
         "correlation_id": correlation_id
     }
-
 
 async def calculate_single_hbar_value(
     hbar_amount: Union[str, int, float], 
@@ -415,6 +435,7 @@ async def calculate_single_hbar_value(
             "correlation_id": correlation_id
         })
         return build_error_response(f"Calculation failed: {str(e)}", hbar_amount, correlation_id)
+
 
 
 @mcp.tool()
@@ -943,5 +964,87 @@ def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, fl
             "correlation_id": correlation_id
         })
         return handle_exception(e, {"correlation_id": correlation_id})
+
+@mcp.tool()
+async def text_to_graphql_query(question: str) -> Dict[str, Any]:
+    """
+    Execute natural language queries against Hedera data using GraphQL through Hgraph API.
+    
+    This tool translates natural language questions into GraphQL queries and executes them
+    against the Hgraph API, which provides access to current Hedera network state and data.
+    
+    The tool will:
+    1. Generate appropriate GraphQL based on the Hedera schema from Hgraph
+    2. Execute the query against the Hgraph API
+    3. Return results as nested dictionaries
+    
+    Args:
+        question: Question to convert to GraphQL
+        
+    Returns:
+        Dict containing:
+        - success: Whether the query was successful
+        - question: The original question
+        - graphql_query: The generated GraphQL query
+        - data: Query results as nested dictionaries
+        - error: Error message if something went wrong
+        
+    Example usage:
+        - text_to_graphql_query(question="What is the most expensive transaction for account 0.0.123?")
+        - text_to_graphql_query(question="Show me token information for token ID 0.0.456789")
+    """
+    try:
+        logger.info(f"🔍 TEXT-TO-GRAPHQL TOOL: Question: '{question[:100]}{'...' if len(question) > 100 else ''}'")
+        
+        gql_service = get_graphql_service()
+        
+        logger.info("🚀 TEXT-TO-GRAPHQL TOOL: Starting text-to-GraphQL pipeline")
+        result = await gql_service.text_to_graphql_query(question)
+        
+        # Log the results
+        success = result.get("success", False)
+        graphql_query = result.get("graphql_query", "")
+        total_attempts = result.get("total_attempts", 0)
+        
+        if success:
+            logger.info(f"✅ TEXT-TO-GRAPHQL TOOL: Pipeline completed successfully")
+            if total_attempts > 1:
+                logger.info(f"🔄 TEXT-TO-GRAPHQL TOOL: Required {total_attempts} attempts")
+            
+            # Log the actual GraphQL query that was executed
+            if graphql_query:
+                logger.info(f"📝 TEXT-TO-GRAPHQL TOOL: Generated GraphQL query:")
+                # Log each line of the query for better readability
+                for i, line in enumerate(graphql_query.strip().split('\n'), 1):
+                    logger.info(f"    {i:2d}: {line}")
+            
+        else:
+            error_msg = result.get("error", "Unknown error")
+            logger.error(f"❌ TEXT-TO-GRAPHQL TOOL: Pipeline failed: {error_msg}")
+            if total_attempts > 0:
+                logger.error(f"🔄 TEXT-TO-GRAPHQL TOOL: Failed after {total_attempts} attempts")
+            
+            # Still log the query if it was generated (for debugging)
+            if graphql_query:
+                logger.error(f"📝 TEXT-TO-GRAPHQL TOOL: Failed GraphQL query:")
+                for i, line in enumerate(graphql_query.strip().split('\n'), 1):
+                    logger.error(f"    {i:2d}: {line}")
+        
+        return {
+            "success": success,
+            "question": question,
+            "graphql_query": graphql_query,
+            "data": result.get("data", {}),
+            "error": result.get("error", ""),
+            "total_attempts": total_attempts
+        }
+        
+    except Exception as e:
+        logger.error(f"💥 TEXT-TO-GRAPHQL TOOL: Tool execution failed with exception: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "question": question,
+            "error": f"Text-to-GraphQL tool failed: {str(e)}",
+        }
 
 

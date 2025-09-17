@@ -1,6 +1,8 @@
 """
 Configuration settings for the MCP server.
 """
+import os
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr, Field
 
@@ -17,7 +19,10 @@ class MCPSettings(BaseSettings):
         sdk_documentation_path: Path to the SDK documentation file
     """
     model_config = SettingsConfigDict(
-        env_file=".env", 
+        env_file=[
+            Path(__file__).parent.parent / ".env", # mcp_servers/.env
+            ".env",  # fallback to current dir
+        ],
         env_file_encoding="utf-8",
         extra="ignore"
     )
@@ -34,12 +39,22 @@ class MCPSettings(BaseSettings):
         description="LLM API key (required)"
     )
     
+    llm_model: str = Field(
+        default="gpt-4.1",
+        description="The LLM model to use (e.g., gpt-4o, gpt-4o-mini for OpenAI)"
+    )
+    
+    llm_provider: str = Field(
+        default="openai",
+        description="The LLM provider to use (e.g., openai, google)"
+    )
+    
     collection_name: str = Field(..., description="Vector store collection name")
     
     embedding_model: str = Field(..., description="The model to use for embeddings")
     
     sdk_documentation_path: str = Field(
-        default="hiero_mirror_sdk_methods_documentation.json",
+        default="hiero_mirror_sdk_methods.json",
         description="Path to the SDK documentation file"
     )
 
@@ -56,6 +71,26 @@ class MCPSettings(BaseSettings):
     hbar_token_id: str = Field(
         default="0.0.1456986",
         description="HBAR token ID for SaucerSwap API calls"
+    )
+
+    # GraphQL (Hgraph) settings for text-to-GraphQL functionality
+    hgraph_endpoint: str = Field(
+        default="https://mainnet.hedera.api.hgraph.io/v1/graphql",
+        description="Hgraph GraphQL endpoint URL"
+    )
+    
+    hgraph_api_key: SecretStr = Field(
+        description="API key for Hgraph authentication"
+    )
+    
+    graphql_schema_path: str = Field(
+        default="hgraph_graphql_schema.json",
+        description="Path to the GraphQL schema introspection JSON file"
+    )
+
+    hgraph_graphql_metadata_path: str = Field(
+        default="hgraph_graphql_metadata.json",
+        description="Path to the GraphQL metadata JSON file"
     )
 
 

@@ -46,10 +46,7 @@ class VectorSearchService:
     def initialize_vector_store(self):
         """Initialize the PostgreSQL pgVector store."""
         try:       
-            # Get database engine from manager
-            engine = self.database_manager.get_engine()
-            
-            # Initialize PGVector following langchain-postgres documentation
+            # Initialize PGVector (following langchain-postgres documentation)
             self.vector_store = PGVector(
                 embeddings=self.embeddings,
                 collection_name=self.collection_name,
@@ -164,3 +161,42 @@ class VectorSearchService:
             True if collection exists, False otherwise
         """
         return self.database_manager.check_collection_exists(self.collection_name)
+    
+    def delete_collection(self):
+        """
+        Delete the vector store collection and all its data.
+        This will remove all embeddings and documents from the collection.
+        """
+        try:
+            logger.info(f"🗑️ DELETE: Deleting collection '{self.collection_name}'")
+            
+            # Delete from langchain_pg_embedding table (documents and embeddings)
+            from sqlalchemy import create_engine, text
+            engine = create_engine(self.database_manager.connection_string)
+            
+            with engine.connect() as conn:
+                # First get the collection UUID
+                result = conn.execute(text(
+                    "SELECT uuid FROM langchain_pg_collection WHERE name = :collection_name"
+                ), {"collection_name": self.collection_name})
+                
+                collection_uuid = result.scalar()
+                if collection_uuid:
+                    # Delete all embeddings for this collection
+                    conn.execute(text(
+                        "DELETE FROM langchain_pg_embedding WHERE collection_id = :collection_id"
+                    ), {"collection_id": collection_uuid})
+                    
+                    # Delete the collection record
+                    conn.execute(text(
+                        "DELETE FROM langchain_pg_collection WHERE uuid = :collection_id"
+                    ), {"collection_id": collection_uuid})
+                    
+                    conn.commit()
+                    logger.info(f"✅ DELETE: Successfully deleted collection '{self.collection_name}'")
+                else:
+                    logger.info(f"ℹ️ DELETE: Collection '{self.collection_name}' does not exist")
+                    
+        except Exception as e:
+            logger.error(f"❌ DELETE: Error deleting collection: {e}")
+            raise
