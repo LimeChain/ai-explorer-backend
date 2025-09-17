@@ -115,7 +115,7 @@ def get_graphql_service() -> GraphQLService:
         try:
             graphql_service = GraphQLService(
                 hgraph_endpoint=settings.hgraph_endpoint,
-                hgraph_api_key=settings.hgraph_api_key,
+                hgraph_api_key=settings.hgraph_api_key.get_secret_value(),
                 llm_api_key=settings.llm_api_key.get_secret_value(),
                 connection_string=settings.database_url,
                 llm_model=settings.llm_model,

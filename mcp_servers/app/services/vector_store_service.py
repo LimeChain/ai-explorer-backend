@@ -4,8 +4,8 @@ This service acts as a facade coordinating the database, text processing, and ve
 """
 import json
 import logging
-from typing import Dict, List, Any, Tuple
-from sqlalchemy import create_engine, text
+from typing import Dict, List, Any
+from sqlalchemy import create_engine
 from langchain_core.documents import Document
 
 
@@ -13,10 +13,9 @@ from .database_manager import DatabaseManager
 from .text_processor import TextProcessor
 from .vector_search_service import VectorSearchService
 from ..logging_config import get_service_logger
+from ..settings import settings
 
 logger = get_service_logger("vector_store_service", "mcp")
-
-METADATA_PATH = "hgraph_graphql_metadata.json"
 
 class VectorStoreService:
     """
@@ -114,7 +113,7 @@ class VectorStoreService:
             Formatted string of relevant rules
         """
         if metadata_path is None:
-            metadata_path = METADATA_PATH
+            metadata_path = settings.hgraph_graphql_metadata_path
             
         metadata = self._load_schema_metadata(metadata_path)
         
@@ -153,7 +152,7 @@ class VectorStoreService:
             Formatted string of relevant examples
         """
         if metadata_path is None:
-            metadata_path = METADATA_PATH
+            metadata_path = settings.hgraph_graphql_metadata_path
             
         metadata = self._load_schema_metadata(metadata_path)
         
@@ -244,7 +243,7 @@ class VectorStoreService:
         
         # Add use cases from external metadata
         if metadata_path is None:
-            metadata_path = METADATA_PATH
+            metadata_path = settings.hgraph_graphql_metadata_path
         
         metadata = self._load_schema_metadata(metadata_path)
         type_name = type_data.get('name', '')
@@ -343,7 +342,7 @@ class VectorStoreService:
             for type_def in custom_types:
                 try:
                     # Create enhanced searchable text with metadata
-                    searchable_text = self._create_graphql_searchable_text(type_def, "hgraph_graphql_metadata.json")
+                    searchable_text = self._create_graphql_searchable_text(type_def, settings.hgraph_graphql_metadata_path)
                     
                     # Log enhanced embedding for important types
                     if type_def.get('name') in ['transaction', 'crypto_transfer', 'token', 'nft']:

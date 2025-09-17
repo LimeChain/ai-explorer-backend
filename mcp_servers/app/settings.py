@@ -54,7 +54,7 @@ class MCPSettings(BaseSettings):
     embedding_model: str = Field(..., description="The model to use for embeddings")
     
     sdk_documentation_path: str = Field(
-        default="hiero_mirror_sdk_methods_documentation.json",
+        default="hiero_mirror_sdk_methods.json",
         description="Path to the SDK documentation file"
     )
 
@@ -84,8 +84,13 @@ class MCPSettings(BaseSettings):
     )
     
     graphql_schema_path: str = Field(
-        default="graphql_schema.json",
+        default="hgraph_graphql_schema.json",
         description="Path to the GraphQL schema introspection JSON file"
+    )
+
+    hgraph_graphql_metadata_path: str = Field(
+        default="hgraph_graphql_metadata.json",
+        description="Path to the GraphQL metadata JSON file"
     )
 
 

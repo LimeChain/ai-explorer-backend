@@ -266,7 +266,7 @@ class GraphQLService:
             
             headers = {
                 "Content-Type": "application/json",
-                "x-api-key": self.hgraph_api_key.get_secret_value()
+                "x-api-key": self.hgraph_api_key
             }
             
             payload = {

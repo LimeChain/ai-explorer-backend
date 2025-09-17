@@ -15,7 +15,7 @@ import re
 import uuid
 from typing import List, Optional
 
-EXPERIMENT_PREFIX = "gpt-4.1-mini"
+EXPERIMENT_PREFIX = "gpt-4.1"
 
 NETWORK = "testnet"
 

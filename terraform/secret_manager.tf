@@ -95,3 +95,22 @@ resource "google_secret_manager_secret" "bigquery_service_account" {
   }
 }
 
+# Hgraph API key for GraphQL authentication
+resource "google_secret_manager_secret" "hgraph_api_key" {
+  secret_id = "${var.app_name}-hgraph-api-key"
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    environment = var.environment
+    app         = var.app_name
+  }
+}
+
+resource "google_secret_manager_secret_version" "hgraph_api_key" {
+  secret      = google_secret_manager_secret.hgraph_api_key.id
+  secret_data = var.hgraph_api_key
+}
+
