@@ -1,6 +1,8 @@
 """
 Configuration settings for the MCP server.
 """
+import os
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr, Field
 
@@ -17,7 +19,10 @@ class MCPSettings(BaseSettings):
         sdk_documentation_path: Path to the SDK documentation file
     """
     model_config = SettingsConfigDict(
-        env_file=".env", 
+        env_file=[
+            Path(__file__).parent.parent / ".env", # mcp_servers/.env
+            ".env",  # fallback to current dir
+        ],
         env_file_encoding="utf-8",
         extra="ignore"
     )
@@ -79,7 +84,7 @@ class MCPSettings(BaseSettings):
     )
     
     graphql_schema_path: str = Field(
-        default="hgraph_graphql_schema.json",
+        default="graphql_schema.json",
         description="Path to the GraphQL schema introspection JSON file"
     )
 
