@@ -14,7 +14,7 @@ from .vector_store_service import VectorStoreService
 
 logger = logging.getLogger(__name__)
 
-COLLECTION_NAME = "graphql_schemas_hgraph"
+COLLECTION_NAME = "graphql_schema"
 MAX_RETRIES = 3
 
 class GraphQLService:
@@ -67,89 +67,22 @@ class GraphQLService:
             logger.error(f"Failed to initialize GraphQL service: {e}")
             raise RuntimeError(f"Failed to initialize GraphQL service: {e}") from e
     
-    def _get_relevant_schemas(self, question: str, k: int = 3) -> tuple[str, List[Dict[str, Any]]]:
-        """
-        Get relevant GraphQL schemas using vector search.
+    def _format_schema_for_prompt(self, schema_data: Dict[str, Any]) -> str:
+        """Simple schema formatting for LLM prompt."""
+        name = schema_data["name"]
+        kind = schema_data["kind"]
+        desc = schema_data.get("description", "")
         
-        Args:
-            question: Natural language question
-            k: Number of relevant schema types to retrieve
-            
-        Returns:
-            Tuple of (formatted schema string, raw schema data)
-        """
-        try:
-            logger.info(f"🔍 SCHEMA SEARCH: Searching for {k} relevant schema types for question")
-            logger.info(f"❓ SCHEMA SEARCH: Query: '{question[:100]}{'...' if len(question) > 100 else ''}'")
-            
-            # Use vector store for intelligent schema retrieval
-            relevant_schemas = self.schema_vector_store.retrieve_graphql_schemas(question, k=k)
-            
-            logger.info(f"📊 SCHEMA SEARCH: Retrieved {len(relevant_schemas)} schema types")
-            
-            if not relevant_schemas:
-                logger.error("❌ SCHEMA SEARCH: No relevant schemas found for the query")
-                raise RuntimeError("No relevant schemas found for the query")
-            
-            # Log the retrieved schema types
-            for i, schema_data in enumerate(relevant_schemas, 1):
-                type_name = schema_data.get("name", "unknown")
-                kind = schema_data.get("kind", "unknown")
-                description = schema_data.get("description", "No description")[:50]
-                logger.info(f"  {i}. {kind} '{type_name}': {description}{'...' if len(description) == 50 else ''}")
-            
-            
-            # Format schemas for prompt
-            formatted_schemas = []
-            for schema_data in relevant_schemas:
-                type_name = schema_data["name"]
-                description = schema_data["description"]
-                kind = schema_data["kind"]
-                
-                schema_lines = [f"GraphQL {kind} {type_name}:"]
-                if description:
-                    schema_lines.append(f"Description: {description}")
-                
-                # Add field information for OBJECT types
-                if schema_data["kind"] == "OBJECT" and schema_data.get("fields"):
-                    schema_lines.append("Fields:")
-                    for field in schema_data["fields"]:
-                        field_line = f"  {field['name']}: {self._format_type(field['type'])}"
-                        if field.get('description'):
-                            field_line += f" - {field['description']}"
-                        schema_lines.append(field_line)
-                
-                # Add input fields for INPUT_OBJECT types
-                elif schema_data["kind"] == "INPUT_OBJECT" and schema_data.get("inputFields"):
-                    schema_lines.append("Input Fields:")
-                    for field in schema_data["inputFields"]:
-                        field_line = f"  {field['name']}: {self._format_type(field['type'])}"
-                        if field.get('description'):
-                            field_line += f" - {field['description']}"
-                        schema_lines.append(field_line)
-                
-                # Add enum values for ENUM types
-                elif schema_data["kind"] == "ENUM" and schema_data.get("enumValues"):
-                    schema_lines.append("Values:")
-                    for value in schema_data["enumValues"]:
-                        value_line = f"  {value['name']}"
-                        if value.get('description'):
-                            value_line += f" - {value['description']}"
-                        schema_lines.append(value_line)
-                
-                schema_lines.append("")  # Add blank line for separation
-                formatted_schemas.extend(schema_lines)
-            
-            formatted_schema_text = "\n".join(formatted_schemas)
-            logger.info(f"✅ SCHEMA SEARCH: Formatted {len(relevant_schemas)} schema types into {len(formatted_schema_text)} character prompt")
-            logger.info(f"📝 SCHEMA SEARCH: Schema context preview (first 200 chars):")
-            logger.info(f"    {formatted_schema_text[:200]}{'...' if len(formatted_schema_text) > 200 else ''}")
-            
-            return formatted_schema_text, relevant_schemas
-            
-        except Exception as e:
-            logger.error(f"Failed to retrieve relevant schemas: {e}")
-            raise
+        lines = [f"{kind} {name}"]
+        if desc:
+            lines.append(f"  {desc}")
+        
+        if kind == "OBJECT" and schema_data.get("fields"):
+            for field in schema_data["fields"][:10]:  # Limit to 10 fields
+                field_type = self._format_type(field["type"])
+                lines.append(f"  {field['name']}: {field_type}")
+        
+        return "\n".join(lines)
     
     def _format_type(self, type_info: Dict[str, Any]) -> str:
         """Format GraphQL type information for display."""
@@ -163,17 +96,13 @@ class GraphQLService:
             return "Unknown"
     
     def initialize_schema_vector_store(self):
-        """Initialize and load GraphQL schemas into the vector store."""
+        """Initialize GraphQL schemas vector store."""
         try:
-            # Check if collection already exists
             if not self.schema_vector_store.vector_search_service.check_collection_exists():
-                logger.info("GraphQL schema vector store collection not found, loading schemas from JSON")
+                logger.info("Loading GraphQL schemas into vector store")
                 self.schema_vector_store.load_graphql_schemas(self.schema_path)
-                logger.info("GraphQL schema vector store initialized successfully")
-            else:
-                logger.info("GraphQL schema vector store collection already exists, skipping initialization")
         except Exception as e:
-            logger.error(f"Failed to initialize GraphQL schema vector store: {e}")
+            logger.error(f"Failed to initialize schema vector store: {e}")
             raise
     
     def _create_graphql_prompt_template(self, include_error_context: bool = False) -> ChatPromptTemplate:
@@ -185,10 +114,13 @@ class GraphQLService:
         """
         if include_error_context:
             template = """
-                Based on the GraphQL schema below, write a GraphQL query that answers the user's question.
+                Based on the GraphQL schema and the instructions below, write a GraphQL query that answers the user's question.
                 
                 Available Schema Types:
                 {schema}
+
+                SCHEMA-SPECIFIC RULES (MUST FOLLOW):
+                {rules}
 
                 Question: {question}
 
@@ -206,6 +138,9 @@ class GraphQLService:
                 CRITICAL: Use appropriate filters and pagination if needed.
                 CRITICAL: Analyze the previous error and fix the specific issue mentioned.
 
+                RELEVANT EXAMPLES:
+                {examples}
+
                 Corrected GraphQL Query:
             """
         else:
@@ -214,6 +149,9 @@ class GraphQLService:
                 
                 Available Schema Types:
                 {schema}
+
+                SCHEMA-SPECIFIC RULES (MUST FOLLOW):
+                {rules}
 
                 Question: {question}
 
@@ -227,81 +165,8 @@ class GraphQLService:
                 CRITICAL: Use the correct period for where clauses.
                 CRITICAL: Focus on the most relevant data for the question.
 
-                Examples of different types of queries:
-                
-                ------------------------------------------------------------
-                EXAMPLE 1:
-                
-                Naural language query:
-                'How many transactions are there for account 0.0.123456 between August 19th and August 20th 2025?' 
-
-                GraphQL query:
-                query {{ 
-                    sent: transaction_aggregate(
-                        where: {{ payer_account_id: {{ _eq: 123456 }} 
-                        consensus_timestamp: {{ _gte: 1755561600000000000, _lte: 1755734400000000000 }} }} 
-                    ) {{ 
-                        aggregate {{ count(columns: consensus_timestamp) }} 
-                    }} 
-                        
-                    hbar: crypto_transfer_aggregate(
-                        where: {{ entity_id: {{ _eq: 123456 }} 
-                        consensus_timestamp: {{ _gte: 1755561600000000000, _lte: 1755734400000000000 }} }}
-                    ) {{ 
-                        aggregate {{ count(columns: consensus_timestamp) }} 
-                    }} 
-                    
-                    token: token_transfer_aggregate(
-                        where: {{ account_id: {{ _eq: 123456 }}
-                        consensus_timestamp: {{ _gte: 1755561600000000000, _lte: 1755734400000000000 }} }}
-                    ) {{ 
-                        aggregate {{ count(columns: consensus_timestamp) }} 
-                    }} 
-                    
-                    nft: nft_transfer_aggregate(
-                        where: {{ _or: [ {{ sender_account_id: {{ _eq: 123456 }} }} {{ receiver_account_id: {{ _eq: 123456 }} }} ] 
-                        consensus_timestamp: {{ _gte: 1755561600000000000, _lte: 1755734400000000000 }} }}
-                    ) {{ 
-                        aggregate {{ count(columns: consensus_timestamp) }}
-                    }} 
-                }}
-
-                ------------------------------------------------------------
-                EXAMPLE 2:
-                
-                Naural language query:
-                'How many transactions in total are there for account 0.0.123456 for July 2025?'
-
-                GraphQL query:
-                Similar to EXAMPLE 1, but with different period for where clauses.
-                
-
-                ------------------------------------------------------------
-                EXAMPLE 3:
-                
-                Naural language query:
-                'Which was the most expensive transaction for 0.0.123456?'
-
-                GraphQL query:
-
-                query {{
-                    transaction(
-                        where: {{ payer_account_id: {{ _eq: 9432776 }} }}
-                        order_by: {{ charged_tx_fee: desc }}
-                        limit: 1
-                    ) {{
-                        consensus_timestamp
-                        transaction_hash
-                        type
-                        result
-                        charged_tx_fee
-                        entity_id
-                        node_account_id
-                    }}
-                }}
-                
-                ------------------------------------------------------------
-
+                RELEVANT EXAMPLES:
+                {examples}
 
                 GraphQL Query:
             """
@@ -310,44 +175,33 @@ class GraphQLService:
     
     async def generate_graphql(self, question: str, previous_query: str = None, error_message: str = None, attempt_number: int = 1) -> Dict[str, Any]:
         """
-        Generate GraphQL query from natural language question with optional error context for retries.
-        
-        Args:
-            question: Natural language question
-            previous_query: Previous GraphQL query that failed (for retry attempts)
-            error_message: Error message from previous attempt (for retry attempts)
-            attempt_number: Current attempt number (for retry context)
-            
-        Returns:
-            Dict containing the generated GraphQL query or error information
+        Simple GraphQL generation: Query → Vector Search → Context → LLM → GraphQL
         """
         try:
-            # Ensure schema vector store is initialized
+            # Initialize if needed
             if not self.schema_vector_store.vector_search_service.check_collection_exists():
-                logger.info("GraphQL schema vector store not initialized, initializing now...")
                 self.initialize_schema_vector_store()
             
-            # Get relevant schema using vector search
-            schema, relevant_schema_data = self._get_relevant_schemas(question)
-
-            # Create GraphQL generation with error context for retry attempts
+            # Get context from vector search
+            context = self.schema_vector_store.retrieve_relevant_context(question)
+            
+            # Format schemas for prompt
+            schemas_text = "\n\n".join([
+                self._format_schema_for_prompt(schema) 
+                for schema in context["schemas"]
+            ])
+            
+            # Prepare LLM prompt
             is_retry = previous_query is not None and error_message is not None
             prompt_template = self._create_graphql_prompt_template(include_error_context=is_retry)
             
-            graphql_chain = (
-                RunnablePassthrough()
-                | prompt_template
-                | self.llm.bind(stop=["\nGraphQLResult:", "\nCorrected GraphQL Query:"])
-                | StrOutputParser()
-            )
-            
-            # Prepare prompt parameters
             prompt_params = {
                 "question": question,
-                "schema": schema
+                "schema": schemas_text,
+                "rules": context["rules"],
+                "examples": context["examples"]
             }
             
-            # Add error context for retry attempts
             if is_retry:
                 prompt_params.update({
                     "previous_query": previous_query,
@@ -355,42 +209,26 @@ class GraphQLService:
                     "attempt_number": attempt_number
                 })
             
-            # Generate GraphQL
+            # Generate GraphQL with LLM
+            graphql_chain = (
+                RunnablePassthrough()
+                | prompt_template  
+                | self.llm
+                | StrOutputParser()
+            )
+            
+            logger.info(f"🔧 PROMPT PARAMS: {prompt_params}")
+
             graphql_query = await graphql_chain.ainvoke(prompt_params)
             
-            # Extract only the actual GraphQL query
+            # Simple cleanup
             graphql_query = graphql_query.strip()
+            if graphql_query.startswith("```"):
+                graphql_query = graphql_query.split("```")[1].strip()
+            if "```" in graphql_query:
+                graphql_query = graphql_query.split("```")[0].strip()
             
-            # Remove code block markers
-            if graphql_query.startswith("```graphql"):
-                graphql_query = graphql_query[10:]
-            elif graphql_query.startswith("```"):
-                graphql_query = graphql_query[3:]
-            
-            # Find the end of the GraphQL query
-            end_markers = [
-                "```",
-                "**Explanation:",
-                "**Note:",
-                "*If you need",
-                "Explanation:",
-                "Note:",
-                "\n\n**",
-                "\n\n*",
-                "\n\nExplanation",
-                "\n\nNote"
-            ]
-            
-            for marker in end_markers:
-                if marker in graphql_query:
-                    graphql_query = graphql_query.split(marker)[0]
-                    break
-            
-            graphql_query = graphql_query.strip()
-            
-            attempt_log = f" (attempt {attempt_number})" if attempt_number > 1 else ""
-            logger.info(f"Generated GraphQL query for question: {question[:100]}...{attempt_log}")
-            logger.debug(f"Generated GraphQL: {graphql_query}")
+            logger.info(f"Generated GraphQL for: {question}")
             
             return {
                 "success": True,
@@ -400,7 +238,7 @@ class GraphQLService:
             }
             
         except Exception as e:
-            logger.error(f"Failed to generate GraphQL (attempt {attempt_number}): {e}")
+            logger.error(f"Failed to generate GraphQL: {e}")
             return {
                 "success": False,
                 "error": f"Failed to generate GraphQL query: {str(e)}",
@@ -435,11 +273,11 @@ class GraphQLService:
                 "query": graphql_query
             }
             
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     self.hgraph_endpoint,
                     headers=headers,
-                    json=payload
+                    json=payload,
                 )
                 logger.info(f"📡 GRAPHQL EXECUTION: Received HTTP {response.status_code} response")
                 response.raise_for_status()
