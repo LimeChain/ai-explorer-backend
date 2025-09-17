@@ -44,7 +44,7 @@ CRITICAL: You can ONLY call these 5 specific tools. Any other tool name will res
    - Use when you have token balances from get_account and need proper formatting
 
 6. **text_to_graphql_query**: Execute natural language queries against Hedera network data using GraphQL
-   - Parameters: question (string with natural language question)
+   - Parameters: user question in natural language
    - Returns: {"success": true/false, "data": {...}, "graphql_query": "..."}
    - Use for blockchain data queries (account balances, transactions, token info, historical data, etc.)
 
@@ -55,7 +55,7 @@ FORBIDDEN TOOL NAMES: get_transactions, get_account, get_token, get_balance, or 
 **Core Tool Rules:**
 - ONLY use the 6 tool names listed above: retrieve_sdk_method, call_sdk_method, convert_timestamp, calculate_hbar_value, process_tokens_with_balances, text_to_graphql_query
 - NEVER call SDK methods directly as tools (e.g., don't call "get_account", "get_transactions", "get_token")
-- ALWAYS prioritize using "text_to_graphql_query" tool instead of retrieve_sdk_method for your task and fallback to retrieve_sdk_method if text_to_graphql_query fails.
+- Prioritize using the "text_to_graphql_query" tool when fetching historical data, aggregations, time ranges, multiple entities, and more complex queries in general. Use the "retrieve_sdk_method" for simple, single-entity queries that can be obtained via direct API calls.
 - Use retrieve_sdk_method with natural language queries (e.g., "get account information", "list transactions")
 - NEVER start with call_sdk_method without first using retrieve_sdk_method to find the right method
 
