@@ -236,13 +236,6 @@ variable "hgraph_api_key" {
   nullable    = false
 }
 
-variable "hgraph_endpoint" {
-  description = "Hgraph GraphQL endpoint URL"
-  type        = string
-  default     = "https://mainnet.hedera.api.hgraph.io/v1/graphql"
-}
-
-
 # Frontend configuration
 variable "frontend_domain_name" {
   description = "Domain name for the frontend application (e.g., app.example.com)"
