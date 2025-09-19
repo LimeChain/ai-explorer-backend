@@ -168,13 +168,13 @@ class VectorSearchService:
         This will remove all embeddings and documents from the collection.
         """
         try:
-            logger.info(f"🗑️ DELETE: Deleting collection '{self.collection_name}'")
+            logger.info(f"DELETE: Deleting collection '{self.collection_name}'")
             
-            # Delete from langchain_pg_embedding table (documents and embeddings)
-            from sqlalchemy import create_engine, text
-            engine = create_engine(self.database_manager.connection_string)
+            # Get the shared engine from database manager
+            engine = self.database_manager.get_engine()
             
-            with engine.connect() as conn:
+            # Use transactional connection
+            with engine.begin() as conn:
                 # First get the collection UUID
                 result = conn.execute(text(
                     "SELECT uuid FROM langchain_pg_collection WHERE name = :collection_name"
@@ -192,11 +192,10 @@ class VectorSearchService:
                         "DELETE FROM langchain_pg_collection WHERE uuid = :collection_id"
                     ), {"collection_id": collection_uuid})
                     
-                    conn.commit()
-                    logger.info(f"✅ DELETE: Successfully deleted collection '{self.collection_name}'")
+                    logger.info(f"DELETE: Successfully deleted collection '{self.collection_name}'")
                 else:
-                    logger.info(f"ℹ️ DELETE: Collection '{self.collection_name}' does not exist")
+                    logger.info(f"DELETE: Collection '{self.collection_name}' does not exist")
                     
         except Exception as e:
-            logger.error(f"❌ DELETE: Error deleting collection: {e}")
+            logger.exception(f"DELETE: Error deleting collection: {e}")
             raise
