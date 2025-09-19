@@ -228,6 +228,14 @@ variable "saucerswap_api_key" {
   nullable    = false
 }
 
+# Hgraph GraphQL configuration
+variable "hgraph_api_key" {
+  description = "Hgraph API key for GraphQL authentication"
+  type        = string
+  sensitive   = true
+  nullable    = false
+}
+
 # Frontend configuration
 variable "frontend_domain_name" {
   description = "Domain name for the frontend application (e.g., app.example.com)"

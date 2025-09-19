@@ -1,0 +1,174 @@
+{
+  "transaction": {
+    "use_cases": [
+      "Find transactions within specific time ranges",
+      "List all transactions for a given account",
+      "List all transactions for a given period",
+      "Count how many transactions an account has within a specific period",
+      "Get account transaction activity",
+      "Find number of transactions by account ID",
+      "Search transactions by account number",
+      "Get transaction count for a given account",
+      "Search transaction history"
+    ],
+    "rules": [
+      "Use numeric account IDs (123456) not 0.0.X format in queries",
+      "consensus_timestamp should be in nanoseconds since epoch for time filters",
+      "When not explicitly stated, use _gte and _lte for time range queries with consensus_timestamp (inclusive)",
+      "Include charged_tx_fee for transaction cost analysis",
+      "Filter by result field for successful/failed transactions"
+    ],
+    "examples": [
+      {
+        "query": "How many transactions are there for account 0.0.123456 between August 19th and August 20th 2025?",
+        "graphql": "query {\n    sent: transaction_aggregate(\n        where: { payer_account_id: { _eq: 123456 }\n        consensus_timestamp: { _gte: 1755561600000000000, _lte: 1755734400000000000 } }\n    ) { \n        aggregate { count(columns: consensus_timestamp) }\n    } \n        \n    hbar: crypto_transfer_aggregate(\n        where: { entity_id: { _eq: 123456 }\n        consensus_timestamp: { _gte: 1755561600000000000, _lte: 1755734400000000000 } }\n    ) { \n        aggregate { count(columns: consensus_timestamp) }\n    } \n    \n    token: token_transfer_aggregate(\n        where: { account_id: { _eq: 123456 }\n        consensus_timestamp: { _gte: 1755561600000000000, _lte: 1755734400000000000 } }\n    ) { \n        aggregate { count(columns: consensus_timestamp) }\n    } \n    \n    nft: nft_transfer_aggregate(\n        where: { _or: [ { sender_account_id: { _eq: 123456 } } { receiver_account_id: { _eq: 123456 } } ] \n        consensus_timestamp: { _gte: 1755561600000000000, _lte: 1755734400000000000 } }\n    ) { \n        aggregate { count(columns: consensus_timestamp) }\n    } \n}",
+        "explanation": "Count all types of transactions for account in time range - sent transactions, HBAR transfers, token transfers, and NFT transfers"
+      },
+      {
+        "query": "Which was the most expensive transaction for 0.0.123456?",
+        "graphql": "query {\n    transaction(\n        where: { payer_account_id: { _eq: 123456 } }\n        order_by: { charged_tx_fee: desc }\n        limit: 1\n    ) {\n        consensus_timestamp\n        transaction_hash\n        type\n        result\n        charged_tx_fee\n        entity_id\n        node_account_id\n    }\n}",
+        "explanation": "Find highest fee transaction for specific account"
+      }
+    ]
+  },
+  "token": {
+    "use_cases": [
+      "Query token information by token ID",
+      "Find tokens created by specific accounts",
+      "Analyze token supply, decimals, and metadata",
+      "Track token creation and modifications",
+      "Query token admin keys and permissions"
+    ],
+    "rules": [
+      "CRITICAL: Use numeric token_id for token identification",
+      "Use consensus_timestamp for token creation queries",
+      "Include decimals field for proper token amount calculations",
+      "Filter by type field for fungible vs non-fungible tokens",
+      "Use treasury_account_id to find token treasury"
+    ]
+  },
+  "nft": {
+    "use_cases": [
+      "Query NFT collections and individual tokens",
+      "Find NFTs owned by specific accounts",
+      "Track NFT transfers and ownership history",
+      "Analyze NFT metadata and properties",
+      "Query NFT creation and minting events"
+    ],
+    "rules": [
+      "CRITICAL: Use account_id field for NFT ownership queries",
+      "CRITICAL: Combine token_id and serial_number for unique NFT identification",
+      "Use consensus_timestamp for NFT creation queries",
+      "Include metadata field for NFT properties and attributes",
+      "Filter by deleted field to exclude burned NFTs"
+    ]
+  },
+  "crypto_transfer": {
+    "use_cases": [
+      "Track HBAR transfers between accounts",
+      "Analyze account balance changes over time",
+      "Find large HBAR movements and transactions",
+      "Calculate net HBAR flow for accounts",
+      "Monitor treasury and exchange activities"
+    ],
+    "rules": [
+      "CRITICAL: Use entity_id for account-specific transfer queries",
+      "CRITICAL: amount field shows transfer amount in tinybars (1 HBAR = 100,000,000 tinybars)",
+      "Use consensus_timestamp for time-based transfer analysis",
+      "Positive amounts indicate credits, negative amounts indicate debits",
+      "Join with transaction table for complete transfer context"
+    ],
+    "examples": [
+      {
+        "query": "What HBAR transfers happened for account 123456?",
+        "graphql": "query {\n  crypto_transfer(\n    where: { entity_id: { _eq: 123456 } }\n    order_by: { consensus_timestamp: desc }\n    limit: 10\n  ) {\n    consensus_timestamp\n    entity_id\n    amount\n    transaction {\n      transaction_hash\n      type\n    }\n  }\n}",
+        "explanation": "Get HBAR transfers for specific account"
+      },
+      {
+        "query": "Find the largest HBAR transfer in the last day",
+        "graphql": "query {\n  crypto_transfer(\n    where: {\n      consensus_timestamp: { _gte: 1755561600000000000 }\n    }\n    order_by: { amount: desc }\n    limit: 1\n  ) {\n    consensus_timestamp\n    entity_id\n    amount\n    transaction {\n      transaction_hash\n      payer_account_id\n    }\n  }\n}",
+        "explanation": "Find largest HBAR transfer by amount"
+      }
+    ]
+  },
+  "contract_result": {
+    "use_cases": [
+      "Query smart contract execution results",
+      "Analyze contract call outcomes and gas usage",
+      "Track contract state changes and events",
+      "Find failed contract executions and errors",
+      "Monitor contract performance and costs"
+    ],
+    "rules": [
+      "CRITICAL: Use contract_id for contract-specific queries",
+      "Use function_result for contract call return values",
+      "Include gas_used for contract execution cost analysis",
+      "Filter by call_result for successful/failed contract calls",
+      "Use consensus_timestamp for temporal contract analysis"
+    ]
+  },
+  "token_transfer": {
+    "use_cases": [
+      "Track fungible token transfers between accounts",
+      "Analyze token flow and trading activity",
+      "Calculate token balance changes",
+      "Monitor token distribution and concentration",
+      "Find large token movements"
+    ],
+    "rules": [
+      "CRITICAL: Use account_id for account-specific token transfers",
+      "CRITICAL: Use token_id to filter transfers for specific tokens",
+      "amount field shows raw token amount (apply decimals for display)",
+      "Use consensus_timestamp for time-based token transfer analysis",
+      "Combine with token table for token metadata and decimals"
+    ]
+  },
+  "nft_transfer": {
+    "use_cases": [
+      "Track NFT transfers and ownership changes",
+      "Find NFT trading and marketplace activity",
+      "Analyze NFT collection ownership distribution",
+      "Monitor NFT minting and burning events",
+      "Track specific NFT ownership history"
+    ],
+    "rules": [
+      "CRITICAL: Use sender_account_id and receiver_account_id for transfer direction",
+      "CRITICAL: Combine token_id and serial_number for specific NFT tracking",
+      "Use consensus_timestamp for NFT transfer timeline analysis",
+      "Filter out null sender_account_id for minting events",
+      "Filter out null receiver_account_id for burning events"
+    ]
+  },
+  "account": {
+    "use_cases": [
+      "Query account information and balances",
+      "Find accounts created within time ranges",
+      "Analyze account activity and transaction patterns",
+      "Track account key changes and updates",
+      "Monitor treasury and system accounts"
+    ],
+    "rules": [
+      "CRITICAL: Use account_id as numeric value for account identification",
+      "Use consensus_timestamp for account creation queries",
+      "Include balance field for current account HBAR balance",
+      "Filter by deleted field to exclude deleted accounts",
+      "Use auto_renew_period for account expiration analysis"
+    ]
+  },
+  "topic_message": {
+    "use_cases": [
+      "Query Hedera Consensus Service messages",
+      "Track topic message sequences and ordering",
+      "Analyze message content and metadata",
+      "Find messages within specific time ranges",
+      "Monitor topic activity and usage patterns"
+    ],
+    "rules": [
+      "CRITICAL: Use topic_id for topic-specific message queries",
+      "Use sequence_number for message ordering within topics",
+      "Include message field for actual message content",
+      "Use consensus_timestamp for temporal message analysis",
+      "Filter by payer_account_id for messages from specific accounts"
+    ]
+  }
+}
