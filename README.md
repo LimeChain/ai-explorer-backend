@@ -19,6 +19,7 @@ Hederion AI Explorer is a next-generation block explorer for the Hedera network 
   - ✅ Semantic search with embeddings
 - MCP tools
   - ✅ Hedera's Mirror Node REST API
+  - ✅ Hgraph GraphQL API
   - ❌ Hedera's BigQuery
   - ✅ Timestamp conversion tool
   - ✅ Money value conversion tool
