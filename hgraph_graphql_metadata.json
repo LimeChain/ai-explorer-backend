@@ -41,7 +41,7 @@
     ],
     "rules": [
       "CRITICAL: Use numeric token_id for token identification",
-      "Use created_timestamp for token creation queries",
+      "Use consensus_timestamp for token creation queries",
       "Include decimals field for proper token amount calculations",
       "Filter by type field for fungible vs non-fungible tokens",
       "Use treasury_account_id to find token treasury"
@@ -58,7 +58,7 @@
     "rules": [
       "CRITICAL: Use account_id field for NFT ownership queries",
       "CRITICAL: Combine token_id and serial_number for unique NFT identification",
-      "Use created_timestamp for NFT creation queries",
+      "Use consensus_timestamp for NFT creation queries",
       "Include metadata field for NFT properties and attributes",
       "Filter by deleted field to exclude burned NFTs"
     ]
@@ -104,7 +104,7 @@
       "Use function_result for contract call return values",
       "Include gas_used for contract execution cost analysis",
       "Filter by call_result for successful/failed contract calls",
-      "Use created_timestamp for temporal contract analysis"
+      "Use consensus_timestamp for temporal contract analysis"
     ]
   },
   "token_transfer": {
@@ -149,7 +149,7 @@
     ],
     "rules": [
       "CRITICAL: Use account_id as numeric value for account identification",
-      "Use created_timestamp for account creation queries",
+      "Use consensus_timestamp for account creation queries",
       "Include balance field for current account HBAR balance",
       "Filter by deleted field to exclude deleted accounts",
       "Use auto_renew_period for account expiration analysis"
