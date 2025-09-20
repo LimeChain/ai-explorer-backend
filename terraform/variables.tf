@@ -139,49 +139,37 @@ variable "log_level" {
 variable "llm_provider" {
   description = "LLM provider to use"
   type        = string
-  default     = "openai"
+  default     = "google_genai"
 }
 
 variable "llm_model" {
   description = "LLM model to use"
   type        = string
-  default     = "gpt-4.1"
+  default     = "gemini-2.5-pro"
 }
 
 variable "embedding_model" {
   description = "Embedding model to use"
   type        = string
-  default     = "text-embedding-3-small"
+  default     = "gemini-embedding-001"
 }
 
 variable "llm_input_cost_per_token" {
   description = "LLM input cost per token in USD"
   type        = number
-  default     = 0.0000004
+  default     = 0.000002
 }
 
 variable "llm_output_cost_per_token" {
   description = "LLM output cost per token in USD"
   type        = number
-  default     = 0.0000016
-}
-
-variable "collection_name" {
-  description = "Vector store collection name"
-  type        = string
-  default     = "sdk_methods"
+  default     = 0.000008
 }
 
 variable "langsmith_tracing" {
   description = "Enable LangSmith tracing"
   type        = bool
   default     = false
-}
-
-variable "langsmith_endpoint" {
-  description = "LangSmith API endpoint"
-  type        = string
-  default     = "https://api.smith.langchain.com"
 }
 
 variable "allowed_origins" {

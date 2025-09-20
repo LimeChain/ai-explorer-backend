@@ -276,9 +276,10 @@ def setup_logging(
         # Configure console handler based on color support
         if use_colors and RICH_AVAILABLE and not use_json:
             # Use Rich handler for colored console output (only in development)
+            from app.settings import settings
             console = Console(
                 stderr=False,  # Use stdout
-                force_terminal=False, # Avoid performance issues
+                force_terminal=settings.force_terminal, # Configurable via environment
                 color_system="auto",
                 width=None  # Auto-detect width
             )

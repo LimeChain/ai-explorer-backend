@@ -11,11 +11,13 @@ ENV UV_CACHE_DIR=/tmp/uv-cache
 # Set work directory
 WORKDIR /app
 
-# Copy dependency files
-COPY pyproject.toml ./
+# Copy workspace configuration and dependency files
+COPY pyproject.toml uv.lock ./
+COPY sdk/ ./sdk/
+COPY mcp_servers/pyproject.toml ./mcp_servers/
 
-# Install dependencies (generate lock file if needed)
-RUN uv sync --no-dev
+# Install dependencies using workspace
+RUN uv sync --frozen
 
 # Stage 2: Production image
 FROM python:3.13-slim AS runtime
@@ -36,7 +38,7 @@ COPY pyproject.toml ./
 COPY alembic.ini ./
 COPY alembic/ ./alembic/
 
-# Setup for MCP servers
+# Setup workspace structure  
 COPY mcp_servers/ ./mcp_servers/
 COPY sdk/ ./sdk/
 
@@ -51,5 +53,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
-# Run the application
-CMD ["/app/scripts/start.sh"]
+# Run the application  
+CMD ["uv", "run", "/app/scripts/start.sh"]

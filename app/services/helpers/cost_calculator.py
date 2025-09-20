@@ -3,7 +3,7 @@ Simple cost calculation utility for LLM token usage based on environment configu
 """
 import logging
 from typing import Tuple
-from app.config import settings
+from app.settings import settings
 
 logger = logging.getLogger(__name__)
 

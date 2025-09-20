@@ -1,6 +1,6 @@
 from langsmith import Client
 
-from app.config import settings
+from app.settings import settings
 from app.services.llm_orchestrator import LLMOrchestrator
 from app.db.session import get_db_session
 from app.schemas.chat import ChatMessage

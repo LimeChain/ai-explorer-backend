@@ -122,7 +122,7 @@ def get_graphql_service() -> GraphQLService:
                 llm_model=settings.llm_model,
                 llm_provider=settings.llm_provider,
                 embedding_model=settings.embedding_model,
-                schema_path=settings.graphql_schema_path
+                schema_path=settings.hgraph_graphql_schema_path
             )
             logger.info("✅ GraphQL service initialized successfully")
         except Exception as e:

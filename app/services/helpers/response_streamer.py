@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, AIMe
 from langchain_core.language_models.chat_models import BaseChatModel
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from app.settings import settings
 from app.services.chat_service import ChatService
 
 logger = logging.getLogger(__name__)
@@ -41,14 +41,13 @@ class ResponseStreamer:
         """Stream the final response and save to database."""
         try:
             encoding = tiktoken.encoding_for_model(settings.llm_model)
-        except Exception as e:
+        except Exception:
             # Fallback for unknown models/providers
             base = "o200k_base" if "gpt-4.1-mini" in settings.llm_model else "cl100k_base"
-            logger.error("❌ Error getting encoding for model %s: %s", settings.llm_model, e)
             encoding = tiktoken.get_encoding(base)
-            logger.warning(
-                "⚠️ Unknown model for tiktoken: provider=%s, model=%s. Falling back to %s.",
-                getattr(settings, 'llm_provider', 'unknown'), settings.llm_model, base
+            logger.debug(
+                "Using %s encoding for non-OpenAI model: %s (provider: %s)",
+                base, settings.llm_model, getattr(settings, 'llm_provider', 'unknown')
             )
         
         # Prepare messages for final response

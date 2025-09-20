@@ -12,7 +12,7 @@ from langgraph.graph import END
 from langchain_mcp_adapters.tools import load_mcp_tools
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from app.settings import settings
 from app.exceptions import LLMServiceError, ValidationError
 from app.prompts.system_prompts import AGENTIC_SYSTEM_PROMPT, RESPONSE_FORMATTING_SYSTEM_PROMPT
 from app.services.chat_service import ChatService

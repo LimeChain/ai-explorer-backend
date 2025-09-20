@@ -137,7 +137,12 @@ class GraphQLService:
         """
         if include_error_context:
             template = """
-                Based on the GraphQL schema and the instructions below, write a GraphQL query that answers the user's question.
+                You are an expert GraphQL query generator fixing a previous error. Analyze the error step-by-step and create a corrected query.
+                
+                First, analyze the error:
+                1. What went wrong in the previous attempt?
+                2. What specific syntax or schema issue caused the failure?
+                3. How can you fix this while maintaining the original intent?
                 
                 Available Schema Types:
                 {schema}
@@ -157,9 +162,13 @@ class GraphQLService:
                 CRITICAL: Only return clean GraphQL that can be executed directly.
                 CRITICAL: Do NOT include any explanation, notes, or comments.
                 CRITICAL: Return ONLY the GraphQL query, nothing else.
+                CRITICAL: Do NOT include the word "graphql" in front of the graphql query or any language identifiers.
                 CRITICAL: Ensure all required fields and arguments are included.
                 CRITICAL: Use appropriate filters and pagination if needed.
                 CRITICAL: Analyze the previous error and fix the specific issue mentioned.
+
+                STRATEGIC GUIDANCE (follow these patterns for complex queries):
+                {strategic_guidance}
 
                 RELEVANT EXAMPLES:
                 {examples}
@@ -168,7 +177,12 @@ class GraphQLService:
             """
         else:
             template = """
-                Based on the GraphQL schema and the instructions below, write a GraphQL query that answers the user's question.
+                You are an expert GraphQL query generator. Analyze the user's question step-by-step and create an optimal GraphQL query.
+                
+                First, understand what the user wants:
+                1. What specific data are they requesting?
+                2. What filters or conditions apply?
+                3. What format should the response have?
                 
                 Available Schema Types:
                 {schema}
@@ -183,10 +197,14 @@ class GraphQLService:
                 CRITICAL: Only return clean GraphQL that can be executed directly.
                 CRITICAL: Do NOT include any explanation, notes, or comments.
                 CRITICAL: Return ONLY the GraphQL query, nothing else.
+                CRITICAL: Do NOT include the word "graphql" in front of the graphql query or any language identifiers.
                 CRITICAL: Always start queries at the correct root field.
                 CRITICAL: Include appropriate filters (where, order_by, limit, offset), sorting, and pagination if needed.
                 CRITICAL: Use the correct period for where clauses.
                 CRITICAL: Focus on the most relevant data for the question.
+
+                STRATEGIC GUIDANCE (follow these patterns for complex queries):
+                {strategic_guidance}
 
                 RELEVANT EXAMPLES:
                 {examples}
@@ -222,7 +240,8 @@ class GraphQLService:
                 "question": question,
                 "schema": schemas_text,
                 "rules": context["rules"],
-                "examples": context["examples"]
+                "examples": context["examples"],
+                "strategic_guidance": context["strategic_guidance"]
             }
             
             if is_retry:
@@ -244,12 +263,25 @@ class GraphQLService:
 
             graphql_query = await graphql_chain.ainvoke(prompt_params)
             
-            # Simple cleanup
+            # Cleanup GraphQL queries
             graphql_query = graphql_query.strip()
+            
+            # Remove code block markers
             if graphql_query.startswith("```"):
                 graphql_query = graphql_query.split("```")[1].strip()
             if "```" in graphql_query:
                 graphql_query = graphql_query.split("```")[0].strip()
+            
+            # Remove "graphql" prefix if present (case insensitive)
+            lines = graphql_query.split('\n')
+            if lines and lines[0].strip().lower() in ['graphql', 'gql']:
+                graphql_query = '\n'.join(lines[1:]).strip()
+            
+            # Also handle inline "graphql" prefix
+            if graphql_query.lower().startswith('graphql'):
+                graphql_query = graphql_query[7:].strip()  # Remove "graphql" (7 chars)
+            elif graphql_query.lower().startswith('gql'):
+                graphql_query = graphql_query[3:].strip()  # Remove "gql" (3 chars)
             
             logger.info(f"Generated GraphQL for: {question}")
             
