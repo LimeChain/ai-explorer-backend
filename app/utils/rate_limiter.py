@@ -3,7 +3,7 @@ import time
 import hashlib
 from fastapi import WebSocket
 from typing import Optional
-from app.config import settings
+from app.settings import settings
 from app.utils.logging_config import get_service_logger
 
 logger = get_service_logger("rate_limiter")

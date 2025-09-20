@@ -6,9 +6,9 @@ from fastapi import FastAPI
 from psycopg_pool import AsyncConnectionPool
 
 from app.api.endpoints import chat, message, suggestions
-from app.config import settings
+from app.settings import settings
 from app.exception_handlers import register_exception_handlers
-from app.utils.logging_config import setup_logging, get_logger, set_correlation_id
+from app.utils.logging_config import setup_logging, get_logger
 from app.middleware import correlation_id_middleware
 from fastapi.middleware.cors import CORSMiddleware
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver

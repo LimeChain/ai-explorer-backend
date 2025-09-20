@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - dev
+      - feat/migrate-model
 
 env:
   GCP_REGION: us-central1

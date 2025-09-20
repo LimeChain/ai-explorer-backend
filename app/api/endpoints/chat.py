@@ -14,7 +14,7 @@ from app.db.session import get_db_session
 from app.exceptions import ChatServiceError, ValidationError, LLMServiceError, RateLimitError
 from app.utils.rate_limiter import IPRateLimiter, GlobalRateLimiter, redis_client
 from app.utils.cost_limiter import CostLimiter
-from app.config import settings
+from app.settings import settings
 from app.utils.logging_config import get_api_logger
 
 logger = get_api_logger("chat")

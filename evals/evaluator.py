@@ -69,7 +69,7 @@ Use the reference outputs below to help you evaluate the correctness of the resp
 </reference_outputs>
 """
 
-from app.config import settings
+from app.settings import settings
 
 # Use a prebuilt evaluator from openevals (https://github.com/langchain-ai/openevals)
 

@@ -8,11 +8,11 @@ Hederion AI Explorer is a next-generation block explorer for the Hedera network 
   - ✅ Chat endpoint for real-time user queries and token-by-token streaming responses over WebSockets
   - ✅ Suggested queries endpoint for list of pre-defined queries
   - ✅ IP and global rate/cost limiting
+  - ❌ Conversation endpoints
 - AI Agent
-  - ✅ LLM agentic reasoning and tool use
+  - ✅ LLM agentic reasoning and tool usage
   - ✅ Multi-turn conversation with context retention
   - ✅ Session-based conversations (anonymous and pseudonymous sessions)
-  - ✅ Contextual user data (wallet account ID)
 - Relational Database
   - ✅ Chat history with database persistence
 - Vector Database
@@ -43,6 +43,21 @@ Hederion AI Explorer is a next-generation block explorer for the Hedera network 
 - LLM API (OpenAI, Google, etc.)
 
 
+### Run Locally (with Docker)
+
+1. Configure the `.env` file to use the correct mcp endpoint:
+
+2. Start all services with Docker:
+```bash
+docker compose up
+```
+
+3. Send a sample query over WebSocket:
+```bash
+docker compose exec api uv run python scripts/dev/query_websocket_dev.py
+```
+
+
 ### Run Locally
 
 1. Clone the repository:
@@ -61,9 +76,9 @@ cp .env.example .env
 uv sync
 ```
 
-4. Start the database:
+4. Start the database and redis services:
 ```bash
-docker compose up db
+docker compose up postgres redis
 ```
 
 5. Run database migrations:
@@ -119,21 +134,6 @@ Call `ask_explorer` tool:
     }
   }
 }
-```
-
-
-### Run Locally (with Docker)
-
-1. Configure the `.env` file to use the correct mcp endpoint:
-
-2. Start all services with Docker:
-```bash
-docker compose up
-```
-
-3. Send a sample query over WebSocket:
-```bash
-docker compose exec api uv run python scripts/dev/query_websocket_dev.py
 ```
 
 
