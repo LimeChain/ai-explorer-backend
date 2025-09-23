@@ -7,7 +7,7 @@ separate from request-based rate limiting.
 import redis
 import hashlib
 from fastapi import WebSocket
-from app.config import settings
+from app.settings import settings
 from app.utils.logging_config import get_service_logger
 
 logger = get_service_logger("api")

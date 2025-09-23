@@ -30,14 +30,12 @@ global_rate_limit_window_seconds = 60
 
 # Application configuration - MVP Optimized
 log_level        = "INFO"                    # Production-ready logging
-llm_provider     = "openai"
-llm_model        = "gpt-4o-mini"             # Cost-effective model
-embedding_model  = "text-embedding-3-small" # Cost-effective embeddings
-collection_name  = "sdk_methods"
+llm_provider     = "google_genai"
+llm_model        = "gemini-2.5-pro"          # Google Gemini model
+embedding_model  = "models/embedding-001"    # Google embedding model
 
 # LangSmith configuration - MVP Optimized
 langsmith_tracing  = true                    # Keep for debugging
-langsmith_endpoint = "https://api.smith.langchain.com"
 
 # CORS configuration - MVP (should be tightened for production)
 allowed_origins = ["*"]                      # TODO: Restrict for production

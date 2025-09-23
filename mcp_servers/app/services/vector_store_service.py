@@ -208,6 +208,71 @@ class VectorStoreService:
         
         return formatted_text
     
+    def get_strategic_guidance(self, user_question: str, metadata_path: str = None, max_scenarios: int = 2) -> str:
+        """
+        Extract relevant strategic guidance scenarios from metadata based on user query.
+        
+        Args:
+            user_question: The user's query to match against scenarios
+            metadata_path: Path to metadata file (uses default if not provided)
+            max_scenarios: Maximum number of strategic scenarios to return
+            
+        Returns:
+            Formatted string of relevant strategic guidance scenarios
+        """
+        if metadata_path is None:
+            metadata_path = settings.hgraph_graphql_metadata_path
+            
+        metadata = self._load_schema_metadata(metadata_path)
+        
+        strategic_guidance = metadata.get('_strategic_guidance', {})
+        scenarios = strategic_guidance.get('complex_scenarios', [])
+        
+        if not scenarios:
+            return "No strategic guidance scenarios available."
+        
+        # Score scenarios based on relevance to user question
+        user_words = set(user_question.lower().split())
+        scored_scenarios = []
+        
+        for scenario in scenarios:
+            scenario_text = (
+                f"{scenario.get('scenario', '')} "
+                f"{scenario.get('description', '')} "
+                f"{scenario.get('example_query', '')} "
+                f"{scenario.get('approach', '')}"
+            ).lower()
+            scenario_words = set(scenario_text.split())
+            
+            # Calculate relevance score
+            common_words = user_words.intersection(scenario_words)
+            relevance_score = len(common_words) / max(len(user_words), 1)
+            
+            scored_scenarios.append((relevance_score, scenario))
+        
+        # Sort by relevance score and take top scenarios
+        scored_scenarios.sort(key=lambda x: x[0], reverse=True)
+        top_scenarios = scored_scenarios[:max_scenarios]
+        
+        if not top_scenarios or top_scenarios[0][0] == 0:
+            # If no good matches, return first few scenarios
+            top_scenarios = [(0, scenario) for scenario in scenarios[:max_scenarios]]
+        
+        # Format strategic guidance for prompt
+        formatted_guidance = []
+        for i, (score, scenario) in enumerate(top_scenarios, 1):
+            formatted_guidance.append(f"STRATEGIC PATTERN {i}: {scenario.get('scenario', 'Unknown')}")
+            formatted_guidance.append(f"Description: {scenario.get('description', '')}")
+            formatted_guidance.append(f"Approach: {scenario.get('approach', '')}")
+            formatted_guidance.append(f"Example Query: '{scenario.get('example_query', '')}'")
+            formatted_guidance.append("Example GraphQL:")
+            formatted_guidance.append(scenario.get('graphql', ''))
+            formatted_guidance.append("")  # Add blank line
+        
+        formatted_text = "\n".join(formatted_guidance)
+        logger.info(f"🎯 Selected {len(top_scenarios)} strategic guidance scenarios from {len(scenarios)} available scenarios")
+        
+        return formatted_text
 
     def initialize_vector_store(self):
         """Initialize the PostgreSQL pgVector store - delegates to VectorSearchService."""
@@ -501,17 +566,19 @@ class VectorStoreService:
                 is_core = schema_name in core_schemas
                 logger.info(f"  {i}. {schema_name} {'(CORE)' if is_core else ''}")
             
-            # Get relevant rules and examples from metadata
+            # Get relevant rules, examples, and strategic guidance from metadata
             rules = self.get_relevant_rules(schemas)
             examples = self.get_relevant_examples(schemas, query)
+            strategic_guidance = self.get_strategic_guidance(query)
             
             context = {
                 "schemas": schemas,
                 "rules": rules,
-                "examples": examples
+                "examples": examples,
+                "strategic_guidance": strategic_guidance
             }
             
-            logger.info(f"✅ Context ready: {len(schemas)} schemas with rules and examples")
+            logger.info(f"✅ Context ready: {len(schemas)} schemas with rules, examples, and strategic guidance")
             return context
             
         except Exception as e:

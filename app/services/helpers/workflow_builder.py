@@ -13,7 +13,7 @@ from langgraph.checkpoint.base import Checkpoint
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from app.config import settings
+from app.settings import settings
 from app.services.helpers.tool_call_parser import ToolCallParser
 from app.services.helpers.constants import MAX_TOOL_CONTEXT_ITEMS, RECURSION_LIMIT, ToolName, MAX_CHAT_HISTORY_MESSAGES
 
@@ -62,7 +62,16 @@ class WorkflowBuilder:
         """Create a model node execution function with proper context handling."""
         async def call_model_node(state):
             try:
-                encoding = tiktoken.encoding_for_model(settings.llm_model)
+                try:
+                    encoding = tiktoken.encoding_for_model(settings.llm_model)
+                except Exception:
+                    # Fallback for unknown models/providers
+                    base = "o200k_base" if "gpt-4.1-mini" in settings.llm_model else "cl100k_base"
+                    encoding = tiktoken.get_encoding(base)
+                    logger.debug(
+                        "Using %s encoding for non-OpenAI model: %s (provider: %s)",
+                        base, settings.llm_model, getattr(settings, 'llm_provider', 'unknown')
+                    )
                 
                 # Prepare messages with context-aware system prompt
                 system_prompt = system_prompt_func(state.get("account_id"))

@@ -69,7 +69,7 @@ Use the reference outputs below to help you evaluate the correctness of the resp
 </reference_outputs>
 """
 
-from app.config import settings
+from app.settings import settings
 
 # Use a prebuilt evaluator from openevals (https://github.com/langchain-ai/openevals)
 
@@ -80,7 +80,7 @@ def correctness_evaluator() -> Callable[[Dict[str, Any], Dict[str, Any], Dict[st
     
     evaluator = create_llm_as_judge(
         prompt=CORRECTNESS_PROMPT,
-        model="openai:gpt-4.1",
+        model=f"{settings.judge_llm_provider}:{settings.judge_llm_model}",
         feedback_key="correctness",
     )
     

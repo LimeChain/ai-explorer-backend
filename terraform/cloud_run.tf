@@ -76,11 +76,6 @@ resource "google_cloud_run_v2_service" "backend_api" {
       }
 
       env {
-        name  = "COLLECTION_NAME"
-        value = var.collection_name
-      }
-
-      env {
         name  = "ALLOWED_ORIGINS"
         value = jsonencode(var.allowed_origins)
       }
@@ -93,11 +88,6 @@ resource "google_cloud_run_v2_service" "backend_api" {
       env {
         name  = "LOG_LEVEL"
         value = var.log_level
-      }
-
-      env {
-        name  = "LANGSMITH_ENDPOINT"
-        value = var.langsmith_endpoint
       }
 
       env {
@@ -266,11 +256,6 @@ resource "google_cloud_run_v2_service" "mcp_servers" {
             version = "latest"
           }
         }
-      }
-
-      env {
-        name  = "COLLECTION_NAME"
-        value = var.collection_name
       }
 
       env {

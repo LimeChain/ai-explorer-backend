@@ -1,6 +1,6 @@
 from langsmith import Client
 
-from app.config import settings
+from app.settings import settings
 from app.services.llm_orchestrator import LLMOrchestrator
 from app.db.session import get_db_session
 from app.schemas.chat import ChatMessage
@@ -21,14 +21,26 @@ NETWORK = "testnet"
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+_PROVIDER_ALIASES = {
+    "openai": "OPENAI_API_KEY",
+    "google_genai": "GOOGLE_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+
+}
+
+key_name = _PROVIDER_ALIASES.get(settings.judge_llm_provider.lower())
+if not key_name:
+    raise ValueError(
+        f"Invalid judge_llm_provider '{settings.judge_llm_provider}'. "
+        f"Supported providers: {', '.join(sorted(_PROVIDER_ALIASES.keys()))}"
+    )
     
 # Set the API key for openevals to use
-os.environ["OPENAI_API_KEY"] = settings.llm_api_key.get_secret_value()
+os.environ[key_name] = settings.judge_llm_api_key.get_secret_value()
 
 client = Client(api_key=settings.langsmith_api_key.get_secret_value())
 dataset = get_or_create_dataset(client)
-
-llm_orchestrator = LLMOrchestrator(enable_persistence=False)
 
 async def get_orchestrator_response(
     query: str, 
@@ -42,6 +54,7 @@ async def get_orchestrator_response(
     response_parts = []
     
     try:
+        llm_orchestrator = LLMOrchestrator(enable_persistence=False)
         # Use context manager for safe database session handling
         with get_db_session() as db:
             if account_id:
@@ -116,6 +129,7 @@ experiment_results = client.evaluate(
     experiment_prefix=EXPERIMENT_PREFIX,
     max_concurrency=1,
     num_repetitions=1,
+    blocking=True
 )
 
 # link will be provided to view the results in langsmith

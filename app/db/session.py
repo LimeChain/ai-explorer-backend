@@ -8,7 +8,7 @@ from functools import wraps
 from sqlalchemy import create_engine, Engine
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator, Callable, Any
-from app.config import settings
+from app.settings import settings
 
 
 # Thread-safe lazy initialization

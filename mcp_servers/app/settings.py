@@ -1,7 +1,7 @@
 """
 Configuration settings for the MCP server.
 """
-import os
+
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr, Field
@@ -26,40 +26,55 @@ class MCPSettings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
+    request_timeout: int = Field(default=30, description="Request timeout in seconds")
+    force_terminal: bool = Field(default=False, description="Force terminal output for Rich console")
     
-    database_url: str = Field(
-        description="Database connection URL"
-    )
-    database_pool_size: int = Field(default=20, description="Database connection pool size")
-    database_max_overflow: int = Field(default=5, description="Database connection pool max overflow")
-    database_pool_timeout: int = Field(default=30, description="Database connection pool timeout in seconds")
-    database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
+    llm_provider: str = Field(description="LLM provider to use (openai, google_genai, anthropic, etc.)")
+    llm_model: str = Field(description="The LLM model to use (e.g., gpt-4o, gpt-4o-mini for OpenAI; gemini-2.5-pro for Google)")
+    llm_api_key: SecretStr = Field(description="LLM API key (required)")
     
-    llm_api_key: SecretStr = Field(
-        description="LLM API key (required)"
-    )
+    embedding_model: str = Field(description="The model to use for embeddings")
     
-    llm_model: str = Field(
-        default="gpt-4.1",
-        description="The LLM model to use (e.g., gpt-4o, gpt-4o-mini for OpenAI)"
-    )
-    
-    llm_provider: str = Field(
-        default="openai",
-        description="The LLM provider to use (e.g., openai, google)"
-    )
-    
-    collection_name: str = Field(..., description="Vector store collection name")
-    
-    embedding_model: str = Field(..., description="The model to use for embeddings")
-    
+    collection_name: str = Field(default="sdk_methods", description="Vector store collection name")
+
     sdk_documentation_path: str = Field(
-        default="hiero_mirror_sdk_methods.json",
+        default="mcp_servers/hiero_mirror_sdk_methods.json",
         description="Path to the SDK documentation file"
     )
 
-    request_timeout: int = Field(default=5, description="Request timeout in seconds")
-    
+    # Database settings
+    database_url: str = Field(description="Database connection URL")
+    database_pool_size: int = Field(
+        default=30, 
+        ge=5, 
+        le=200, 
+        description="Database connection pool size"
+    )
+    database_max_overflow: int = Field(
+        default=10, 
+        ge=0, 
+        le=100, 
+        description="Database connection pool max overflow"
+    )
+    database_pool_timeout: int = Field(
+        default=30, 
+        ge=5, 
+        le=60, 
+        description="Database connection pool timeout in seconds (5-60s)"
+    )
+    database_pool_recycle: int = Field(
+        default=7200,
+        ge=300,
+        le=7200, 
+        description="Database connection recycle time in seconds"
+    )
+    database_pool_pre_ping: bool = Field(
+        default=True,
+        description="Enable pool pre-ping to handle disconnected connections"
+    )
+    database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
+
     # SaucerSwap API configuration
     saucerswap_api_key: SecretStr = Field(
         description="SaucerSwap API key for real-time token pricing"
@@ -73,7 +88,7 @@ class MCPSettings(BaseSettings):
         description="HBAR token ID for SaucerSwap API calls"
     )
 
-    # GraphQL (Hgraph) settings for text-to-GraphQL functionality
+    # Hgraph GraphQL settings 
     hgraph_mainnet_endpoint: str = Field(
         default="https://mainnet.hedera.api.hgraph.io/v1/graphql",
         description="Hgraph GraphQL endpoint URL for Hedera mainnet"
@@ -88,16 +103,15 @@ class MCPSettings(BaseSettings):
         description="API key for Hgraph authentication"
     )
     
-    graphql_schema_path: str = Field(
-        default="hgraph_graphql_schema.json",
+    hgraph_graphql_schema_path: str = Field(
+        default="mcp_servers/hgraph_graphql_schema.json",
         description="Path to the GraphQL schema introspection JSON file"
     )
 
     hgraph_graphql_metadata_path: str = Field(
-        default="hgraph_graphql_metadata.json",
+        default="mcp_servers/hgraph_graphql_metadata.json",
         description="Path to the GraphQL metadata JSON file"
     )
 
 
-# Global settings instance
 settings = MCPSettings()

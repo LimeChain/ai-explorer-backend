@@ -21,7 +21,7 @@ from urllib.parse import urljoin
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from langsmith import Client
-from app.config import settings
+from app.settings import settings
 from app.utils.logging_config import setup_logging, get_service_logger, set_correlation_id
 from evals.dataset import get_or_create_dataset, DATASET_NAME
 from evals.evaluator import correctness_evaluator
