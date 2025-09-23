@@ -75,12 +75,6 @@ class MCPSettings(BaseSettings):
     )
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
 
-    # Redis settings
-    redis_url: str = Field(description="Redis connection URL")
-    redis_max_connections: int = Field(default=20, description="Redis connection pool max connections")
-    redis_retry_on_timeout: bool = Field(default=True, description="Redis retry on timeout")
-    redis_socket_timeout: float = Field(default=5.0, description="Redis socket timeout in seconds")
-    
     # SaucerSwap API configuration
     saucerswap_api_key: SecretStr = Field(
         description="SaucerSwap API key for real-time token pricing"
