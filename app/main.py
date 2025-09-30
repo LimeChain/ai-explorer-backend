@@ -61,7 +61,7 @@ checkpointer = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager - runs once at startup and shutdown."""
-    global checkpointer
+    global checkpointer, _pool
     pool = get_connection_pool()
     await pool.open()
     await pool.wait(timeout=settings.checkpointer_pool_timeout)
@@ -75,18 +75,7 @@ async def lifespan(app: FastAPI):
         raise
     finally:
         await pool.close()
-    # pool = get_connection_pool()
-    # await pool.open()
-    # async with pool.connection() as conn:
-    #     checkpointer = AsyncPostgresSaver(conn)
-    #     await conn.execute("SELECT 1")
-    #     try:
-    #         await checkpointer.setup()
-    #         logger.info("Checkpointer initialized successfully")
-    #         yield  # Application runs here
-    #     except Exception as e:
-    #         logger.error("❌ Failed to initialize checkpointer: %s", e)
-    #         raise
+        _pool = None
 
 
 # Create FastAPI app with lifespan
