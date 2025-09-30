@@ -125,7 +125,5 @@ class Settings(BaseSettings):
     saucerswap_api_key: SecretStr = Field(..., description="SaucerSwap API key")
     hbar_token_id: str = Field(default="0.0.1456986", description="HBAR token ID for SaucerSwap API calls")
 
-    hgraph_api_key: SecretStr = Field(..., description="Hgraph API key")
-
 # Global settings instance
 settings = Settings()
