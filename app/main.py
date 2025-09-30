@@ -50,10 +50,10 @@ def get_connection_pool():
             kwargs={
                 "autocommit": True
             },
-            check=lambda conn: conn.execute("SELECT 1")
+            check=AsyncConnectionPool.check_connection
         )
 
-        return _pool
+    return _pool
 
 # Global checkpointer instance
 checkpointer = None
@@ -64,16 +64,29 @@ async def lifespan(app: FastAPI):
     global checkpointer
     pool = get_connection_pool()
     await pool.open()
-    async with pool.connection() as conn:
-        checkpointer = AsyncPostgresSaver(conn)
-        await conn.execute("SELECT 1")
-        try:
-            await checkpointer.setup()
-            logger.info("Checkpointer initialized successfully")
-            yield  # Application runs here
-        except Exception as e:
-            logger.error("❌ Failed to initialize checkpointer: %s", e)
-            raise
+    await pool.wait(timeout=settings.checkpointer_pool_timeout)
+    try:
+        checkpointer = AsyncPostgresSaver(pool)
+        await checkpointer.setup()
+        logger.info("Checkpointer initialized successfully")
+        yield  # Application runs here
+    except Exception as e:
+        logger.error("❌ Failed to initialize checkpointer: %s", e)
+        raise
+    finally:
+        await pool.close()
+    # pool = get_connection_pool()
+    # await pool.open()
+    # async with pool.connection() as conn:
+    #     checkpointer = AsyncPostgresSaver(conn)
+    #     await conn.execute("SELECT 1")
+    #     try:
+    #         await checkpointer.setup()
+    #         logger.info("Checkpointer initialized successfully")
+    #         yield  # Application runs here
+    #     except Exception as e:
+    #         logger.error("❌ Failed to initialize checkpointer: %s", e)
+    #         raise
 
 
 # Create FastAPI app with lifespan
