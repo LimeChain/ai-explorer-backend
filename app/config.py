@@ -87,6 +87,12 @@ class Settings(BaseSettings):
     )
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
 
+    # Checkpointer DB settings
+    checkpointer_min_pool_size: int = Field(default=1, description="Checkpointer database connection pool min size")
+    checkpointer_max_pool_size: int = Field(default=10, description="Checkpointer database connection pool max size")
+    checkpointer_max_idle: int = Field(default=300, description="Checkpointer database connection pool max idle time in seconds")
+    checkpointer_pool_timeout: int = Field(default=30, description="Checkpointer database connection pool timeout in seconds")
+
     # Vector store settings
     collection_name: str = Field(..., description="Vector store collection name")
 
@@ -118,6 +124,8 @@ class Settings(BaseSettings):
     saucerswap_base_url: str = Field(default="https://api.saucerswap.finance", description="SaucerSwap API base URL")
     saucerswap_api_key: SecretStr = Field(..., description="SaucerSwap API key")
     hbar_token_id: str = Field(default="0.0.1456986", description="HBAR token ID for SaucerSwap API calls")
+
+    hgraph_api_key: SecretStr = Field(..., description="Hgraph API key")
 
 # Global settings instance
 settings = Settings()
