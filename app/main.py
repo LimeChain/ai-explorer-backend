@@ -3,6 +3,7 @@ Main FastAPI application for the AI Explorer backend service.
 """
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from psycopg_pool import AsyncConnectionPool
 
 from app.api.endpoints import chat, message, suggestions
 from app.config import settings
@@ -32,26 +33,49 @@ if settings.langsmith_tracing:
 else:
     logger.info("🚫 LangSmith tracing disabled")
 
+# Global connection pool
+_pool = None
+
+def get_connection_pool():
+    """Get or create a connection pool."""
+    global _pool
+    if _pool is None:
+        _pool = AsyncConnectionPool(
+            settings.database_url,
+            min_size=settings.checkpointer_min_pool_size,
+            max_size=settings.checkpointer_max_pool_size,
+            max_idle=settings.checkpointer_max_idle,
+            timeout=settings.checkpointer_pool_timeout,
+            open=False,
+            kwargs={
+                "autocommit": True
+            },
+            check=AsyncConnectionPool.check_connection
+        )
+
+    return _pool
+
 # Global checkpointer instance
 checkpointer = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager - runs once at startup and shutdown."""
-    global checkpointer
-    
-    # Startup: Initialize checkpointer
+    global checkpointer, _pool
+    pool = get_connection_pool()
+    await pool.open()
+    await pool.wait(timeout=settings.checkpointer_pool_timeout)
     try:
-        # Create the checkpointer using the context manager
-        async with AsyncPostgresSaver.from_conn_string(settings.database_url) as checkpointer:
-            await checkpointer.setup()
-            logger.info("Checkpointer initialized successfully")
-            
-            yield  # Application runs here
-            
+        checkpointer = AsyncPostgresSaver(pool)
+        await checkpointer.setup()
+        logger.info("Checkpointer initialized successfully")
+        yield  # Application runs here
     except Exception as e:
         logger.error("❌ Failed to initialize checkpointer: %s", e)
         raise
+    finally:
+        await pool.close()
+        _pool = None
 
 
 # Create FastAPI app with lifespan
