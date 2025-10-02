@@ -36,13 +36,13 @@ variable "domain_name" {
 variable "database_instance_tier" {
   description = "The machine type for the database instance"
   type        = string
-  default     = "db-custom-1-3840" # 1 CPU, 3.75GB RAM (MVP appropriate)
+  default     = "db-custom-2-8192" # 2 CPU, 8GB RAM
 }
 
 variable "database_disk_size" {
   description = "Database disk size in GB"
   type        = number
-  default     = 20
+  default     = 50
 }
 
 variable "database_name" {
@@ -66,13 +66,13 @@ variable "cloud_run_max_instances" {
 variable "cloud_run_memory" {
   description = "Memory allocation for Cloud Run services"
   type        = string
-  default     = "1Gi"
+  default     = "4Gi"
 }
 
 variable "cloud_run_cpu" {
   description = "CPU allocation for Cloud Run services"
   type        = string
-  default     = "1"
+  default     = "2"
 }
 
 # Rate limiting configuration
