@@ -4,7 +4,7 @@ Configuration settings for the AI Explorer backend service.
 
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import SecretStr, Field
+from pydantic import SecretStr, Field, model_validator
 from typing import List
 
 
@@ -75,6 +75,28 @@ class Settings(BaseSettings):
     )
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
 
+     # Checkpointer DB settings
+    checkpointer_min_pool_size: int = Field(
+        default=1,
+        ge=0,
+        description="Checkpointer database connection pool min size (0+)"
+    )
+    checkpointer_max_pool_size: int = Field(
+        default=10,
+        ge=1,
+        description="Checkpointer database connection pool max size (>= min size)"
+    )
+    checkpointer_max_idle: int = Field(
+        default=300,
+        ge=0,
+        description="Checkpointer database connection pool max idle time in seconds (0+)"
+    )
+    checkpointer_pool_timeout: int = Field(
+        default=30,
+        ge=1,
+        description="Checkpointer database connection pool timeout in seconds (1+)"
+    )
+    
     # Vector store settings
     collection_name: str = Field(default="sdk_methods", description="Vector store collection name")
 
@@ -108,6 +130,12 @@ class Settings(BaseSettings):
     langsmith_project: str = Field(description="LangSmith project name")
     langsmith_api_key: SecretStr = Field(description="LangSmith API key (required)")
     langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", description="LangSmith API endpoint")
+
+    @model_validator(mode="after")
+    def _validate_checkpointer_pool(self) -> "Settings":
+        if self.checkpointer_max_pool_size < max(1, self.checkpointer_min_pool_size):
+            raise ValueError("checkpointer_max_pool_size must be >= checkpointer_min_pool_size")
+        return self
 
     def model_post_init(self, __context: None) -> None:
         """Initialize LangSmith environment variables after settings are loaded."""

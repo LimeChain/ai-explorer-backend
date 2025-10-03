@@ -146,19 +146,19 @@ variable "log_level" {
 variable "llm_provider" {
   description = "LLM provider to use"
   type        = string
-  default     = "google_genai"
+  default     = "openai"
 }
 
 variable "llm_model" {
   description = "LLM model to use"
   type        = string
-  default     = "gemini-2.5-pro"
+  default     = "gpt-4.1"
 }
 
 variable "embedding_model" {
   description = "Embedding model to use"
   type        = string
-  default     = "gemini-embedding-001"
+  default     = "text-embedding-3-small"
 }
 
 variable "llm_input_cost_per_token" {

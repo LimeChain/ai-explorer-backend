@@ -279,7 +279,7 @@ def setup_logging(
             from app.settings import settings
             console = Console(
                 stderr=False,  # Use stdout
-                force_terminal=settings.force_terminal, # Configurable via environment
+                force_terminal=settings.force_terminal, 
                 color_system="auto",
                 width=None  # Auto-detect width
             )

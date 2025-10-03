@@ -6,7 +6,6 @@ import json
 import logging
 from typing import Dict, List, Any, Optional
 from langchain_openai import OpenAIEmbeddings
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from langchain_postgres import PGVector
 from langchain_core.documents import Document
@@ -42,7 +41,7 @@ class VectorSearchService:
         self.database_manager = database_manager
         self.text_processor = text_processor
         self.collection_name = collection_name
-        self.embeddings = GoogleGenerativeAIEmbeddings(google_api_key=llm_api_key, model=embedding_model)
+        self.embeddings = OpenAIEmbeddings(openai_api_key=llm_api_key, model=embedding_model)
         self.vector_store: Optional[PGVector] = None
         
     def initialize_vector_store(self):

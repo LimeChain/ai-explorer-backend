@@ -157,14 +157,15 @@ class GraphQLService:
                 Error Message: {error_message}
                 Attempt: {attempt_number} of 3
 
-                CRITICAL: Write a valid GraphQL query that fixes the above error.
-                CRITICAL: Use proper GraphQL syntax with correct field names and types.
-                CRITICAL: Only return clean GraphQL that can be executed directly.
-                CRITICAL: Do NOT include any explanation, notes, or comments.
-                CRITICAL: Return ONLY the GraphQL query, nothing else.
-                CRITICAL: Do NOT include the word "graphql" in front of the graphql query or any language identifiers.
+                CRITICAL: Write a valid GraphQL query using proper syntax.
+                CRITICAL: Always start queries at the correct root field.
+                CRITICAL: Use correct field names and types that exist in the schema.
                 CRITICAL: Ensure all required fields and arguments are included.
-                CRITICAL: Use appropriate filters and pagination if needed.
+                CRITICAL: Include appropriate filters (where, order_by, limit, offset), sorting, and pagination if needed.
+                CRITICAL: Focus on the most relevant data for the question.
+                CRITICAL: Only return clean GraphQL that can be executed directly.
+                CRITICAL: Return ONLY the GraphQL query, nothing else, do not include explanation, notes, or comments.
+                CRITICAL: Do NOT include the word "graphql" in front of the graphql query or any language identifiers.
                 CRITICAL: Analyze the previous error and fix the specific issue mentioned.
 
                 STRATEGIC GUIDANCE (follow these patterns for complex queries):
@@ -193,15 +194,14 @@ class GraphQLService:
                 Question: {question}
 
                 CRITICAL: Write a valid GraphQL query using proper syntax.
-                CRITICAL: Use correct field names and types from the schema.
-                CRITICAL: Only return clean GraphQL that can be executed directly.
-                CRITICAL: Do NOT include any explanation, notes, or comments.
-                CRITICAL: Return ONLY the GraphQL query, nothing else.
-                CRITICAL: Do NOT include the word "graphql" in front of the graphql query or any language identifiers.
                 CRITICAL: Always start queries at the correct root field.
+                CRITICAL: Use correct field names and types that exist in the schema.
+                CRITICAL: Ensure all required fields and arguments are included.
                 CRITICAL: Include appropriate filters (where, order_by, limit, offset), sorting, and pagination if needed.
-                CRITICAL: Use the correct period for where clauses.
                 CRITICAL: Focus on the most relevant data for the question.
+                CRITICAL: Only return clean GraphQL that can be executed directly.
+                CRITICAL: Return ONLY the GraphQL query, nothing else, do not include explanation, notes, or comments.
+                CRITICAL: Do NOT include the word "graphql" in front of the graphql query or any language identifiers.
 
                 STRATEGIC GUIDANCE (follow these patterns for complex queries):
                 {strategic_guidance}

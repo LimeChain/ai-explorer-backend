@@ -6,7 +6,7 @@
         "description": "When user asks for data involving multiple entity types",
         "approach": "Use relationship joins and nested queries",
         "example_query": "Show account with all its token balances and NFTs",
-        "graphql": "query {\n  entity(\n    where: { id: { _eq: 123456 } }\n  ) {\n    id\n    balance\n    token_balances {\n      token_id\n      balance\n      token {\n        name\n        symbol\n        decimals\n      }\n    }\n    nfts {\n      token_id\n      serial_number\n      token {\n        name\n        symbol\n      }\n    }\n  }\n}"
+        "graphql": "query {\n  entity(\n    where: { id: { _eq: 123456 } }\n  ) {\n    id\n    balance\n    type\n    created_timestamp\n  }\n  token_account(\n    where: { account_id: { _eq: 123456 }, associated: { _eq: true } }\n  ) {\n    token_id\n    balance\n    token {\n      name\n      symbol\n      decimals\n    }\n  }\n  nft(\n    where: { account_id: { _eq: 123456 }, deleted: { _eq: false } }\n  ) {\n    token_id\n    serial_number\n    token {\n      name\n      symbol\n    }\n  }\n}"
       },
       {
         "scenario": "Time-based Trending Analysis",
@@ -65,6 +65,9 @@
       "Use consensus_timestamp in nanoseconds for time filtering",
       "CRITICAL: Only include consensus_timestamp filters when user explicitly specifies time periods",
       "CRITICAL: When user says 'all transactions' or similar, do NOT add time range filters",
+      "CRITICAL: For CURRENT HBAR balances, use 'entity' table with type='ACCOUNT' and balance field",
+      "CRITICAL: For HISTORICAL HBAR balances, use 'entity_history' table",
+      "CRITICAL: 'crypto_transfer' shows TRANSFER AMOUNTS, NOT account balances",
       "For month queries like 'July 2025', use full month boundaries (start of July to start of August)",
       "For day queries, use full day boundaries (start of day to start of next day)",
       "Combine aggregation with grouping for analytical queries",
@@ -91,6 +94,11 @@
       "Use numeric account IDs (123456) not 0.0.X format in queries",
       "CRITICAL: Only add consensus_timestamp filters when user explicitly specifies time periods",
       "CRITICAL: If user asks for 'all transactions' or doesn't mention time, do NOT add time filters",
+      "CRITICAL: When counting transactions for an account, include ALL transaction types unless specifically asked otherwise:",
+      "  - transaction (where account is payer): payer_account_id",
+      "  - crypto_transfer (HBAR in/out): entity_id", 
+      "  - token_transfer (token in/out): account_id",
+      "  - nft_transfer (NFT sent/received): sender_account_id OR receiver_account_id",
       "consensus_timestamp should be in nanoseconds since epoch for time filters",
       "For explicit time ranges, use _gte and _lte with consensus_timestamp (inclusive)",
       "For month queries (e.g., 'July 2025'), use full month boundaries",
@@ -100,8 +108,8 @@
     "examples": [
       {
         "query": "How many transactions are there for account 0.0.123456 between August 19th and August 20th 2025?",
-        "graphql": "query {\n    sent: transaction_aggregate(\n        where: { payer_account_id: { _eq: 123456 }\n        consensus_timestamp: { _gte: 1755561600000000000, _lte: 1755734400000000000 } }\n    ) { \n        aggregate { count(columns: consensus_timestamp) }\n    } \n        \n    hbar: crypto_transfer_aggregate(\n        where: { entity_id: { _eq: 123456 }\n        consensus_timestamp: { _gte: 1755561600000000000, _lte: 1755734400000000000 } }\n    ) { \n        aggregate { count(columns: consensus_timestamp) }\n    } \n    \n    token: token_transfer_aggregate(\n        where: { account_id: { _eq: 123456 }\n        consensus_timestamp: { _gte: 1755561600000000000, _lte: 1755734400000000000 } }\n    ) { \n        aggregate { count(columns: consensus_timestamp) }\n    } \n    \n    nft: nft_transfer_aggregate(\n        where: { _or: [ { sender_account_id: { _eq: 123456 } } { receiver_account_id: { _eq: 123456 } } ] \n        consensus_timestamp: { _gte: 1755561600000000000, _lte: 1755734400000000000 } }\n    ) { \n        aggregate { count(columns: consensus_timestamp) }\n    } \n}",
-        "explanation": "Count all types of transactions for account in time range - sent transactions, HBAR transfers, token transfers, and NFT transfers"
+        "graphql": "query {\n    sent: transaction_aggregate(\n        where: { \n          payer_account_id: { _eq: 123456 }\n          consensus_timestamp: { _gte: 1755561600000000000, _lte: 1755734400000000000 } \n        }\n    ) { \n        aggregate { count }\n    } \n        \n    hbar: crypto_transfer_aggregate(\n        where: { \n          entity_id: { _eq: 123456 }\n          consensus_timestamp: { _gte: 1755561600000000000, _lte: 1755734400000000000 } \n        }\n    ) { \n        aggregate { count }\n    } \n    \n    token: token_transfer_aggregate(\n        where: { \n          account_id: { _eq: 123456 }\n          consensus_timestamp: { _gte: 1755561600000000000, _lte: 1755734400000000000 } \n        }\n    ) { \n        aggregate { count }\n    } \n    \n    nft: nft_transfer_aggregate(\n        where: { \n          _or: [ \n            { sender_account_id: { _eq: 123456 } } \n            { receiver_account_id: { _eq: 123456 } } \n          ]\n          consensus_timestamp: { _gte: 1755561600000000000, _lte: 1755734400000000000 } \n        }\n    ) { \n        aggregate { count }\n    } \n}",
+        "explanation": "Count ALL transaction types involving account in time range - transactions where account is payer, HBAR transfers (in/out), token transfers (in/out), and NFT transfers (sent/received)"
       },
       {
         "query": "Which was the most expensive transaction for 0.0.123456?",
@@ -117,6 +125,16 @@
         "query": "Show me transactions for account 0.0.123456 in July 2025",
         "graphql": "query {\n    transaction(\n        where: { \n            payer_account_id: { _eq: 123456 }\n            consensus_timestamp: { _gte: 1751328000000000000, _lte: 1754006400000000000 }\n        }\n        order_by: { consensus_timestamp: desc }\n    ) {\n        consensus_timestamp\n        transaction_hash\n        type\n        result\n        charged_tx_fee\n        entity_id\n    }\n}",
         "explanation": "Get transactions with time filter because user specified 'July 2025' - uses full month boundaries"
+      },
+      {
+        "query": "What was the biggest transaction for account 0.0.123456?",
+        "graphql": "query {\n    # Biggest HBAR transfer for this account\n    crypto_transfer(\n      where: { entity_id: { _eq: 123456 }, amount: { _gt: 0 }}\n      order_by: { amount: desc }\n      limit: 1\n    ) {\n      amount\n      consensus_timestamp\n      entity_id\n      transaction {\n        transaction_hash\n        payer_account_id\n        type\n        charged_tx_fee\n      }\n    }\n\n    # Biggest token transfer for this account\n    token_transfer(\n      where: { account_id: { _eq: 123456 }, amount: { _gt: 0 }}\n      order_by: { amount: desc }\n      limit: 1\n    ) {\n      amount\n      consensus_timestamp\n      account_id\n      token_id\n      token {\n        name\n        symbol\n        decimals\n      }\n      transaction {\n        transaction_hash\n        payer_account_id\n        type\n        charged_tx_fee\n      }\n    }\n  }",
+        "explanation": "Find biggest transaction for specific account by checking both HBAR transfers (crypto_transfer) and token transfers (token_transfer) - client needs to normalize amounts using decimals to compare actual values"
+      },
+      {
+        "query": "How many transactions are there for account 0.0.123456 in February 2024?",
+        "graphql": "query {\n  # Transactions where account is the payer\n  sent: transaction_aggregate(\n    where: {\n      payer_account_id: { _eq: 123456 }\n      consensus_timestamp: { _gte: 1706745600000000000, _lte: 1709251200000000000 }\n    }\n  ) {\n    aggregate { count }\n  }\n  \n  # HBAR transfers (sent and received)\n  hbar: crypto_transfer_aggregate(\n    where: {\n      entity_id: { _eq: 123456 }\n      consensus_timestamp: { _gte: 1706745600000000000, _lte: 1709251200000000000 }\n    }\n  ) {\n    aggregate { count }\n  }\n  \n  # Token transfers (sent and received)\n  token: token_transfer_aggregate(\n    where: {\n      account_id: { _eq: 123456 }\n      consensus_timestamp: { _gte: 1706745600000000000, _lte: 1709251200000000000 }\n    }\n  ) {\n    aggregate { count }\n  }\n  \n  # NFT transfers (as sender or receiver)\n  nft: nft_transfer_aggregate(\n    where: {\n      _or: [\n        { sender_account_id: { _eq: 123456 } }\n        { receiver_account_id: { _eq: 123456 } }\n      ]\n      consensus_timestamp: { _gte: 1706745600000000000, _lte: 1709251200000000000 }\n    }\n  ) {\n    aggregate { count }\n  }\n}",
+        "explanation": "Count ALL transactions involving account in February 2024 - includes transactions where account is payer, HBAR transfers (in/out), token transfers (in/out), and NFT transfers (sent/received)"
       }
     ]
   },
@@ -203,14 +221,17 @@
   "crypto_transfer": {
     "use_cases": [
       "Track HBAR transfers between accounts",
-      "Analyze account balance changes over time",
       "Find large HBAR movements and transactions",
       "Calculate net HBAR flow for accounts",
-      "Monitor treasury and exchange activities"
+      "Monitor treasury and exchange activities",
+      "IMPORTANT: This shows TRANSFERS, NOT current balances. For current balances use 'entity', for historical balances use 'entity_history'"
     ],
     "rules": [
       "CRITICAL: Use entity_id for account-specific transfer queries",
       "CRITICAL: amount field shows transfer amount in tinybars (1 HBAR = 100,000,000 tinybars)",
+      "CRITICAL: This table shows TRANSFER AMOUNTS, not account balances",
+      "CRITICAL: For current HBAR balances, use 'entity' table instead",
+      "CRITICAL: For historical HBAR balances, use 'entity_history' table instead",
       "Use consensus_timestamp for time-based transfer analysis",
       "Positive amounts indicate credits, negative amounts indicate debits",
       "Join with transaction table for complete transfer context"
@@ -435,6 +456,622 @@
         "query": "Find topics with messages from specific payer account 0.0.123456",
         "graphql": "query {\n  topic_message(\n    where: {\n      payer_account_id: { _eq: 123456 }\n      consensus_timestamp: { _gte: 1735689600000000000 }\n    }\n    order_by: { consensus_timestamp: desc }\n    limit: 30\n  ) {\n    topic_id\n    sequence_number\n    consensus_timestamp\n    message\n    running_hash\n    payer_account_id\n  }\n}",
         "explanation": "Find all HCS messages submitted by specific account across topics"
+      }
+    ]
+  },
+  "entity": {
+    "use_cases": [
+      "Get base info about accounts, contracts, topics, files (type, memo, keys)",
+      "Query entity metadata and configuration",
+      "Find entities by type or identifier",
+      "Analyze entity creation patterns",
+      "Track entity state changes over time",
+      "CRITICAL: Find accounts with highest/lowest CURRENT HBAR balances",
+      "Get current account balance information"
+    ],
+    "rules": [
+      "CRITICAL: Use numeric id for entity identification",
+      "CRITICAL: For current HBAR balances, use balance field on entities with type='ACCOUNT'",
+      "CRITICAL: This is the PRIMARY table for current account balances",
+      "Filter by type field (ACCOUNT, CONTRACT, TOPIC, FILE)",
+      "Use created_timestamp for entity creation queries",
+      "Include balance field for account entities (shows current HBAR balance in tinybars)",
+      "Filter by deleted field to exclude deleted entities"
+    ],
+    "examples": [
+      {
+        "query": "What type of entity is 0.0.123?",
+        "graphql": "query {\n  entity(\n    where: { id: { _eq: 123 } }\n  ) {\n    id\n    type\n    shard\n    realm\n    num\n    memo\n    key\n    created_timestamp\n    expiry_timestamp\n    deleted\n  }\n}",
+        "explanation": "Get entity type and basic information"
+      },
+      {
+        "query": "What's the memo or EVM address of this account?",
+        "graphql": "query {\n  entity(\n    where: { id: { _eq: 123456 }, type: { _eq: \"ACCOUNT\" } }\n  ) {\n    id\n    memo\n    evm_address\n    alias\n    key\n    balance\n    auto_renew_period\n  }\n}",
+        "explanation": "Get account memo, EVM address and other metadata"
+      },
+      {
+        "query": "Which account holds the largest HBAR balance?",
+        "graphql": "query {\n  entity(\n    where: {\n      type: { _eq: \"ACCOUNT\" }\n      deleted: { _eq: false }\n      balance: { _gt: 0 }\n    }\n    order_by: { balance: desc }\n    limit: 1\n  ) {\n    id\n    balance\n    created_timestamp\n    evm_address\n  }\n}",
+        "explanation": "Find account with highest current HBAR balance using entity table"
+      },
+      {
+        "query": "Show me the top 10 accounts by HBAR balance",
+        "graphql": "query {\n  entity(\n    where: {\n      type: { _eq: \"ACCOUNT\" }\n      deleted: { _eq: false }\n      balance: { _gt: 100000000000 }\n    }\n    order_by: { balance: desc }\n    limit: 10\n  ) {\n    id\n    balance\n    created_timestamp\n    evm_address\n    auto_renew_period\n  }\n}",
+        "explanation": "Get top 10 accounts with highest HBAR balances (filter >1000 HBAR to exclude small accounts)"
+      }
+    ]
+  },
+  "entity_history": {
+    "use_cases": [
+      "Historical snapshots of entity state (HBAR balances, renew settings)",
+      "Track balance changes over time",
+      "Find entities with highest historical balances",
+      "Analyze account state at specific timestamps"
+    ],
+    "rules": [
+      "CRITICAL: Use entity_id for entity-specific history queries",
+      "Use timestamp_range for historical snapshots",
+      "Include balance field for HBAR balance history",
+      "Filter by entity type for specific entity types"
+    ],
+    "examples": [
+      {
+        "query": "Who has the highest HBAR balance?",
+        "graphql": "query {\n  entity_history(\n    where: { \n      timestamp_range: { _contains: 1735689600000000000 }\n    }\n    order_by: { balance: desc }\n    limit: 10\n  ) {\n    entity_id\n    balance\n    timestamp_range\n    auto_renew_period\n  }\n}",
+        "explanation": "Find entities with highest balances at specific time"
+      },
+      {
+        "query": "What was account X's balance at time T?",
+        "graphql": "query {\n  entity_history(\n    where: {\n      entity_id: { _eq: 123456 }\n      timestamp_range: { _contains: 1735732800000000000 }\n    }\n  ) {\n    entity_id\n    balance\n    timestamp_range\n    auto_renew_period\n    expiry_timestamp\n  }\n}",
+        "explanation": "Get specific account balance at historical timestamp"
+      }
+    ]
+  },
+  "entity_stake": {
+    "use_cases": [
+      "Per-entity staking state queries",
+      "Check if accounts are staked to nodes",
+      "Analyze staking distribution across entities",
+      "Monitor staking rewards and penalties"
+    ],
+    "rules": [
+      "CRITICAL: Use entity_id for entity-specific staking queries",
+      "Include staked_node_id to identify staking target",
+      "Use staked_to_me for rewards earned by node operators",
+      "Filter by decline_reward for reward preferences"
+    ],
+    "examples": [
+      {
+        "query": "Is account 0.0.123 staked? To which node?",
+        "graphql": "query {\n  entity_stake(\n    where: { entity_id: { _eq: 123 } }\n  ) {\n    entity_id\n    staked_node_id\n    staked_to_me\n    decline_reward\n    stake_total_start\n    stake_reward_start\n  }\n}",
+        "explanation": "Get staking information for specific entity"
+      }
+    ]
+  },
+  "entity_transaction": {
+    "use_cases": [
+      "Transactions tied to a specific entity",
+      "Find all transactions involving specific accounts/contracts",
+      "Track entity activity patterns",
+      "Analyze transaction volumes per entity"
+    ],
+    "rules": [
+      "CRITICAL: Use entity_id for entity-specific transaction queries",
+      "Use consensus_timestamp for time-based filtering",
+      "Include transaction details for complete context",
+      "Filter by transaction type for specific operations"
+    ],
+    "examples": [
+      {
+        "query": "What transactions involved account 0.0.456?",
+        "graphql": "query {\n  entity_transaction(\n    where: { entity_id: { _eq: 456 } }\n    order_by: { consensus_timestamp: desc }\n    limit: 50\n  ) {\n    entity_id\n    consensus_timestamp\n    payer_account_id\n    type\n    result\n    charged_tx_fee\n    transaction_hash\n  }\n}",
+        "explanation": "Get all transactions involving specific entity"
+      }
+    ]
+  },
+  "transaction_signature": {
+    "use_cases": [
+      "Signatures collected on a transaction",
+      "Verify multi-sig transaction completeness",
+      "Audit transaction approval processes",
+      "Track signature collection patterns"
+    ],
+    "rules": [
+      "CRITICAL: Use consensus_timestamp to identify transaction",
+      "Include public_key_prefix for signature verification",
+      "Use signature field for actual signature data",
+      "Filter by entity_id for specific signers"
+    ],
+    "examples": [
+      {
+        "query": "Who signed transaction T?",
+        "graphql": "query {\n  transaction_signature(\n    where: { consensus_timestamp: { _eq: 1735689600000000000 } }\n  ) {\n    consensus_timestamp\n    public_key_prefix\n    entity_id\n    signature\n    type\n  }\n}",
+        "explanation": "Get all signatures for specific transaction"
+      }
+    ]
+  },
+  "ethereum_transaction": {
+    "use_cases": [
+      "Ethereum-bridged transactions (EVM payloads, nonce)",
+      "Track EVM transaction attempts and failures",
+      "Analyze Ethereum compatibility layer usage",
+      "Monitor EVM nonce management"
+    ],
+    "rules": [
+      "CRITICAL: Use consensus_timestamp for transaction identification",
+      "Include nonce for EVM transaction ordering",
+      "Use call_data_id for EVM payload reference",
+      "Filter by hash for specific Ethereum transactions"
+    ],
+    "examples": [
+      {
+        "query": "List latest EthereumTransaction attempts",
+        "graphql": "query {\n  ethereum_transaction(\n    order_by: { consensus_timestamp: desc }\n    limit: 20\n  ) {\n    consensus_timestamp\n    hash\n    nonce\n    gas_limit\n    gas_price\n    value\n    call_data_id\n    recovery_id\n    signature_r\n    signature_s\n  }\n}",
+        "explanation": "Get recent Ethereum transactions"
+      },
+      {
+        "query": "Which txs failed due to wrong nonce?",
+        "graphql": "query {\n  ethereum_transaction(\n    where: { call_result: { _eq: \"WRONG_NONCE\" } }\n    order_by: { consensus_timestamp: desc }\n  ) {\n    consensus_timestamp\n    hash\n    nonce\n    call_result\n    from\n    to\n    gas_limit\n  }\n}",
+        "explanation": "Find Ethereum transactions that failed due to nonce issues"
+      }
+    ]
+  },
+  "transaction_transfer": {
+    "use_cases": [
+      "Transfers grouped by transaction",
+      "Analyze complete transfer context within transactions",
+      "Track multi-party transfer operations",
+      "Find complex transfer patterns"
+    ],
+    "rules": [
+      "CRITICAL: Use consensus_timestamp for transaction grouping",
+      "Include entity_id for transfer participants",
+      "Use amount for transfer values",
+      "Combine with token_id for token transfers"
+    ],
+    "examples": [
+      {
+        "query": "Show all transfers inside transaction T",
+        "graphql": "query {\n  transaction_transfer(\n    where: { consensus_timestamp: { _eq: 1735689600000000000 } }\n  ) {\n    consensus_timestamp\n    entity_id\n    amount\n    token_id\n    is_approval\n  }\n}",
+        "explanation": "Get all transfers within specific transaction"
+      }
+    ]
+  },
+  "assessed_custom_fee": {
+    "use_cases": [
+      "Custom fees charged in transactions",
+      "Track token-specific fee structures",
+      "Analyze fee collection patterns",
+      "Monitor custom fee effectiveness"
+    ],
+    "rules": [
+      "CRITICAL: Use token_id for token-specific fee queries",
+      "Use consensus_timestamp for time-based fee analysis",
+      "Include amount for fee values",
+      "Filter by collector_account_id for fee recipients"
+    ],
+    "examples": [
+      {
+        "query": "What custom fees were charged on token 0.0.555 today?",
+        "graphql": "query {\n  assessed_custom_fee(\n    where: {\n      token_id: { _eq: 555 }\n      consensus_timestamp: { _gte: 1735689600000000000 }\n    }\n  ) {\n    consensus_timestamp\n    token_id\n    amount\n    collector_account_id\n    payer_account_id\n  }\n}",
+        "explanation": "Get custom fees charged for specific token in time period"
+      }
+    ]
+  },
+  "staking_reward_transfer": {
+    "use_cases": [
+      "Staking rewards credited to accounts",
+      "Track reward distribution patterns",
+      "Analyze staking reward amounts",
+      "Monitor node reward payouts"
+    ],
+    "rules": [
+      "CRITICAL: Use account_id for account-specific reward queries",
+      "Use consensus_timestamp for reward timing",
+      "Include amount for reward values",
+      "Filter by payer_account_id for reward sources"
+    ],
+    "examples": [
+      {
+        "query": "What rewards did account 0.0.123 get last epoch?",
+        "graphql": "query {\n  staking_reward_transfer(\n    where: {\n      account_id: { _eq: 123 }\n      consensus_timestamp: { _gte: 1735689600000000000, _lte: 1735948800000000000 }\n    }\n  ) {\n    account_id\n    amount\n    consensus_timestamp\n    payer_account_id\n  }\n}",
+        "explanation": "Get staking rewards for account in specific epoch"
+      }
+    ]
+  },
+  "token_account": {
+    "use_cases": [
+      "Token balances and associations per account",
+      "Find token holders and distribution",
+      "Track account token portfolios",
+      "Analyze token association patterns"
+    ],
+    "rules": [
+      "CRITICAL: Use account_id for account-specific token holdings",
+      "CRITICAL: Use token_id for token-specific holder queries",
+      "Include balance for token amounts",
+      "Filter by associated field for active associations",
+      "Use automatic_association for auto-association status"
+    ],
+    "examples": [
+      {
+        "query": "What tokens does account 0.0.123 hold?",
+        "graphql": "query {\n  token_account(\n    where: {\n      account_id: { _eq: 123 }\n      associated: { _eq: true }\n      balance: { _gt: 0 }\n    }\n  ) {\n    account_id\n    token_id\n    balance\n    freeze_status\n    kyc_status\n    automatic_association\n    token {\n      name\n      symbol\n      decimals\n    }\n  }\n}",
+        "explanation": "Get all tokens held by specific account"
+      },
+      {
+        "query": "Top holders of token 0.0.456",
+        "graphql": "query {\n  token_account(\n    where: {\n      token_id: { _eq: 456 }\n      associated: { _eq: true }\n      balance: { _gt: 0 }\n    }\n    order_by: { balance: desc }\n    limit: 50\n  ) {\n    account_id\n    balance\n    freeze_status\n    kyc_status\n    token {\n      name\n      symbol\n      decimals\n    }\n  }\n}",
+        "explanation": "Find accounts with highest balances of specific token"
+      }
+    ]
+  },
+  "contract": {
+    "use_cases": [
+      "Contract entities and metadata",
+      "Find contract creation events",
+      "Track contract deployment patterns",
+      "Analyze contract configuration"
+    ],
+    "rules": [
+      "CRITICAL: Use contract_id for contract identification",
+      "Use created_timestamp for contract creation queries",
+      "Include file_id for contract bytecode reference",
+      "Filter by deleted field to exclude deleted contracts"
+    ],
+    "examples": [
+      {
+        "query": "When was contract 0.0.987 created?",
+        "graphql": "query {\n  contract(\n    where: { contract_id: { _eq: 987 } }\n  ) {\n    contract_id\n    created_timestamp\n    file_id\n    auto_renew_period\n    admin_key\n    proxy_account_id\n    deleted\n  }\n}",
+        "explanation": "Get contract creation and metadata information"
+      }
+    ]
+  },
+  "contract_log": {
+    "use_cases": [
+      "EVM logs emitted by contracts",
+      "Track contract events and state changes",
+      "Analyze smart contract activity",
+      "Monitor contract interaction patterns"
+    ],
+    "rules": [
+      "CRITICAL: Use contract_id for contract-specific log queries",
+      "Use consensus_timestamp for temporal log analysis",
+      "Include topic0, topic1, topic2, topic3 for event filtering",
+      "Use data field for event parameters"
+    ],
+    "examples": [
+      {
+        "query": "What events did contract 0x… emit?",
+        "graphql": "query {\n  contract_log(\n    where: { contract_id: { _eq: 123456 } }\n    order_by: { consensus_timestamp: desc }\n    limit: 100\n  ) {\n    consensus_timestamp\n    contract_id\n    topic0\n    topic1\n    topic2\n    topic3\n    data\n    index\n    root_contract_id\n  }\n}",
+        "explanation": "Get EVM logs emitted by specific contract"
+      }
+    ]
+  },
+  "contract_state": {
+    "use_cases": [
+      "Contract storage (key/value)",
+      "Query contract state variables",
+      "Track storage changes over time",
+      "Analyze contract data patterns"
+    ],
+    "rules": [
+      "CRITICAL: Use contract_id for contract-specific state queries",
+      "Use slot for storage slot identification",
+      "Include value for storage values",
+      "Use modified_timestamp for state change timing"
+    ],
+    "examples": [
+      {
+        "query": "What is stored in slot 0x0 for contract 0.0.123?",
+        "graphql": "query {\n  contract_state(\n    where: {\n      contract_id: { _eq: 123 }\n      slot: { _eq: \"0x0000000000000000000000000000000000000000000000000000000000000000\" }\n    }\n  ) {\n    contract_id\n    slot\n    value\n    modified_timestamp\n  }\n}",
+        "explanation": "Get specific storage slot value for contract"
+      }
+    ]
+  },
+  "topic_message_aggregate": {
+    "use_cases": [
+      "Aggregated topic message counts",
+      "Calculate message statistics per topic",
+      "Analyze topic usage patterns",
+      "Track message volume trends"
+    ],
+    "rules": [
+      "CRITICAL: Use topic_id for topic-specific aggregations",
+      "Use consensus_timestamp for time-based aggregations",
+      "Include count aggregations for message volumes",
+      "Group by time periods for trend analysis"
+    ],
+    "examples": [
+      {
+        "query": "Message volume on topic 0.0.456 over last 7 days",
+        "graphql": "query {\n  topic_message_aggregate(\n    where: {\n      topic_id: { _eq: 456 }\n      consensus_timestamp: { _gte: 1735689600000000000 }\n    }\n  ) {\n    aggregate {\n      count\n      min { consensus_timestamp }\n      max { consensus_timestamp }\n    }\n  }\n}",
+        "explanation": "Get message count and time range for topic"
+      }
+    ]
+  },
+  "topic_message_lookup": {
+    "use_cases": [
+      "Fast lookup for messages by sequence or timestamp",
+      "Direct message retrieval by sequence number",
+      "Efficient message searching",
+      "Message indexing operations"
+    ],
+    "rules": [
+      "CRITICAL: Use topic_id and sequence_number for direct lookup",
+      "Use partition_id for efficient querying",
+      "Include consensus_timestamp for temporal context"
+    ],
+    "examples": [
+      {
+        "query": "Give me message #2000 on topic 0.0.789",
+        "graphql": "query {\n  topic_message_lookup(\n    where: {\n      topic_id: { _eq: 789 }\n      sequence_number: { _eq: 2000 }\n    }\n  ) {\n    topic_id\n    sequence_number\n    consensus_timestamp\n    partition_id\n    message\n  }\n}",
+        "explanation": "Get specific message by sequence number"
+      }
+    ]
+  },
+  "schedule": {
+    "use_cases": [
+      "Scheduled transaction metadata",
+      "Track pending scheduled transactions",
+      "Analyze scheduled transaction patterns",
+      "Monitor schedule execution status"
+    ],
+    "rules": [
+      "CRITICAL: Use schedule_id for schedule identification",
+      "Use creator_account_id for schedule creator queries",
+      "Include executed_timestamp for execution status",
+      "Filter by deleted field for active schedules"
+    ],
+    "examples": [
+      {
+        "query": "What's in schedule ID 0.0.321?",
+        "graphql": "query {\n  schedule(\n    where: { schedule_id: { _eq: 321 } }\n  ) {\n    schedule_id\n    creator_account_id\n    payer_account_id\n    transaction_body\n    executed_timestamp\n    deleted\n    wait_for_expiry\n  }\n}",
+        "explanation": "Get detailed information about specific schedule"
+      }
+    ]
+  },
+  "schedule_signature": {
+    "use_cases": [
+      "Signatures collected for a schedule",
+      "Track multi-sig schedule approval progress",
+      "Monitor schedule signature collection",
+      "Verify schedule readiness for execution"
+    ],
+    "rules": [
+      "CRITICAL: Use schedule_id for schedule-specific signatures",
+      "Include public_key_prefix for signer identification",
+      "Use consensus_timestamp for signature timing"
+    ],
+    "examples": [
+      {
+        "query": "Who has signed schedule 0.0.321 so far?",
+        "graphql": "query {\n  schedule_signature(\n    where: { schedule_id: { _eq: 321 } }\n  ) {\n    schedule_id\n    public_key_prefix\n    consensus_timestamp\n    signature\n  }\n}",
+        "explanation": "Get all signatures collected for specific schedule"
+      }
+    ]
+  },
+  "network_stake": {
+    "use_cases": [
+      "Network-wide staking totals",
+      "Analyze overall network staking metrics",
+      "Track total staked amounts",
+      "Monitor network security metrics"
+    ],
+    "rules": [
+      "Use consensus_timestamp for time-based stake analysis",
+      "Include stake_total for total network stake",
+      "Use stake_rewarded for distributed rewards"
+    ],
+    "examples": [
+      {
+        "query": "How much HBAR is staked right now?",
+        "graphql": "query {\n  network_stake(\n    order_by: { consensus_timestamp: desc }\n    limit: 1\n  ) {\n    consensus_timestamp\n    epoch_day\n    node_reward_fee_fraction\n    node_reward_fee_paid\n    staking_reward_fee_fraction\n    staking_reward_fee_paid\n    staking_reward_rate\n    staking_start_threshold\n  }\n}",
+        "explanation": "Get current network staking information"
+      }
+    ]
+  },
+  "node_stake": {
+    "use_cases": [
+      "Staking data per node",
+      "Analyze individual node staking metrics",
+      "Track node reward distribution",
+      "Monitor node staking performance"
+    ],
+    "rules": [
+      "CRITICAL: Use node_id for node-specific queries",
+      "Use consensus_timestamp for temporal node analysis",
+      "Include stake_total for node stake amounts",
+      "Use stake_rewarded for node reward tracking"
+    ],
+    "examples": [
+      {
+        "query": "What is node 5's stake weight?",
+        "graphql": "query {\n  node_stake(\n    where: { node_id: { _eq: 5 } }\n    order_by: { consensus_timestamp: desc }\n    limit: 1\n  ) {\n    node_id\n    consensus_timestamp\n    epoch_day\n    max_stake\n    min_stake\n    stake_not_rewarded\n    stake_rewarded\n    stake_total\n    reward_rate\n  }\n}",
+        "explanation": "Get current staking information for specific node"
+      }
+    ]
+  },
+  "record_file": {
+    "use_cases": [
+      "Record file metadata (consensus batches)",
+      "Find record files by timestamp ranges",
+      "Analyze consensus timing patterns",
+      "Track record file processing"
+    ],
+    "rules": [
+      "Use consensus_start and consensus_end for time ranges",
+      "Include hash for file integrity verification",
+      "Use name for file identification"
+    ],
+    "examples": [
+      {
+        "query": "Which record file includes timestamp 1690000000?",
+        "graphql": "query {\n  record_file(\n    where: {\n      consensus_start: { _lte: 1690000000000000000 }\n      consensus_end: { _gte: 1690000000000000000 }\n    }\n  ) {\n    name\n    consensus_start\n    consensus_end\n    hash\n    prev_hash\n    version\n    size\n  }\n}",
+        "explanation": "Find record file containing specific timestamp"
+      }
+    ]
+  },
+  "file_data": {
+    "use_cases": [
+      "Contents of on-ledger files",
+      "Query file data and metadata",
+      "Track file updates and versions",
+      "Analyze file usage patterns"
+    ],
+    "rules": [
+      "CRITICAL: Use entity_id for file identification",
+      "Use consensus_timestamp for file version queries",
+      "Include file_data for actual file contents",
+      "Filter by transaction_type for file operations"
+    ],
+    "examples": [
+      {
+        "query": "What are the contents of file 0.0.123?",
+        "graphql": "query {\n  file_data(\n    where: { entity_id: { _eq: 123 } }\n    order_by: { consensus_timestamp: desc }\n    limit: 1\n  ) {\n    entity_id\n    consensus_timestamp\n    file_data\n    transaction_type\n  }\n}",
+        "explanation": "Get latest contents of specific file"
+      }
+    ]
+  },
+  "address_book": {
+    "use_cases": [
+      "Network address books",
+      "Track network configuration changes",
+      "Analyze address book versions",
+      "Monitor network topology"
+    ],
+    "rules": [
+      "Use start_consensus_timestamp for version identification",
+      "Include node_count for network size tracking",
+      "Filter by file_id for specific address book files"
+    ],
+    "examples": [
+      {
+        "query": "List all address books",
+        "graphql": "query {\n  address_book(\n    order_by: { start_consensus_timestamp: desc }\n  ) {\n    start_consensus_timestamp\n    end_consensus_timestamp\n    node_count\n    file_id\n  }\n}",
+        "explanation": "Get all network address book versions"
+      }
+    ]
+  },
+  "address_book_entry": {
+    "use_cases": [
+      "Node entries inside an address book",
+      "Query individual node configurations",
+      "Track node metadata changes",
+      "Analyze network node composition"
+    ],
+    "rules": [
+      "CRITICAL: Use node_id for node identification",
+      "Use consensus_timestamp for address book version",
+      "Include node_account_id for node account mapping",
+      "Use description for node metadata"
+    ],
+    "examples": [
+      {
+        "query": "Which nodes are in the current address book?",
+        "graphql": "query {\n  address_book_entry(\n    order_by: { consensus_timestamp: desc }\n    limit: 100\n  ) {\n    node_id\n    consensus_timestamp\n    node_account_id\n    node_cert_hash\n    description\n    memo\n    public_key\n    rsa_public_key\n    stake\n  }\n}",
+        "explanation": "Get current network nodes from latest address book"
+      }
+    ]
+  },
+  "address_book_service_endpoint": {
+    "use_cases": [
+      "Node service endpoints",
+      "Query node connectivity information",
+      "Track endpoint configuration changes",
+      "Analyze network service topology"
+    ],
+    "rules": [
+      "CRITICAL: Use node_id for node endpoint queries",
+      "Include ip_address_v4 for IPv4 endpoints",
+      "Use port for service port information",
+      "Filter by consensus_timestamp for version queries"
+    ],
+    "examples": [
+      {
+        "query": "What gRPC endpoints exist for node X?",
+        "graphql": "query {\n  address_book_service_endpoint(\n    where: { node_id: { _eq: 3 } }\n    order_by: { consensus_timestamp: desc }\n  ) {\n    node_id\n    consensus_timestamp\n    ip_address_v4\n    port\n    domain_name\n  }\n}",
+        "explanation": "Get service endpoints for specific node"
+      }
+    ]
+  },
+  "network": {
+    "use_cases": [
+      "Network consensus info / metadata",
+      "Query network status and configuration",
+      "Track network-wide metrics",
+      "Monitor consensus state"
+    ],
+    "rules": [
+      "Use consensus_timestamp for temporal network queries",
+      "Include network-wide aggregated metrics",
+      "Filter by specific network parameters"
+    ],
+    "examples": [
+      {
+        "query": "What's the current network state?",
+        "graphql": "query {\n  network(\n    order_by: { consensus_timestamp: desc }\n    limit: 1\n  ) {\n    consensus_timestamp\n    freeze_time\n    last_update_time\n    network_stake_rewarded\n    node_reward_fee_fraction\n    staking_period\n    staking_reward_fee_fraction\n    staking_start_threshold\n  }\n}",
+        "explanation": "Get current network consensus information"
+      }
+    ]
+  },
+  "net": {
+    "use_cases": [
+      "Health/metrics check",
+      "API availability monitoring",
+      "System health verification",
+      "Network connectivity testing"
+    ],
+    "rules": [
+      "Use for health check queries only",
+      "Returns basic availability metrics",
+      "Minimal response for monitoring"
+    ],
+    "examples": [
+      {
+        "query": "Is the API alive and responsive?",
+        "graphql": "query {\n  net {\n    status\n    version\n    timestamp\n  }\n}",
+        "explanation": "Check API health and responsiveness"
+      }
+    ]
+  },
+  "total_accounts": {
+    "use_cases": [
+      "Count of accounts on the network",
+      "Track account growth metrics",
+      "Analyze network adoption",
+      "Monitor account creation trends"
+    ],
+    "rules": [
+      "Returns total account count",
+      "Use for network statistics",
+      "Tracks cumulative account numbers"
+    ],
+    "examples": [
+      {
+        "query": "How many Hedera accounts exist?",
+        "graphql": "query {\n  total_accounts {\n    count\n    timestamp\n  }\n}",
+        "explanation": "Get total number of accounts on Hedera network"
+      }
+    ]
+  },
+  "ecosystem_metric": {
+    "use_cases": [
+      "Precomputed ecosystem KPIs",
+      "Track ecosystem health metrics",
+      "Analyze ecosystem trends",
+      "Monitor ecosystem activity"
+    ],
+    "rules": [
+      "Use metric_name for specific KPI queries",
+      "Include timestamp for temporal analysis",
+      "Filter by metric_type for category queries"
+    ],
+    "examples": [
+      {
+        "query": "Daily active smart contracts over 90 days",
+        "graphql": "query {\n  ecosystem_metric(\n    where: {\n      metric_name: { _eq: \"daily_active_contracts\" }\n      timestamp: { _gte: 1735689600000000000 }\n    }\n    order_by: { timestamp: desc }\n  ) {\n    metric_name\n    metric_value\n    timestamp\n    metric_type\n  }\n}",
+        "explanation": "Get daily active contract metrics for time period"
       }
     ]
   }

@@ -80,7 +80,7 @@ def correctness_evaluator() -> Callable[[Dict[str, Any], Dict[str, Any], Dict[st
     
     evaluator = create_llm_as_judge(
         prompt=CORRECTNESS_PROMPT,
-        model=f"{settings.judge_llm_provider}:{settings.judge_llm_model}",
+        model="openai:gpt-4.1",
         feedback_key="correctness",
     )
     
