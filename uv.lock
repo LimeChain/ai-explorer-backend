@@ -16,16 +16,20 @@ dependencies = [
     { name = "langgraph" },
     { name = "langgraph-checkpoint-postgres" },
     { name = "langsmith" },
+    { name = "mcp" },
     { name = "openevals" },
     { name = "psycopg", extra = ["binary"] },
     { name = "psycopg2-binary" },
+    { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "python-dotenv" },
     { name = "redis" },
     { name = "sqlalchemy" },
     { name = "tiktoken" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
 ]
 
 [package.metadata]
@@ -39,16 +43,20 @@ requires-dist = [
     { name = "langgraph", specifier = ">=0.5.2" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=2.0.23,<3.0.0" },
     { name = "langsmith", specifier = ">=0.4.1" },
+    { name = "mcp", specifier = ">=1.11.0" },
     { name = "openevals", specifier = ">=0.1.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.9" },
     { name = "psycopg2-binary", specifier = ">=2.9.0" },
+    { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest-asyncio", specifier = ">=1.0.0" },
+    { name = "python-dotenv", specifier = ">=1.1.1" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "tiktoken", specifier = ">=0.11.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.35.0" },
+    { name = "websockets", specifier = ">=15.0.1" },
 ]
 
 [[package]]
