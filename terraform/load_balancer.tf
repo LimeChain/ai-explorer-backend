@@ -81,6 +81,11 @@ resource "google_compute_url_map" "url_map" {
       service = google_compute_backend_service.backend_service.id
     }
 
+    path_rule {
+      paths  = ["/mcp"]
+      service = google_compute_backend_service.mcp_external_service.id
+    }
+
   }
 }
 
@@ -100,6 +105,21 @@ resource "google_compute_backend_service" "backend_service" {
   # Backend service for Cloud Run is automatically managed by Google
 }
 
+resource "google_compute_backend_service" "mcp_external_service" {
+  name                  = "${var.app_name}-mcp-external-service"
+  protocol              = "HTTP"
+  timeout_sec           = 30
+  enable_cdn            = false
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+
+  backend {
+    group = google_compute_region_network_endpoint_group.mcp_external_neg.id
+  }
+
+  # Note: Health checks are not supported for serverless NEG backends (Cloud Run)
+  # Backend service for Cloud Run is automatically managed by Google
+}
+
 # MCP service is internal only - no external backend service needed
 # Backend service communicates with MCP directly via internal networking
 
@@ -111,6 +131,16 @@ resource "google_compute_region_network_endpoint_group" "backend_neg" {
 
   cloud_run {
     service = google_cloud_run_v2_service.backend_api.name
+  }
+}
+
+resource "google_compute_region_network_endpoint_group" "mcp_external_neg" {
+  name                  = "${var.app_name}-mcp-external-neg"
+  network_endpoint_type = "SERVERLESS"
+  region                = var.region
+
+  cloud_run {
+    service = google_cloud_run_v2_service.mcp_external.name
   }
 }
 

@@ -19,7 +19,9 @@ resource "google_cloud_run_v2_service" "backend_api" {
   ingress              = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   invoker_iam_disabled = true
 
-
+  scaling {
+    min_instance_count = var.cloud_run_min_instances
+  }
   template {
     service_account = google_service_account.backend_sa.email
 
@@ -33,6 +35,7 @@ resource "google_cloud_run_v2_service" "backend_api" {
     }
 
     containers {
+      name  = "api-1"
       image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker_repo.repository_id}/api:latest"
 
       ports {
@@ -162,13 +165,12 @@ resource "google_cloud_run_v2_service" "backend_api" {
 
       env {
         name  = "LANGSMITH_API_KEY"
-        value = ""
-        # value_source {
-        #   secret_key_ref {
-        #     secret  = google_secret_manager_secret.langsmith_api_key.secret_id
-        #     version = "latest"
-        #   }
-        # }
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.langsmith_api_key.secret_id
+            version = "latest"
+          }
+        }
       }
 
       env {
@@ -178,7 +180,7 @@ resource "google_cloud_run_v2_service" "backend_api" {
 
       env {
         name  = "LANGSMITH_PROJECT"
-        value = "ai-explorer"
+        value = var.langsmith_project
       }
 
       env {
@@ -200,6 +202,16 @@ resource "google_cloud_run_v2_service" "backend_api" {
         name  = "LLM_OUTPUT_COST_PER_TOKEN"
         value = tostring(var.llm_output_cost_per_token)
       }
+
+      env {
+        name  = "SAUCERSWAP_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.saucerswap_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
     }
   }
 
@@ -217,6 +229,9 @@ resource "google_cloud_run_v2_service" "mcp_servers" {
   ingress              = "INGRESS_TRAFFIC_INTERNAL_ONLY"
   invoker_iam_disabled = true
 
+  scaling {
+    min_instance_count = var.cloud_run_min_instances
+  }
   template {
     service_account = google_service_account.mcp_sa.email
 
@@ -230,6 +245,7 @@ resource "google_cloud_run_v2_service" "mcp_servers" {
     }
 
     containers {
+      name  = "mcp-server-1"
       image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker_repo.repository_id}/mcp-server:latest"
 
       ports {
@@ -278,7 +294,35 @@ resource "google_cloud_run_v2_service" "mcp_servers" {
         value = var.embedding_model
       }
 
+      env {
+        name  = "LLM_PROVIDER"
+        value = var.llm_provider
+      }
 
+      env {
+        name  = "LLM_MODEL"
+        value = var.llm_model
+      }
+
+      env {
+        name = "HGRAPH_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.hgraph_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name  = "SAUCERSWAP_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.saucerswap_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
 
       # env {
       #   name = "BIGQUERY_SERVICE_ACCOUNT"
@@ -293,4 +337,75 @@ resource "google_cloud_run_v2_service" "mcp_servers" {
   }
 
   depends_on = [google_project_service.apis, google_compute_router_nat.nat]
+}
+
+# External MCP
+resource "google_cloud_run_v2_service" "mcp_external" {
+  name                 = "${var.app_name}-mcp-external"
+  location             = var.region
+  ingress              = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  invoker_iam_disabled = true
+
+  scaling {
+    min_instance_count = var.cloud_run_min_instances
+  }
+  template {
+    service_account = google_service_account.mcp_sa.email
+
+    vpc_access {
+      connector = google_vpc_access_connector.connector.id
+      egress    = "ALL_TRAFFIC"
+    }
+
+    scaling {
+      max_instance_count = var.cloud_run_max_instances
+    }
+
+    containers {
+      name  = "mcp-external-1"
+      image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker_repo.repository_id}/mcp-external:latest"
+
+      ports {
+        container_port = 8002
+      }
+
+      resources {
+        limits = {
+          cpu    = var.cloud_run_cpu
+          memory = var.cloud_run_memory
+        }
+      }
+
+      env {
+        name  = "ENVIRONMENT"
+        value = var.environment
+      }
+
+      env {
+        name  = "LOG_LEVEL"
+        value = var.log_level
+      }
+
+      env {
+        name  = "API_BASE_URL"
+        value = "wss://${split("://", google_cloud_run_v2_service.backend_api.uri)[1]}"
+      }
+
+      env {
+        name  = "HTTP_HOST"
+        value = "0.0.0.0"
+      }
+
+      env {
+        name  = "HTTP_PORT"
+        value = "8002"
+      }
+    }
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_compute_router_nat.nat,
+    google_cloud_run_v2_service.backend_api
+  ]
 }

@@ -1,5 +1,5 @@
 # Multi-stage build for AI Explorer External MCP Server
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -18,7 +18,7 @@ COPY main.py ./
 RUN pip install --no-cache-dir -e .
 
 # Production stage
-FROM python:3.11-slim as production
+FROM python:3.11-slim AS production
 
 # Install curl for health check
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
