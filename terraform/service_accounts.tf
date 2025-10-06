@@ -13,8 +13,8 @@ resource "google_service_account" "mcp_sa" {
 
 resource "google_project_iam_member" "backend_sql_client" {
   project = var.project_id
-  role = "roles/cloudsql.client"
-  member = "serviceAccount:${google_service_account.backend_sa.email}"
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.backend_sa.email}"
 }
 
 resource "google_secret_manager_secret_iam_binding" "backend_secret_access" {
@@ -28,8 +28,8 @@ resource "google_secret_manager_secret_iam_binding" "backend_secret_access" {
 
 resource "google_project_iam_member" "mcp_bigquery_user" {
   project = var.project_id
-  role = "roles/bigquery.user"
-  member = "serviceAccount:${google_service_account.mcp_sa.email}"
+  role    = "roles/bigquery.user"
+  member  = "serviceAccount:${google_service_account.mcp_sa.email}"
 }
 
 resource "google_cloud_run_service_iam_binding" "mcp_lb_access" {

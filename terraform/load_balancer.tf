@@ -82,7 +82,7 @@ resource "google_compute_url_map" "url_map" {
     }
 
     path_rule {
-      paths  = ["/mcp"]
+      paths   = ["/mcp"]
       service = google_compute_backend_service.mcp_external_service.id
     }
 

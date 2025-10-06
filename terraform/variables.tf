@@ -37,7 +37,7 @@ variable "database_instance_tier" {
   description = "The machine type for the database instance"
   type        = string
   # default     = "db-custom-2-8192" # 2 CPU, 8GB RAM
-  default     = "db-custom-1-3840"
+  default = "db-custom-1-3840"
 }
 
 variable "database_disk_size" {
@@ -66,8 +66,8 @@ variable "cloud_run_max_instances" {
 
 variable "cloud_run_min_instances" {
   description = "Minimum number of Cloud Run instances"
-  type = number
-  default = 0
+  type        = number
+  default     = 0
 }
 
 variable "cloud_run_memory" {

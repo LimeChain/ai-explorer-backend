@@ -164,7 +164,7 @@ resource "google_cloud_run_v2_service" "backend_api" {
       }
 
       env {
-        name  = "LANGSMITH_API_KEY"
+        name = "LANGSMITH_API_KEY"
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.langsmith_api_key.secret_id
@@ -204,7 +204,7 @@ resource "google_cloud_run_v2_service" "backend_api" {
       }
 
       env {
-        name  = "SAUCERSWAP_API_KEY"
+        name = "SAUCERSWAP_API_KEY"
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.saucerswap_api_key.secret_id
@@ -315,7 +315,7 @@ resource "google_cloud_run_v2_service" "mcp_servers" {
       }
 
       env {
-        name  = "SAUCERSWAP_API_KEY"
+        name = "SAUCERSWAP_API_KEY"
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.saucerswap_api_key.secret_id
