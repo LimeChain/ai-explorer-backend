@@ -43,7 +43,7 @@ variable "database_instance_tier" {
 variable "database_disk_size" {
   description = "Database disk size in GB"
   type        = number
-  default     = 20
+  default     = 50
 }
 
 variable "database_name" {
