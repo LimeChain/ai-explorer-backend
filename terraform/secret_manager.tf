@@ -114,3 +114,21 @@ resource "google_secret_manager_secret_version" "hgraph_api_key" {
   secret_data = var.hgraph_api_key
 }
 
+# Saucerswap API key
+resource "google_secret_manager_secret" "saucerswap_api_key" {
+  secret_id = "${var.app_name}-saucerswap-api-key"
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    environment = var.environment
+    app         = var.app_name
+  }
+}
+
+resource "google_secret_manager_secret_version" "saucerswap_api_key" {
+  secret      = google_secret_manager_secret.saucerswap_api_key.id
+  secret_data = var.saucerswap_api_key
+}

@@ -11,14 +11,10 @@ resource "google_service_account" "mcp_sa" {
   description  = "Service account for MCP servers Cloud Run service"
 }
 
-# IAM bindings for service accounts
-resource "google_project_iam_binding" "backend_sql_client" {
+resource "google_project_iam_member" "backend_sql_client" {
   project = var.project_id
   role    = "roles/cloudsql.client"
-
-  members = [
-    "serviceAccount:${google_service_account.backend_sa.email}",
-  ]
+  member  = "serviceAccount:${google_service_account.backend_sa.email}"
 }
 
 resource "google_secret_manager_secret_iam_binding" "backend_secret_access" {
@@ -30,13 +26,10 @@ resource "google_secret_manager_secret_iam_binding" "backend_secret_access" {
   ]
 }
 
-resource "google_project_iam_binding" "mcp_bigquery_user" {
+resource "google_project_iam_member" "mcp_bigquery_user" {
   project = var.project_id
   role    = "roles/bigquery.user"
-
-  members = [
-    "serviceAccount:${google_service_account.mcp_sa.email}",
-  ]
+  member  = "serviceAccount:${google_service_account.mcp_sa.email}"
 }
 
 resource "google_cloud_run_service_iam_binding" "mcp_lb_access" {

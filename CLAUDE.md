@@ -13,7 +13,8 @@ The system architecture follows a multi-container architecture with the followin
 - **Frontend Application**: React-based SPA for user interface (separate repository)
 - **Load Balancer**: Load balances requests to the backend API over http and websocket
 - **API**: handles routing, core AI agentic workflow, cost and rate limiting and communicates with MCP over VPC
-- **MCP**: Hedera Mirror Node API and BigQueryTools for data fetching.
+- **MCP External**: Exposes the AI Explorer to other AI agents as tools over MCP protocol
+- **MCP Internal**: Provides internal tools for data fetching from Hedera Mirror Node and BigQuery.
 - **Database**: PostgreSQL with pgvector extension for vector search and session-based chat history.
 - **In-Memory Storage**: Redis for rate and budget limiting.
 - **VPC**: Private VPC with private IP address for the API and MCP to communicate with the database and redis over VPC.

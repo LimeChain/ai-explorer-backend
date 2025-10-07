@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -64,7 +62,7 @@ services:
       - .:/app
     working_dir: /app
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -84,11 +82,46 @@ services:
       - .:/app
     working_dir: /app
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(5); s.connect(('127.0.0.1', 8001)); s.close()"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s=socket.socket(); s.settimeout(5); s.connect(('127.0.0.1', 8001)); s.close()",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
+    restart: unless-stopped
+
+  mcp-external:
+    build:
+      context: ./mcp_external
+      dockerfile: Dockerfile
+    container_name: ai-explorer-mcp-external
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_BASE_URL: ws://api:8000
+      LOG_LEVEL: INFO
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8002
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s=socket.socket(); s.settimeout(5); s.connect(('127.0.0.1', 8002)); s.close()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
 
 volumes:

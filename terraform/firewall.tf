@@ -48,7 +48,7 @@ resource "google_compute_firewall" "allow_lb_to_cloud_run" {
 
   allow {
     protocol = "tcp"
-    ports    = ["8000", "8001"]
+    ports    = ["8000", "8001", "8002"]
   }
 
   # Google Cloud Load Balancer health check source ranges
