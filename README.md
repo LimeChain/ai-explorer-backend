@@ -76,7 +76,7 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-7. Install the Hedera SDK as a package and start the MCP server:
+7. Install the Hedera SDK as a package and start the internal tools MCP server:
 ```bash
 uv pip install -e ./sdk
 uv run python mcp_servers/main.py
@@ -85,6 +85,40 @@ uv run python mcp_servers/main.py
 8. Send a sample query over WebSocket:
 ```bash
 uv run python scripts/ws_send_query.py
+```
+
+9. Start the external MCP server that exposes the whole service as a tool for AI agents:
+```bash
+uv run python mcp_external/main.py  --transport http --port 8002
+```
+
+Connect via Postman MCP client.
+
+List the available tools:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/list",
+  "params": {}
+}
+```
+
+Call `ask_explorer` tool:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "ask_explorer",
+    "arguments": {
+      "question": "What are the recent transactions for account 0.0.123?",
+      "network": "mainnet",
+      "account_id": "0.0.123"
+    }
+  }
+}
 ```
 
 

@@ -12,6 +12,7 @@ env:
   ARTIFACT_REGISTRY_REPO: ai-explorer-docker-repo
   CLOUD_RUN_SERVICE_API: ai-explorer-api
   CLOUD_RUN_SERVICE_MCP: ai-explorer-mcp-server
+  CLOUD_RUN_SERVICE_MCP_EXTERNAL: ai-explorer-mcp-external
 
 jobs:
   build-and-push:
@@ -46,17 +47,23 @@ jobs:
           API_LATEST_IMAGE_URI="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/api:latest"
           MCP_IMAGE_URI="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/mcp-server:${{ github.sha }}"
           MCP_LATEST_IMAGE_URI="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/mcp-server:latest"
+          MCP_EXTERNAL_IMAGE_URI="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/mcp-external:${{ github.sha }}"
+          MCP_EXTERNAL_LATEST_IMAGE_URI="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/mcp-external:latest"
 
           echo "API Image URI: $API_IMAGE_URI"
           echo "API Latest Image URI: $API_LATEST_IMAGE_URI"
           echo "MCP Image URI: $MCP_IMAGE_URI"
           echo "MCP Latest Image URI: $MCP_LATEST_IMAGE_URI"
+          echo "MCP Image URI: $MCP_EXTERNAL_IMAGE_URI"
+          echo "MCP Latest Image URI: $MCP_EXTERNAL_LATEST_IMAGE_URI"
 
           # Set output variables for use in subsequent steps
           echo "API_IMAGE_URI=$API_IMAGE_URI" >> "$GITHUB_OUTPUT"
           echo "API_LATEST_IMAGE_URI=$API_LATEST_IMAGE_URI" >> "$GITHUB_OUTPUT"
           echo "MCP_IMAGE_URI=$MCP_IMAGE_URI" >> "$GITHUB_OUTPUT"
           echo "MCP_LATEST_IMAGE_URI=$MCP_LATEST_IMAGE_URI" >> "$GITHUB_OUTPUT"
+          echo "MCP_EXTERNAL_IMAGE_URI=$MCP_EXTERNAL_IMAGE_URI" >> "$GITHUB_OUTPUT"
+          echo "MCP_EXTERNAL_LATEST_IMAGE_URI=$MCP_EXTERNAL_LATEST_IMAGE_URI" >> "$GITHUB_OUTPUT"
           echo "CURRENT_TAG=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push API Docker image
@@ -88,6 +95,20 @@ jobs:
             COMMIT_SHA=${{ steps.determine_tag.outputs.CURRENT_TAG }}
             COMMIT_MESSAGE=${{ github.event.head_commit.message }}
 
+      - name: Build and push MCP External Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./mcp_external
+          file: ./mcp_external/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.determine_tag.outputs.MCP_EXTERNAL_IMAGE_URI }}
+            ${{ steps.determine_tag.outputs.MCP_EXTERNAL_LATEST_IMAGE_URI }}
+          build-args: |
+            COMMIT_SHA=${{ steps.determine_tag.outputs.CURRENT_TAG }}
+            COMMIT_MESSAGE=${{ github.event.head_commit.message }}
+
       - name: Output image URIs
         run: |
           echo "Images pushed successfully!"
@@ -95,6 +116,8 @@ jobs:
           echo "API Latest Image URI: ${{ steps.determine_tag.outputs.API_LATEST_IMAGE_URI }}"
           echo "MCP Image URI: ${{ steps.determine_tag.outputs.MCP_IMAGE_URI }}"
           echo "MCP Latest Image URI: ${{ steps.determine_tag.outputs.MCP_LATEST_IMAGE_URI }}"
+          echo "MCP External Image URI: ${{ steps.determine_tag.outputs.MCP_EXTERNAL_IMAGE_URI }}"
+          echo "MCP External Latest Image URI: ${{ steps.determine_tag.outputs.MCP_EXTERNAL_LATEST_IMAGE_URI }}"
           echo "Built using: Dockerfile and mcp_servers/Dockerfile"
 
       - name: Deploy to Cloud Run
@@ -111,6 +134,13 @@ jobs:
           # Deploy MCP Server service
           gcloud run deploy ${{ env.CLOUD_RUN_SERVICE_MCP }} \
             --image ${{ steps.determine_tag.outputs.MCP_LATEST_IMAGE_URI }} \
+            --region ${{ env.GCP_REGION }} \
+            --platform managed \
+            --quiet
+
+          # Deploy MCP External service
+          gcloud run deploy ${{ env.CLOUD_RUN_SERVICE_MCP_EXTERNAL }} \
+            --image ${{ steps.determine_tag.outputs.MCP_EXTERNAL_LATEST_IMAGE_URI }} \
             --region ${{ env.GCP_REGION }} \
             --platform managed \
             --quiet
@@ -137,6 +167,18 @@ jobs:
           # Get MCP Server service details  
           echo "=== MCP Server Service Status ==="
           gcloud run services describe ${{ env.CLOUD_RUN_SERVICE_MCP }} \
+            --region ${{ env.GCP_REGION }} \
+            --format="table(
+              metadata.name,
+              status.conditions[0].type,
+              status.conditions[0].status,
+              status.url,
+              spec.template.spec.containers[0].image
+            )"
+
+          # Get MCP External service details  
+          echo "=== MCP Server Service Status ==="
+          gcloud run services describe ${{ env.CLOUD_RUN_SERVICE_MCP_EXTERNAL }} \
             --region ${{ env.GCP_REGION }} \
             --format="table(
               metadata.name,

@@ -36,13 +36,14 @@ variable "domain_name" {
 variable "database_instance_tier" {
   description = "The machine type for the database instance"
   type        = string
-  default     = "db-custom-2-8192" # 2 CPU, 8GB RAM
+  # default     = "db-custom-2-8192" # 2 CPU, 8GB RAM
+  default = "db-custom-1-3840"
 }
 
 variable "database_disk_size" {
   description = "Database disk size in GB"
   type        = number
-  default     = 50
+  default     = 20
 }
 
 variable "database_name" {
@@ -61,6 +62,12 @@ variable "cloud_run_max_instances" {
   description = "Maximum number of Cloud Run instances"
   type        = number
   default     = 5
+}
+
+variable "cloud_run_min_instances" {
+  description = "Minimum number of Cloud Run instances"
+  type        = number
+  default     = 0
 }
 
 variable "cloud_run_memory" {
@@ -157,13 +164,13 @@ variable "embedding_model" {
 variable "llm_input_cost_per_token" {
   description = "LLM input cost per token in USD"
   type        = number
-  default     = 0.0000004
+  default     = 0.000002
 }
 
 variable "llm_output_cost_per_token" {
   description = "LLM output cost per token in USD"
   type        = number
-  default     = 0.0000016
+  default     = 0.000008
 }
 
 variable "collection_name" {
@@ -182,6 +189,11 @@ variable "langsmith_endpoint" {
   description = "LangSmith API endpoint"
   type        = string
   default     = "https://api.smith.langchain.com"
+}
+
+variable "langsmith_project" {
+  description = "LangSmith Project"
+  type        = string
 }
 
 variable "allowed_origins" {
