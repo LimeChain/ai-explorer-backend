@@ -47,6 +47,8 @@ CRITICAL: You can ONLY call these 6 specific tools. Any other tool name will res
    - Parameters: question (string), network (string)
    - Returns: {"success": true/false, "data": {...}, "graphql_query": "..."}
    - Use for blockchain data queries (account balances, transactions, token info, historical data, etc.)
+   - CRITICAL: When user mentions tokens by NAME (e.g., "USDC", "DOVU", "Sauce"), pass the token NAME as-is in the question - do NOT convert to token_id
+   - CRITICAL: Only include token_id in the question if user explicitly provides it (e.g., "token 0.0.123456")
 
 FORBIDDEN TOOL NAMES: get_transactions, get_account, get_token, get_balance, or any other SDK method names. These must be called via call_sdk_method.
 

@@ -3,6 +3,7 @@
 import logging
 import json
 import httpx
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from pydantic import SecretStr
 
@@ -131,14 +132,27 @@ class GraphQLService:
     def _create_graphql_prompt_template(self, include_error_context: bool = False) -> ChatPromptTemplate:
         """
         Create the prompt template for GraphQL generation with optional error context.
-        
+
         Args:
             include_error_context: Whether to include error context for retry attempts
         """
         if include_error_context:
             template = """
                 Based on the GraphQL schema and the instructions below, write a GraphQL query that answers the user's question.
-                
+
+                CURRENT DATE/TIME INFORMATION:
+                {current_datetime}
+
+                TOKEN/NFT LOOKUP RULES:
+                CRITICAL: When the user mentions a token by name (e.g., "USDC", "USDC Coin", "Sauce"), DO NOT guess or add token_id values to the query.
+                CRITICAL: Use the 'symbol' or 'name' field with pattern matching: symbol: {{ _ilike: "TOKENNAME%" }} or name: {{ _ilike: "%TOKENNAME%" }}
+                CRITICAL: The _ilike operator is case-insensitive and supports % wildcard for partial matches.
+                Examples:
+                  - "USDC" or "USDC Coin" → symbol: {{ _ilike: "USDC%" }} or name: {{ _ilike: "%USDC%" }}
+                  - "Sauce" or "SAUCE token" → symbol: {{ _ilike: "SAUCE%" }} or name: {{ _ilike: "%SAUCE%" }}
+                  - "Hedera" token → name: {{ _ilike: "%Hedera%" }}
+                CRITICAL: Only use token_id when the user explicitly provides a numeric ID like "token 0.0.456789" or "token_id 456789".
+
                 Available Schema Types:
                 {schema}
 
@@ -169,7 +183,20 @@ class GraphQLService:
         else:
             template = """
                 Based on the GraphQL schema and the instructions below, write a GraphQL query that answers the user's question.
-                
+
+                CURRENT DATE/TIME INFORMATION:
+                {current_datetime}
+
+                TOKEN/NFT LOOKUP RULES:
+                CRITICAL: When the user mentions a token by name (e.g., "USDC", "USDC Coin", "Sauce"), DO NOT guess or add token_id values to the query.
+                CRITICAL: Use the 'symbol' or 'name' field with pattern matching: symbol: {{ _ilike: "TOKENNAME%" }}
+                CRITICAL: The _ilike operator is case-insensitive and supports % wildcard for partial matches.
+                Examples:
+                  - "USDC" or "USDC Coin" → symbol: {{ _ilike: "USDC%" }} or name: {{ _ilike: "%USDC%" }}
+                  - "Sauce" or "SAUCE token" → symbol: {{ _ilike: "SAUCE%" }} or name: {{ _ilike: "%SAUCE%" }}
+                  - "Hedera" token → name: {{ _ilike: "%Hedera%" }}
+                CRITICAL: Only use token_id when the user explicitly provides a numeric ID like "token 0.0.456789" or "token_id 456789".
+
                 Available Schema Types:
                 {schema}
 
@@ -193,9 +220,40 @@ class GraphQLService:
 
                 GraphQL Query:
             """
-        
+
         return ChatPromptTemplate.from_template(template)
-    
+
+    def _get_current_datetime_info(self) -> str:
+        """
+        Generate current date/time information for the prompt including Hedera consensus timestamps.
+
+        Returns:
+            Formatted string with current date/time and timestamp calculations
+        """
+        now = datetime.now(timezone.utc)
+        now_ns = int(now.timestamp() * 1_000_000_000)  # Hedera uses nanoseconds
+
+        # Calculate common time ranges
+        one_hour_ago_ns = int((now.timestamp() - 3600) * 1_000_000_000)
+        one_day_ago_ns = int((now.timestamp() - 86400) * 1_000_000_000)
+        seven_days_ago_ns = int((now.timestamp() - 7 * 86400) * 1_000_000_000)
+        thirty_days_ago_ns = int((now.timestamp() - 30 * 86400) * 1_000_000_000)
+
+        return f"""
+Current UTC Date/Time: {now.strftime('%Y-%m-%d %H:%M:%S UTC')} (ISO: {now.isoformat()})
+
+Hedera Consensus Timestamps (nanoseconds since Unix epoch):
+  - Current timestamp:     {now_ns}
+  - 1 hour ago:            {one_hour_ago_ns}
+  - 24 hours ago:          {one_day_ago_ns}
+  - 7 days ago:            {seven_days_ago_ns}
+  - 30 days ago:           {thirty_days_ago_ns}
+
+IMPORTANT: Use these calculated timestamps for time-based queries. Do NOT use hardcoded timestamps from examples.
+IMPORTANT: For "last 24 hours" queries, use: where: {{ consensus_timestamp: {{ _gte: {one_day_ago_ns} }} }}
+IMPORTANT: For "last 7 days" queries, use: where: {{ consensus_timestamp: {{ _gte: {seven_days_ago_ns} }} }}
+"""
+
     async def generate_graphql(self, question: str, previous_query: str = None, error_message: str = None, attempt_number: int = 1) -> Dict[str, Any]:
         """
         Simple GraphQL generation: Query → Vector Search → Context → LLM → GraphQL
@@ -217,12 +275,13 @@ class GraphQLService:
             # Prepare LLM prompt
             is_retry = previous_query is not None and error_message is not None
             prompt_template = self._create_graphql_prompt_template(include_error_context=is_retry)
-            
+
             prompt_params = {
                 "question": question,
                 "schema": schemas_text,
                 "rules": context["rules"],
-                "examples": context["examples"]
+                "examples": context["examples"],
+                "current_datetime": self._get_current_datetime_info()
             }
             
             if is_retry:
