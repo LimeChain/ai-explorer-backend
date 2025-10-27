@@ -16,7 +16,10 @@
       "consensus_timestamp should be in nanoseconds since epoch for time filters",
       "When not explicitly stated, use _gte and _lte for time range queries with consensus_timestamp (inclusive)",
       "Include charged_tx_fee for transaction cost analysis",
-      "Filter by result field for successful/failed transactions"
+      "Filter by result field for successful/failed transactions",
+      "AGGREGATION: Use transaction_aggregate for counting transactions or calculating fee statistics",
+      "Aggregate syntax: transaction_aggregate(where: {...}) { aggregate { count } }",
+      "Available aggregations: count, sum(charged_tx_fee), avg(charged_tx_fee)"
     ],
     "examples": [
       {
@@ -28,6 +31,11 @@
         "query": "Which was the most expensive transaction for 0.0.123456?",
         "graphql": "query {\n    transaction(\n        where: { payer_account_id: { _eq: 123456 } }\n        order_by: { charged_tx_fee: desc }\n        limit: 1\n    ) {\n        consensus_timestamp\n        transaction_hash\n        type\n        result\n        charged_tx_fee\n        entity_id\n        node_account_id\n    }\n}",
         "explanation": "Find highest fee transaction for specific account"
+      },
+      {
+        "query": "How many successful transactions occurred today?",
+        "graphql": "query {\n  transaction_aggregate(\n    where: {\n      consensus_timestamp: { _gte: 1755561600000000000 }\n      result: { _eq: \"SUCCESS\" }\n    }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Use transaction_aggregate to count transactions matching criteria"
       }
     ]
   },
@@ -40,11 +48,32 @@
       "Query token admin keys and permissions"
     ],
     "rules": [
-      "CRITICAL: Use numeric token_id for token identification",
+      "CRITICAL: When user mentions token by name (e.g., 'USDC', 'DOVU', 'Sauce'), use symbol: { _ilike: 'TOKENNAME%' } - do NOT guess token_id",
+      "CRITICAL: Only use token_id when user explicitly provides numeric ID like 'token 0.0.123456' or 'token_id 123456'",
+      "Use _ilike operator for case-insensitive pattern matching on symbol or name fields",
       "Use consensus_timestamp for token creation queries",
       "Include decimals field for proper token amount calculations",
       "Filter by type field for fungible vs non-fungible tokens",
-      "Use treasury_account_id to find token treasury"
+      "Use treasury_account_id to find token treasury",
+      "RELATIONSHIPS: Access token holders via nested token_account query",
+      "Do NOT use token table alone for holder queries - always traverse to token_account"
+    ],
+    "examples": [
+      {
+        "query": "What are the details of USDC token?",
+        "graphql": "query {\n  token(\n    where: { symbol: { _ilike: \"USDC%\" } }\n  ) {\n    token_id\n    name\n    symbol\n    decimals\n    type\n    total_supply\n    initial_supply\n    treasury_account_id\n    created_timestamp_iso8601\n  }\n}",
+        "explanation": "Retrieve complete token information by symbol name using _ilike pattern (do NOT guess token_id)"
+      },
+      {
+        "query": "What are the details of token 0.0.123456?",
+        "graphql": "query {\n  token(\n    where: { token_id: { _eq: 123456 } }\n  ) {\n    token_id\n    name\n    symbol\n    decimals\n    type\n  }\n}",
+        "explanation": "Use token_id ONLY when user explicitly provides a numeric ID like '0.0.123456' or 'token_id 123456'"
+      },
+      {
+        "query": "Find all tokens created by account 0.0.789",
+        "graphql": "query {\n  token(\n    where: { treasury_account_id: { _eq: 789 } }\n    order_by: { created_timestamp: desc }\n    limit: 20\n  ) {\n    token_id\n    name\n    symbol\n    type\n    created_timestamp_iso8601\n  }\n}",
+        "explanation": "List tokens where account is the treasury (typically the creator)"
+      }
     ]
   },
   "nft": {
@@ -60,34 +89,43 @@
       "CRITICAL: Combine token_id and serial_number for unique NFT identification",
       "Use consensus_timestamp for NFT creation queries",
       "Include metadata field for NFT properties and attributes",
-      "Filter by deleted field to exclude burned NFTs"
+      "Filter by deleted field to exclude burned NFTs",
+      "WARNING: nft is a state table - use nft_aggregate only for collection size counts",
+      "For specific NFTs: use filtering (where) not aggregation"
+    ],
+    "examples": [
+      {
+        "query": "Show me NFT serial number 5 from collection 0.0.456789",
+        "graphql": "query {\n  nft(\n    where: {\n      token_id: { _eq: 456789 }\n      serial_number: { _eq: 5 }\n    }\n  ) {\n    token_id\n    serial_number\n    account_id\n    metadata\n    created_timestamp_iso8601\n    deleted\n  }\n}",
+        "explanation": "Get specific NFT details by token ID and serial number"
+      },
+      {
+        "query": "What NFTs does account 0.0.123456 own?",
+        "graphql": "query {\n  nft(\n    where: {\n      account_id: { _eq: 123456 }\n      deleted: { _eq: false }\n    }\n    order_by: { created_timestamp: desc }\n    limit: 50\n  ) {\n    token_id\n    serial_number\n    metadata\n    created_timestamp_iso8601\n  }\n}",
+        "explanation": "Find all non-deleted NFTs owned by a specific account"
+      }
     ]
   },
   "crypto_transfer": {
     "use_cases": [
       "Track HBAR transfers between accounts",
       "Analyze account balance changes over time",
-      "Find large HBAR movements and transactions",
       "Calculate net HBAR flow for accounts",
       "Monitor treasury and exchange activities"
     ],
     "rules": [
       "CRITICAL: Use entity_id for account-specific transfer queries",
       "CRITICAL: amount field shows transfer amount in tinybars (1 HBAR = 100,000,000 tinybars)",
+      "TERMINOLOGY: crypto_transfer has 'amount' field (HBAR transferred), while transaction table has 'charged_tx_fee' (fees paid)",
+      "For finding largest/biggest transfer or transaction by amount: Use crypto_transfer_aggregate with max instead of crypto_transfer with order_by",
       "Use consensus_timestamp for time-based transfer analysis",
-      "Positive amounts indicate credits, negative amounts indicate debits",
-      "Join with transaction table for complete transfer context"
+      "Positive amounts indicate credits, negative amounts indicate debits"
     ],
     "examples": [
       {
         "query": "What HBAR transfers happened for account 123456?",
         "graphql": "query {\n  crypto_transfer(\n    where: { entity_id: { _eq: 123456 } }\n    order_by: { consensus_timestamp: desc }\n    limit: 10\n  ) {\n    consensus_timestamp\n    entity_id\n    amount\n    transaction {\n      transaction_hash\n      type\n    }\n  }\n}",
         "explanation": "Get HBAR transfers for specific account"
-      },
-      {
-        "query": "Find the largest HBAR transfer in the last day",
-        "graphql": "query {\n  crypto_transfer(\n    where: {\n      consensus_timestamp: { _gte: 1755561600000000000 }\n    }\n    order_by: { amount: desc }\n    limit: 1\n  ) {\n    consensus_timestamp\n    entity_id\n    amount\n    transaction {\n      transaction_hash\n      payer_account_id\n    }\n  }\n}",
-        "explanation": "Find largest HBAR transfer by amount"
       }
     ]
   },
@@ -105,6 +143,13 @@
       "Include gas_used for contract execution cost analysis",
       "Filter by call_result for successful/failed contract calls",
       "Use consensus_timestamp for temporal contract analysis"
+    ],
+    "examples": [
+      {
+        "query": "Show me the result of the contract execution for contract 0.0.789 in transaction at timestamp 1234567890000000000",
+        "graphql": "query {\n  contract_result(\n    where: {\n      contract_id: { _eq: 789 }\n      consensus_timestamp: { _eq: 1234567890000000000 }\n    }\n  ) {\n    consensus_timestamp_iso8601\n    contract_id\n    call_result\n    gas_used\n    gas_limit\n    amount\n    error_message\n  }\n}",
+        "explanation": "Get contract execution result with gas usage and outcome"
+      }
     ]
   },
   "token_transfer": {
@@ -120,7 +165,23 @@
       "CRITICAL: Use token_id to filter transfers for specific tokens",
       "amount field shows raw token amount (apply decimals for display)",
       "Use consensus_timestamp for time-based token transfer analysis",
-      "Combine with token table for token metadata and decimals"
+      "Combine with token table for token metadata and decimals",
+      "AGGREGATION: Use token_transfer_aggregate for counting token transfers or summing amounts",
+      "Aggregate syntax: token_transfer_aggregate(where: {...}) { aggregate { sum { amount } } }",
+      "Available aggregations: count, sum(amount), avg(amount), min(amount), max(amount)",
+      "WARNING: For CURRENT token balances, use token_account table, NOT aggregates on token_transfer"
+    ],
+    "examples": [
+      {
+        "query": "Show token 0.0.456 transfers for the last hour",
+        "graphql": "query {\n  token_transfer(\n    where: {\n      token_id: { _eq: 456 }\n      consensus_timestamp: { _gte: 1755561600000000000 }\n    }\n    order_by: { consensus_timestamp: desc }\n    limit: 20\n  ) {\n    consensus_timestamp_iso8601\n    account_id\n    token_id\n    amount\n  }\n}",
+        "explanation": "Get recent token transfers for a specific token"
+      },
+      {
+        "query": "How many token transfers happened for token 0.0.456 today?",
+        "graphql": "query {\n  token_transfer_aggregate(\n    where: {\n      token_id: { _eq: 456 }\n      consensus_timestamp: { _gte: 1755561600000000000 }\n    }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Use aggregate to count historical token transfer activity"
+      }
     ]
   },
   "nft_transfer": {
@@ -136,7 +197,23 @@
       "CRITICAL: Combine token_id and serial_number for specific NFT tracking",
       "Use consensus_timestamp for NFT transfer timeline analysis",
       "Filter out null sender_account_id for minting events",
-      "Filter out null receiver_account_id for burning events"
+      "Filter out null receiver_account_id for burning events",
+      "AGGREGATION: Use nft_transfer_aggregate for counting NFT transfers",
+      "Aggregate syntax: nft_transfer_aggregate(where: {...}) { aggregate { count } }",
+      "Available aggregations: count",
+      "Use for: NFT trading volume, mint/burn counts, collection activity"
+    ],
+    "examples": [
+      {
+        "query": "Show NFT transfers for collection 0.0.789 in the last day",
+        "graphql": "query {\n  nft_transfer(\n    where: {\n      token_id: { _eq: 789 }\n      consensus_timestamp: { _gte: 1755561600000000000 }\n    }\n    order_by: { consensus_timestamp: desc }\n    limit: 20\n  ) {\n    consensus_timestamp_iso8601\n    token_id\n    serial_number\n    sender_account_id\n    receiver_account_id\n  }\n}",
+        "explanation": "Track recent NFT transfers for a collection"
+      },
+      {
+        "query": "How many NFTs were minted from collection 0.0.789 today?",
+        "graphql": "query {\n  nft_transfer_aggregate(\n    where: {\n      token_id: { _eq: 789 }\n      sender_account_id: { _is_null: true }\n      consensus_timestamp: { _gte: 1755561600000000000 }\n    }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count NFT mints (null sender) for a collection"
+      }
     ]
   },
   "account": {
@@ -153,6 +230,13 @@
       "Include balance field for current account HBAR balance",
       "Filter by deleted field to exclude deleted accounts",
       "Use auto_renew_period for account expiration analysis"
+    ],
+    "examples": [
+      {
+        "query": "Get balance and details for account 0.0.123456",
+        "graphql": "query {\n  entity(\n    where: { id: { _eq: 123456 } }\n  ) {\n    id\n    alias\n    balance\n    created_timestamp_iso8601\n    auto_renew_period\n    deleted\n    memo\n  }\n}",
+        "explanation": "Retrieve account information (note: 'account' entity is actually 'entity' in the schema)"
+      }
     ]
   },
   "topic_message": {
@@ -168,7 +252,2385 @@
       "Use sequence_number for message ordering within topics",
       "Include message field for actual message content",
       "Use consensus_timestamp for temporal message analysis",
-      "Filter by payer_account_id for messages from specific accounts"
+      "Filter by payer_account_id for messages from specific accounts",
+      "AGGREGATION: Use topic_message_aggregate for counting messages",
+      "Aggregate syntax: topic_message_aggregate(where: {...}) { aggregate { count } }",
+      "Use for: Topic activity metrics, message volume analysis"
+    ],
+    "examples": [
+      {
+        "query": "Get the last 10 messages from topic 0.0.12345",
+        "graphql": "query {\n  topic_message(\n    where: { topic_id: { _eq: 12345 } }\n    order_by: { sequence_number: desc }\n    limit: 10\n  ) {\n    topic_id\n    sequence_number\n    message\n    consensus_timestamp_iso8601\n    payer_account_id\n  }\n}",
+        "explanation": "Retrieve recent messages from a specific HCS topic"
+      },
+      {
+        "query": "How many messages were submitted to topic 0.0.12345?",
+        "graphql": "query {\n  topic_message_aggregate(\n    where: { topic_id: { _eq: 12345 } }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total messages in an HCS topic"
+      }
+    ]
+  },
+  "token_account": {
+    "use_cases": [
+      "Query token balance for specific accounts",
+      "Find largest token holders",
+      "Track token balance changes over time",
+      "Analyze token distribution across accounts",
+      "Find accounts holding specific tokens"
+    ],
+    "rules": [
+      "WHEN TO USE: For listing multiple holders or specific holder details - use token_account",
+      "CRITICAL: When user mentions token by name, use relationship filter: where: { token: { symbol: { _ilike: 'TOKENNAME%' } } } - do NOT use token_id",
+      "CRITICAL: Only use token_id when user explicitly provides numeric ID like 'token 0.0.123456'",
+      "CRITICAL: Use account_id field for account identification (NOT owner_address)",
+      "CRITICAL: balance field shows raw token amount (apply token.decimals for display)",
+      "Use balance_timestamp for historical balance queries",
+      "Filter by associated: true to get active token associations (excludes dissociated accounts)",
+      "Aggregates on state tables are rarely useful - prefer filtering and sorting"
+    ],
+    "examples": [
+      {
+        "query": "Who has the largest USDC balance?",
+        "graphql": "query {\n  token_account(\n    where: {\n      token: { symbol: { _ilike: \"USDC%\" } }\n      associated: { _eq: true }\n    }\n    order_by: { balance: desc }\n    limit: 1\n  ) {\n    account_id\n    balance\n    token {\n      symbol\n      decimals\n    }\n  }\n}",
+        "explanation": "Query token holders directly using symbol pattern matching with _ilike (do NOT use token_id or nested queries)"
+      },
+      {
+        "query": "Show me the top 10 holders of DOVU token",
+        "graphql": "query {\n  token_account(\n    where: {\n      token: { symbol: { _ilike: \"DOVU%\" } }\n      associated: { _eq: true }\n    }\n    order_by: { balance: desc }\n    limit: 10\n  ) {\n    account_id\n    balance\n    entity {\n      id\n      alias\n    }\n  }\n}",
+        "explanation": "Query token holders by symbol name using _ilike pattern matching (do NOT guess token_id)"
+      },
+      {
+        "query": "What percentage of total supply does the top holder own for token 0.0.456789?",
+        "graphql": "query {\n  token(where: { token_id: { _eq: 456789 } }) {\n    total_supply\n    decimals\n    token_account(\n      where: { associated: { _eq: true } }\n      order_by: { balance: desc }\n      limit: 1\n    ) {\n      balance\n    }\n  }\n}",
+        "explanation": "Use nested pattern ONLY when user provides explicit token_id - calculates percentage by comparing balance to total_supply"
+      }
+    ]
+  },
+  "_transfer": {
+    "use_cases": [
+      "Query all types of transfers (crypto, token, NFT) in a unified view",
+      "Track transfer history across different asset types",
+      "Analyze transfer patterns and volumes",
+      "Find transfers for specific tokens or NFTs",
+      "Monitor transfer approvals and delegated transfers"
+    ],
+    "rules": [
+      "Use type field to distinguish between crypto, token, and NFT transfers",
+      "sender_account_id and receiver_account_id are numeric account IDs",
+      "consensus_timestamp is in nanoseconds since epoch",
+      "Use serial_number for NFT transfers (null for fungible tokens)",
+      "amount field shows transfer amount (tinybars for HBAR, raw amount for tokens)"
+    ],
+    "examples": [
+      {
+        "query": "Show all transfers (HBAR, tokens, NFTs) for account 0.0.123456",
+        "graphql": "query {\n  _transfer(\n    where: {\n      _or: [\n        { sender_account_id: { _eq: 123456 } }\n        { receiver_account_id: { _eq: 123456 } }\n      ]\n    }\n    order_by: { consensus_timestamp: desc }\n    limit: 50\n  ) {\n    consensus_timestamp_iso8601\n    type\n    sender_account_id\n    receiver_account_id\n    amount\n    token_id\n    serial_number\n  }\n}",
+        "explanation": "Unified view of all transfer types for an account"
+      }
+    ]
+  },
+  "address_book": {
+    "use_cases": [
+      "Query network address book entries",
+      "Track network node information",
+      "Monitor address book updates and changes",
+      "Analyze network topology"
+    ],
+    "rules": [
+      "Use start_consensus_timestamp and end_consensus_timestamp for address book validity periods",
+      "file_id references the file containing address book data",
+      "node_count indicates number of nodes in the address book"
+    ],
+    "examples": [
+      {
+        "query": "Get the current network address book",
+        "graphql": "query {\n  address_book(\n    order_by: { start_consensus_timestamp: desc }\n    limit: 1\n  ) {\n    file_id\n    start_consensus_timestamp_iso8601\n    end_consensus_timestamp_iso8601\n    node_count\n  }\n}",
+        "explanation": "Retrieve the most recent address book entry"
+      }
+    ]
+  },
+  "address_book_entry": {
+    "use_cases": [
+      "Query individual network node details",
+      "Find node information by node_id or node_account_id",
+      "Track node public keys and certificates",
+      "Monitor node stake amounts"
+    ],
+    "rules": [
+      "CRITICAL: Use node_id for node identification",
+      "node_account_id links to the account entity",
+      "consensus_timestamp indicates when the entry was created/updated",
+      "stake field shows the node's stake amount"
+    ],
+    "examples": [
+      {
+        "query": "Get all active network nodes",
+        "graphql": "query {\n  address_book_entry(\n    order_by: { node_id: asc }\n    limit: 50\n  ) {\n    node_id\n    node_account_id\n    description\n    stake\n    consensus_timestamp_iso8601\n  }\n}",
+        "explanation": "Retrieve list of network nodes with their details"
+      }
+    ]
+  },
+  "address_book_service_endpoint": {
+    "use_cases": [
+      "Query network node service endpoints",
+      "Find node IP addresses and ports",
+      "Track service endpoint changes",
+      "Monitor network connectivity information"
+    ],
+    "rules": [
+      "Use node_id to link endpoints to specific nodes",
+      "ip_address_v4 contains the IPv4 address",
+      "port indicates the service port number",
+      "domain_name provides DNS name if available"
+    ],
+    "examples": [
+      {
+        "query": "What are the service endpoints for node 3?",
+        "graphql": "query {\n  address_book_service_endpoint(\n    where: { node_id: { _eq: 3 } }\n    order_by: { consensus_timestamp: desc }\n    limit: 10\n  ) {\n    node_id\n    ip_address_v4\n    port\n    domain_name\n    consensus_timestamp_iso8601\n  }\n}",
+        "explanation": "Get network endpoints for a specific node"
+      }
+    ]
+  },
+  "assessed_custom_fee": {
+    "use_cases": [
+      "Track custom fees assessed in HTS transactions",
+      "Analyze fee collection patterns",
+      "Find fees collected by specific accounts",
+      "Monitor custom fee usage across tokens"
+    ],
+    "rules": [
+      "CRITICAL: collector_account_id is the account that received the fee",
+      "payer_account_id is the account that paid the fee",
+      "amount field shows fee amount collected",
+      "token_id indicates which token the fee was collected in",
+      "consensus_timestamp links to the transaction",
+      "AGGREGATION: Use assessed_custom_fee_aggregate for summing fees collected",
+      "Aggregate syntax: assessed_custom_fee_aggregate(where: {...}) { aggregate { sum { amount } } }",
+      "Use for: Fee revenue analysis, collector earnings"
+    ],
+    "examples": [
+      {
+        "query": "What custom fees were collected for a specific collector?",
+        "graphql": "query {\n  assessed_custom_fee(\n    where: { collector_account_id: { _eq: 123456 } }\n    order_by: { consensus_timestamp: desc }\n    limit: 10\n  ) {\n    consensus_timestamp_iso8601\n    amount\n    token_id\n    payer_account_id\n  }\n}",
+        "explanation": "Find recent custom fees collected by a specific account"
+      },
+      {
+        "query": "How much in custom fees did collector 0.0.789 earn?",
+        "graphql": "query {\n  assessed_custom_fee_aggregate(\n    where: { collector_account_id: { _eq: 789 } }\n  ) {\n    aggregate {\n      sum {\n        amount\n      }\n      count\n    }\n  }\n}",
+        "explanation": "Sum custom fees collected by an account"
+      }
+    ]
+  },
+  "contract": {
+    "use_cases": [
+      "Query smart contract bytecode",
+      "Find contracts by file_id",
+      "Analyze contract deployment",
+      "Track contract code and initialization"
+    ],
+    "rules": [
+      "CRITICAL: Use id field for contract identification",
+      "file_id references the file containing contract bytecode",
+      "initcode contains contract initialization bytecode",
+      "runtime_bytecode contains deployed contract code"
+    ],
+    "examples": [
+      {
+        "query": "Show me the bytecode for contract 0.0.789",
+        "graphql": "query {\n  contract(\n    where: { id: { _eq: 789 } }\n  ) {\n    id\n    file_id\n    runtime_bytecode\n  }\n}",
+        "explanation": "Retrieve smart contract bytecode"
+      }
+    ]
+  },
+  "contract_action": {
+    "use_cases": [
+      "Track smart contract internal calls",
+      "Analyze contract execution flow",
+      "Monitor gas consumption per call",
+      "Find contract interaction patterns",
+      "Debug contract execution"
+    ],
+    "rules": [
+      "CRITICAL: Use consensus_timestamp and index for unique identification",
+      "call_depth indicates nested call level (0 for top-level)",
+      "call_type indicates operation (CALL, DELEGATECALL, STATICCALL, CREATE, etc.)",
+      "caller and recipient_account identify the call participants",
+      "gas and gas_used track gas consumption",
+      "value shows amount transferred in the call",
+      "AGGREGATION: Use contract_action_aggregate for counting internal calls or gas analysis",
+      "Aggregate syntax: contract_action_aggregate(where: {...}) { aggregate { sum { gas_used } } }",
+      "Use for: Call frequency, gas consumption patterns"
+    ],
+    "examples": [
+      {
+        "query": "Show contract internal calls for a transaction",
+        "graphql": "query {\n  contract_action(\n    where: { consensus_timestamp: { _eq: 1234567890000000000 } }\n    order_by: { index: asc }\n  ) {\n    index\n    call_depth\n    call_type\n    caller\n    recipient_account\n    gas_used\n    value\n  }\n}",
+        "explanation": "Get execution trace of contract calls within a transaction"
+      },
+      {
+        "query": "How many internal calls did contract 0.0.456 make?",
+        "graphql": "query {\n  contract_action_aggregate(\n    where: { caller: { _eq: 456 } }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count internal contract calls initiated by a contract"
+      }
+    ]
+  },
+  "contract_log": {
+    "use_cases": [
+      "Query smart contract event logs",
+      "Find logs by topic filters",
+      "Track contract events and emissions",
+      "Monitor specific event signatures",
+      "Analyze contract activity"
+    ],
+    "rules": [
+      "CRITICAL: Use topic0, topic1, topic2, topic3 for event signature filtering",
+      "contract_id identifies the contract that emitted the log",
+      "data contains the event data payload",
+      "index indicates log position within the transaction",
+      "bloom is the bloom filter for efficient log filtering",
+      "AGGREGATION: Use contract_log_aggregate for counting events",
+      "Aggregate syntax: contract_log_aggregate(where: {...}) { aggregate { count } }",
+      "Use for: Event emission frequency, contract activity metrics"
+    ],
+    "examples": [
+      {
+        "query": "Find Transfer events for an ERC20 contract",
+        "graphql": "query {\n  contract_log(\n    where: {\n      contract_id: { _eq: 123456 }\n      topic0: { _eq: \"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef\" }\n    }\n    order_by: { consensus_timestamp: desc }\n    limit: 20\n  ) {\n    consensus_timestamp_iso8601\n    data\n    topic1\n    topic2\n    topic3\n  }\n}",
+        "explanation": "Query Transfer event logs (topic0 is keccak256('Transfer(address,address,uint256)'))"
+      },
+      {
+        "query": "How many Transfer events did contract 0.0.456 emit?",
+        "graphql": "query {\n  contract_log_aggregate(\n    where: {\n      contract_id: { _eq: 456 }\n      topic0: { _eq: \"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef\" }\n    }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count Transfer events (ERC20) emitted by contract"
+      }
+    ]
+  },
+  "contract_state": {
+    "use_cases": [
+      "Query smart contract storage state",
+      "Find contract storage values by slot",
+      "Track state changes over time",
+      "Analyze contract storage patterns"
+    ],
+    "rules": [
+      "CRITICAL: Use contract_id and slot together for unique storage identification",
+      "slot is the storage slot key",
+      "value contains the current storage value",
+      "modified_timestamp indicates last modification time"
+    ],
+    "examples": [
+      {
+        "query": "What is the value in storage slot 0x0 for contract 0.0.456?",
+        "graphql": "query {\n  contract_state(\n    where: {\n      contract_id: { _eq: 456 }\n      slot: { _eq: \"0x0000000000000000000000000000000000000000000000000000000000000000\" }\n    }\n  ) {\n    contract_id\n    slot\n    value\n    modified_timestamp_iso8601\n  }\n}",
+        "explanation": "Read a specific storage slot from a contract"
+      }
+    ]
+  },
+  "contract_state_change": {
+    "use_cases": [
+      "Track smart contract storage modifications",
+      "Monitor state changes per transaction",
+      "Analyze storage write patterns",
+      "Debug contract state mutations"
+    ],
+    "rules": [
+      "CRITICAL: Use consensus_timestamp, contract_id, and slot for identification",
+      "value_read shows the value before the change",
+      "value_written shows the value after the change",
+      "migration flag indicates if this is from a migration"
+    ],
+    "examples": [
+      {
+        "query": "Show storage changes for contract 0.0.456 in transaction at timestamp 1234567890000000000",
+        "graphql": "query {\n  contract_state_change(\n    where: {\n      contract_id: { _eq: 456 }\n      consensus_timestamp: { _eq: 1234567890000000000 }\n    }\n    order_by: { slot: asc }\n  ) {\n    slot\n    value_read\n    value_written\n    migration\n  }\n}",
+        "explanation": "Track storage modifications in a transaction"
+      }
+    ]
+  },
+  "contract_transactions_last_24hrs": {
+    "use_cases": [
+      "Get current count of contract transactions in last 24 hours",
+      "Monitor recent contract activity",
+      "Track network contract usage trends"
+    ],
+    "rules": [
+      "This is a summary view updated periodically",
+      "count field shows total contract transactions",
+      "updated_at shows when the metric was last refreshed"
+    ],
+    "examples": [
+      {
+        "query": "How many contract transactions occurred in the last 24 hours?",
+        "graphql": "query {\n  contract_transactions_last_24hrs {\n    count\n    updated_at\n  }\n}",
+        "explanation": "Get current 24-hour contract transaction count"
+      }
+    ]
+  },
+  "crypto_allowance": {
+    "use_cases": [
+      "Query HBAR allowances delegated to spenders",
+      "Track spending approvals",
+      "Monitor allowance amounts",
+      "Find allowances by owner or spender"
+    ],
+    "rules": [
+      "CRITICAL: owner is the account that granted the allowance",
+      "CRITICAL: spender is the account authorized to spend",
+      "amount shows current allowance balance (tinybars)",
+      "amount_granted shows initial allowance amount",
+      "payer_account_id is the account paying for the allowance transaction"
+    ],
+    "examples": [
+      {
+        "query": "What HBAR allowances has account 0.0.123456 granted?",
+        "graphql": "query {\n  crypto_allowance(\n    where: { owner: { _eq: 123456 } }\n    order_by: { amount: desc }\n  ) {\n    owner\n    spender\n    amount\n    amount_granted\n    payer_account_id\n  }\n}",
+        "explanation": "Find all HBAR spending allowances granted by an account"
+      }
+    ]
+  },
+  "crypto_allowance_history": {
+    "use_cases": [
+      "Track historical HBAR allowance changes",
+      "Analyze allowance modification patterns",
+      "Audit allowance grants and revocations"
+    ],
+    "rules": [
+      "Similar to crypto_allowance but includes historical records",
+      "Use timestamp_range for temporal queries"
+    ],
+    "examples": [
+      {
+        "query": "Show the allowance history between owner 0.0.123 and spender 0.0.456",
+        "graphql": "query {\n  crypto_allowance_history(\n    where: {\n      owner: { _eq: 123 }\n      spender: { _eq: 456 }\n    }\n    order_by: { timestamp_range: desc }\n    limit: 10\n  ) {\n    owner\n    spender\n    amount\n    timestamp_range\n  }\n}",
+        "explanation": "Track historical changes to a specific HBAR allowance"
+      }
+    ]
+  },
+  "custom_fee": {
+    "use_cases": [
+      "Query custom fee schedules for HTS tokens",
+      "Find fee configurations by token",
+      "Analyze fee structures and collectors",
+      "Monitor custom fee types (fixed, fractional, royalty)"
+    ],
+    "rules": [
+      "CRITICAL: Use token_id to find fees for specific tokens",
+      "collector_account_id receives the custom fee",
+      "Use all_collectors_are_exempt flag to check exemption rules",
+      "Different fee types have different amount calculations"
+    ],
+    "examples": [
+      {
+        "query": "What are the custom fees for token 0.0.789?",
+        "graphql": "query {\n  custom_fee(\n    where: { token_id: { _eq: 789 } }\n  ) {\n    token_id\n    collector_account_id\n    all_collectors_are_exempt\n  }\n}",
+        "explanation": "Get custom fee configuration for a token"
+      }
+    ]
+  },
+  "ecosystem__nft_collection_sales_volume": {
+    "use_cases": [
+      "Track NFT collection sales volumes",
+      "Analyze NFT marketplace activity",
+      "Monitor collection trading trends",
+      "Find top-selling NFT collections"
+    ],
+    "rules": [
+      "This is an analytics view for NFT marketplace metrics",
+      "Volumes are typically aggregated by time period"
+    ],
+    "examples": [
+      {
+        "query": "What are the top NFT collections by sales volume?",
+        "graphql": "query {\n  ecosystem__nft_collection_sales_volume(\n    order_by: { volume: desc }\n    limit: 10\n  ) {\n    token_id\n    volume\n    period\n  }\n}",
+        "explanation": "Find highest volume NFT collections"
+      }
+    ]
+  },
+  "ecosystem__nft_collection_sales_volume_total": {
+    "use_cases": [
+      "Get total NFT collection sales volumes",
+      "Analyze overall NFT marketplace statistics",
+      "Track cumulative trading volumes"
+    ],
+    "rules": [
+      "This provides cumulative/total metrics for NFT sales"
+    ],
+    "examples": [
+      {
+        "query": "What is the total sales volume for all NFT collections?",
+        "graphql": "query {\n  ecosystem__nft_collection_sales_volume_total {\n    total_volume\n    updated_at\n  }\n}",
+        "explanation": "Get cumulative NFT marketplace volume"
+      }
+    ]
+  },
+  "ecosystem_active_nft_account_cohorts": {
+    "use_cases": [
+      "Analyze NFT account cohorts by activity",
+      "Track NFT user engagement metrics",
+      "Monitor NFT ecosystem growth"
+    ],
+    "rules": [
+      "This is an analytics view for user cohort analysis",
+      "Cohorts are typically segmented by time or activity level"
+    ],
+    "examples": [
+      {
+        "query": "Show NFT user cohorts by activity level",
+        "graphql": "query {\n  ecosystem_active_nft_account_cohorts(\n    order_by: { cohort_date: desc }\n    limit: 10\n  ) {\n    cohort_date\n    active_accounts\n    activity_level\n  }\n}",
+        "explanation": "Analyze NFT user engagement over time"
+      }
+    ]
+  },
+  "ecosystem_estimated_transaction_totals": {
+    "use_cases": [
+      "Get estimated transaction count totals",
+      "Monitor network transaction volumes",
+      "Track ecosystem growth metrics"
+    ],
+    "rules": [
+      "This provides estimated/aggregated transaction statistics",
+      "Use for high-level ecosystem analytics"
+    ],
+    "examples": [
+      {
+        "query": "What are the estimated total transactions on Hedera?",
+        "graphql": "query {\n  ecosystem_estimated_transaction_totals {\n    total_transactions\n    estimated_date\n  }\n}",
+        "explanation": "Get network-wide transaction count estimate"
+      }
+    ]
+  },
+  "ecosystem_metric": {
+    "use_cases": [
+      "Query ecosystem-level metrics and statistics",
+      "Monitor network health indicators",
+      "Track various ecosystem KPIs",
+      "Analyze network growth trends"
+    ],
+    "rules": [
+      "Metrics are categorized by type/name",
+      "Values are typically aggregated over time periods"
+    ],
+    "examples": [
+      {
+        "query": "Show key ecosystem metrics",
+        "graphql": "query {\n  ecosystem_metric(\n    order_by: { timestamp: desc }\n    limit: 10\n  ) {\n    metric_name\n    metric_value\n    timestamp\n  }\n}",
+        "explanation": "Retrieve recent ecosystem KPIs"
+      }
+    ]
+  },
+  "ecosystem_metric_description": {
+    "use_cases": [
+      "Get descriptions of available ecosystem metrics",
+      "Understand metric definitions",
+      "Find available analytics data points"
+    ],
+    "rules": [
+      "This is a reference table for metric metadata",
+      "Use to discover available metrics"
+    ],
+    "examples": [
+      {
+        "query": "What metrics are available for tracking?",
+        "graphql": "query {\n  ecosystem_metric_description {\n    metric_name\n    description\n    unit\n  }\n}",
+        "explanation": "List all available ecosystem metrics and their definitions"
+      }
+    ]
+  },
+  "ecosystem_transaction_count_by_type": {
+    "use_cases": [
+      "Analyze transaction distribution by type",
+      "Monitor transaction type trends",
+      "Track which transaction types are most used"
+    ],
+    "rules": [
+      "Groups transaction counts by transaction type",
+      "Typically aggregated by time period"
+    ],
+    "examples": [
+      {
+        "query": "What are the most common transaction types?",
+        "graphql": "query {\n  ecosystem_transaction_count_by_type(\n    order_by: { count: desc }\n    limit: 10\n  ) {\n    transaction_type\n    count\n    period\n  }\n}",
+        "explanation": "Analyze transaction distribution by type"
+      }
+    ]
+  },
+  "entity": {
+    "use_cases": [
+      "Query account/entity information",
+      "Find accounts by ID or alias",
+      "Track account creation and balances",
+      "Monitor account activity and metadata"
+    ],
+    "rules": [
+      "CRITICAL: Use id field for account identification (numeric)",
+      "alias provides the EVM address or public key alias",
+      "balance shows current HBAR balance (tinybars)",
+      "Use deleted flag to filter out deleted accounts",
+      "auto_renew_period indicates account renewal settings",
+      "WARNING: entity is a state table - use entity_aggregate only for total account counts",
+      "For specific accounts: use filtering (where) not aggregation"
+    ],
+    "examples": [
+      {
+        "query": "Get account details by account ID",
+        "graphql": "query {\n  entity(\n    where: { id: { _eq: 123456 } }\n  ) {\n    id\n    alias\n    balance\n    created_timestamp_iso8601\n    deleted\n    memo\n    auto_renew_period\n  }\n}",
+        "explanation": "Retrieve account information including balance and metadata"
+      }
+    ]
+  },
+  "entity_history": {
+    "use_cases": [
+      "Track historical account/entity changes",
+      "Analyze account modification history",
+      "Audit account updates over time"
+    ],
+    "rules": [
+      "Similar to entity but includes historical snapshots",
+      "Use timestamp_range for temporal queries"
+    ],
+    "examples": [
+      {
+        "query": "Show the modification history for account 0.0.123456",
+        "graphql": "query {\n  entity_history(\n    where: { id: { _eq: 123456 } }\n    order_by: { timestamp_range: desc }\n    limit: 10\n  ) {\n    id\n    balance\n    timestamp_range\n    memo\n  }\n}",
+        "explanation": "Track historical changes to an account"
+      }
+    ]
+  },
+  "entity_stake": {
+    "use_cases": [
+      "Query account staking information",
+      "Find accounts staking to specific nodes",
+      "Track staking amounts and rewards",
+      "Monitor staking participation"
+    ],
+    "rules": [
+      "Links accounts to staked nodes",
+      "Shows staking amounts and configurations",
+      "Use for staking analytics"
+    ],
+    "examples": [
+      {
+        "query": "Which accounts are staking to node 3?",
+        "graphql": "query {\n  entity_stake(\n    where: { staked_node_id: { _eq: 3 } }\n    order_by: { stake_total_start: desc }\n    limit: 20\n  ) {\n    id\n    staked_node_id\n    stake_total_start\n    staked_to_me\n  }\n}",
+        "explanation": "Find accounts staking to a specific node"
+      }
+    ]
+  },
+  "erc_beta_nft": {
+    "use_cases": [
+      "Query ERC-721 style NFT data (beta)",
+      "Find NFT metadata in ERC standard format",
+      "Track NFT ownership in ERC compatibility layer"
+    ],
+    "rules": [
+      "This is a beta/experimental ERC compatibility view",
+      "Provides ERC-721 standard interface to Hedera NFTs"
+    ],
+    "examples": [
+      {
+        "query": "Get ERC-721 compatible NFT data for token 0.0.789, serial 5",
+        "graphql": "query {\n  erc_beta_nft(\n    where: {\n      token_id: { _eq: 789 }\n      serial_number: { _eq: 5 }\n    }\n  ) {\n    token_id\n    serial_number\n    owner\n    token_uri\n  }\n}",
+        "explanation": "Access NFT data in ERC-721 format"
+      }
+    ]
+  },
+  "erc_beta_token": {
+    "use_cases": [
+      "Query ERC-20 style token data (beta)",
+      "Find token information in ERC standard format",
+      "Track token balances in ERC compatibility layer"
+    ],
+    "rules": [
+      "This is a beta/experimental ERC compatibility view",
+      "Provides ERC-20 standard interface to Hedera tokens"
+    ],
+    "examples": [
+      {
+        "query": "Get ERC-20 compatible token data for token 0.0.456",
+        "graphql": "query {\n  erc_beta_token(\n    where: { token_id: { _eq: 456 } }\n  ) {\n    token_id\n    name\n    symbol\n    decimals\n    total_supply\n  }\n}",
+        "explanation": "Access token data in ERC-20 format"
+      }
+    ]
+  },
+  "erc_beta_token_account": {
+    "use_cases": [
+      "Query ERC-20 token balances (beta)",
+      "Find account token holdings in ERC format",
+      "Track balances in ERC compatibility layer"
+    ],
+    "rules": [
+      "This is a beta/experimental ERC compatibility view",
+      "Provides ERC-20 balance interface"
+    ],
+    "examples": [
+      {
+        "query": "Get ERC-20 token balance for account 0x123... and token 0.0.456",
+        "graphql": "query {\n  erc_beta_token_account(\n    where: {\n      account: { _eq: \"0x123...\" }\n      token_id: { _eq: 456 }\n    }\n  ) {\n    account\n    token_id\n    balance\n  }\n}",
+        "explanation": "Check token balance in ERC-20 format"
+      }
+    ]
+  },
+  "ethereum_transaction": {
+    "use_cases": [
+      "Query Ethereum-style transactions on Hedera",
+      "Find transactions by hash or nonce",
+      "Track EVM transaction details",
+      "Analyze gas usage and pricing"
+    ],
+    "rules": [
+      "CRITICAL: Use hash for Ethereum transaction identification",
+      "nonce provides transaction sequence number",
+      "gas_limit and gas_price define gas parameters",
+      "value shows ETH-style value transferred"
+    ],
+    "examples": [
+      {
+        "query": "Find Ethereum transaction by hash",
+        "graphql": "query {\n  ethereum_transaction(\n    where: { hash: { _eq: \"0x123...\" } }\n  ) {\n    hash\n    nonce\n    gas_limit\n    gas_price\n    value\n    type\n    from\n    to\n  }\n}",
+        "explanation": "Retrieve EVM transaction details by hash"
+      }
+    ]
+  },
+  "network_stake": {
+    "use_cases": [
+      "Query total network staking information",
+      "Monitor overall stake distribution",
+      "Track network-wide staking metrics"
+    ],
+    "rules": [
+      "Provides aggregated network-level staking data",
+      "Shows total stake across all nodes"
+    ],
+    "examples": [
+      {
+        "query": "What is the total stake across the Hedera network?",
+        "graphql": "query {\n  network_stake(\n    order_by: { consensus_timestamp: desc }\n    limit: 1\n  ) {\n    stake_total\n    stake_rewarded\n    consensus_timestamp_iso8601\n  }\n}",
+        "explanation": "Get current network-wide staking totals"
+      }
+    ]
+  },
+  "nft_allowance": {
+    "use_cases": [
+      "Query NFT spending allowances",
+      "Track NFT approval delegations",
+      "Find NFTs approved for specific spenders",
+      "Monitor NFT marketplace approvals"
+    ],
+    "rules": [
+      "CRITICAL: owner is the account that owns the NFT",
+      "CRITICAL: spender is the authorized account",
+      "token_id and serial_number identify the specific NFT",
+      "approved_for_all flag indicates collection-level approval"
+    ],
+    "examples": [
+      {
+        "query": "What NFT approvals has account 0.0.123456 granted?",
+        "graphql": "query {\n  nft_allowance(\n    where: { owner: { _eq: 123456 } }\n    limit: 20\n  ) {\n    owner\n    spender\n    token_id\n    serial_number\n    approved_for_all\n  }\n}",
+        "explanation": "Find NFT spending approvals granted by an account"
+      }
+    ]
+  },
+  "nft_allowance_history": {
+    "use_cases": [
+      "Track historical NFT allowance changes",
+      "Analyze NFT approval patterns",
+      "Audit NFT delegation history"
+    ],
+    "rules": [
+      "Similar to nft_allowance but includes historical records",
+      "Use timestamp_range for temporal queries"
+    ],
+    "examples": [
+      {
+        "query": "Show NFT approval history for token 0.0.789, serial 5",
+        "graphql": "query {\n  nft_allowance_history(\n    where: {\n      token_id: { _eq: 789 }\n      serial_number: { _eq: 5 }\n    }\n    order_by: { timestamp_range: desc }\n    limit: 10\n  ) {\n    owner\n    spender\n    timestamp_range\n    approved_for_all\n  }\n}",
+        "explanation": "Track historical approval changes for a specific NFT"
+      }
+    ]
+  },
+  "nft_history": {
+    "use_cases": [
+      "Track historical NFT data changes",
+      "Analyze NFT metadata modifications",
+      "Monitor NFT ownership transitions"
+    ],
+    "rules": [
+      "Similar to nft but includes historical snapshots",
+      "Use timestamp_range for temporal queries"
+    ],
+    "examples": [
+      {
+        "query": "Show ownership history for NFT token 0.0.789, serial 5",
+        "graphql": "query {\n  nft_history(\n    where: {\n      token_id: { _eq: 789 }\n      serial_number: { _eq: 5 }\n    }\n    order_by: { timestamp_range: desc }\n    limit: 10\n  ) {\n    token_id\n    serial_number\n    account_id\n    timestamp_range\n  }\n}",
+        "explanation": "Track NFT ownership transitions over time"
+      }
+    ]
+  },
+  "node_stake": {
+    "use_cases": [
+      "Query individual node staking information",
+      "Find stake amounts per node",
+      "Track node stake changes",
+      "Analyze stake distribution across nodes"
+    ],
+    "rules": [
+      "CRITICAL: Use node_id for node identification",
+      "Shows stake amounts and staking accounts per node",
+      "Use for node-level staking analytics"
+    ],
+    "examples": [
+      {
+        "query": "What is the stake amount for node 3?",
+        "graphql": "query {\n  node_stake(\n    where: { node_id: { _eq: 3 } }\n    order_by: { consensus_timestamp: desc }\n    limit: 1\n  ) {\n    node_id\n    stake\n    stake_rewarded\n    stake_not_rewarded\n    consensus_timestamp_iso8601\n  }\n}",
+        "explanation": "Get current staking information for a specific node"
+      }
+    ]
+  },
+  "non_fee_transfer": {
+    "use_cases": [
+      "Query transfers excluding fee payments",
+      "Analyze actual value transfers vs fees",
+      "Track non-fee HBAR movements"
+    ],
+    "rules": [
+      "Filters out fee-related transfers",
+      "Shows only intentional value transfers",
+      "Similar structure to crypto_transfer"
+    ],
+    "examples": [
+      {
+        "query": "Show non-fee HBAR transfers for account 0.0.123456",
+        "graphql": "query {\n  non_fee_transfer(\n    where: { entity_id: { _eq: 123456 } }\n    order_by: { consensus_timestamp: desc }\n    limit: 20\n  ) {\n    consensus_timestamp_iso8601\n    entity_id\n    amount\n  }\n}",
+        "explanation": "Get intentional value transfers excluding fees"
+      }
+    ]
+  },
+  "query_root": {
+    "use_cases": [
+      "Root query type for GraphQL schema",
+      "Entry point for all queries"
+    ],
+    "rules": [
+      "This is the GraphQL query root type",
+      "All queries start from this type"
+    ],
+    "examples": [
+      {
+        "query": "This is the root query type - all queries start here",
+        "graphql": "query {\n  # All GraphQL queries are accessed through query_root\n  transaction(limit: 1) {\n    consensus_timestamp\n  }\n}",
+        "explanation": "Example showing query_root as the entry point"
+      }
+    ]
+  },
+  "schedule": {
+    "use_cases": [
+      "Query scheduled transactions",
+      "Find pending scheduled executions",
+      "Track schedule creation and execution",
+      "Monitor multi-signature transaction schedules"
+    ],
+    "rules": [
+      "CRITICAL: Use schedule_id for identification",
+      "creator_account_id is the account that created the schedule",
+      "payer_account_id pays for the scheduled transaction",
+      "executed_timestamp indicates when schedule was executed (null if pending)"
+    ],
+    "examples": [
+      {
+        "query": "Find pending scheduled transactions",
+        "graphql": "query {\n  schedule(\n    where: { executed_timestamp: { _is_null: true } }\n    order_by: { consensus_timestamp: desc }\n    limit: 20\n  ) {\n    schedule_id\n    creator_account_id\n    payer_account_id\n    consensus_timestamp_iso8601\n  }\n}",
+        "explanation": "Get list of scheduled transactions that haven't been executed yet"
+      }
+    ]
+  },
+  "staking_reward_transfer": {
+    "use_cases": [
+      "Track staking reward distributions",
+      "Monitor reward payments to stakers",
+      "Analyze staking reward patterns",
+      "Calculate staking yields"
+    ],
+    "rules": [
+      "CRITICAL: account_id receives the staking reward",
+      "amount shows reward amount in tinybars",
+      "consensus_timestamp indicates when reward was paid",
+      "Links to staking activities and node performance",
+      "AGGREGATION: Use staking_reward_transfer_aggregate for summing rewards",
+      "Aggregate syntax: staking_reward_transfer_aggregate(where: {...}) { aggregate { sum { amount } } }",
+      "Use for: Total rewards earned, reward distribution analysis"
+    ],
+    "examples": [
+      {
+        "query": "What staking rewards did account 0.0.123456 receive in the last month?",
+        "graphql": "query {\n  staking_reward_transfer(\n    where: {\n      account_id: { _eq: 123456 }\n      consensus_timestamp: { _gte: 1755561600000000000 }\n    }\n    order_by: { consensus_timestamp: desc }\n  ) {\n    account_id\n    amount\n    consensus_timestamp_iso8601\n  }\n}",
+        "explanation": "Track staking rewards received by an account"
+      },
+      {
+        "query": "How much total staking rewards did account 0.0.123456 earn?",
+        "graphql": "query {\n  staking_reward_transfer_aggregate(\n    where: { account_id: { _eq: 123456 } }\n  ) {\n    aggregate {\n      sum {\n        amount\n      }\n      count\n    }\n  }\n}",
+        "explanation": "Sum all staking rewards received by an account"
+      }
+    ]
+  },
+  "subscription_root": {
+    "use_cases": [
+      "Root subscription type for GraphQL schema",
+      "Entry point for real-time subscriptions"
+    ],
+    "rules": [
+      "This is the GraphQL subscription root type",
+      "All subscriptions start from this type"
+    ],
+    "examples": [
+      {
+        "query": "This is the root subscription type for real-time updates",
+        "graphql": "subscription {\n  # All GraphQL subscriptions start from subscription_root\n  transaction(limit: 1) {\n    consensus_timestamp\n  }\n}",
+        "explanation": "Example showing subscription_root as the entry point"
+      }
+    ]
+  },
+  "token_airdrop": {
+    "use_cases": [
+      "Query token airdrop operations",
+      "Track token distribution campaigns",
+      "Monitor airdrop claims and pending airdrops",
+      "Analyze airdrop patterns"
+    ],
+    "rules": [
+      "CRITICAL: Use token_id to identify which token is being airdropped",
+      "sender_account_id is the account distributing tokens",
+      "receiver_account_id is the intended recipient",
+      "Use state field to check if airdrop is pending or claimed"
+    ],
+    "examples": [
+      {
+        "query": "What pending airdrops does account 0.0.123456 have?",
+        "graphql": "query {\n  token_airdrop(\n    where: {\n      receiver_account_id: { _eq: 123456 }\n      state: { _eq: \"PENDING\" }\n    }\n    order_by: { timestamp: desc }\n  ) {\n    token_id\n    sender_account_id\n    receiver_account_id\n    amount\n    state\n    timestamp\n  }\n}",
+        "explanation": "Find unclaimed airdrops for an account"
+      }
+    ]
+  },
+  "token_airdrop_history": {
+    "use_cases": [
+      "Track historical token airdrop changes",
+      "Analyze airdrop claim history",
+      "Monitor airdrop state transitions"
+    ],
+    "rules": [
+      "Similar to token_airdrop but includes historical records",
+      "Use timestamp_range for temporal queries"
+    ],
+    "examples": [
+      {
+        "query": "Show airdrop claim history for token 0.0.789",
+        "graphql": "query {\n  token_airdrop_history(\n    where: { token_id: { _eq: 789 } }\n    order_by: { timestamp_range: desc }\n    limit: 20\n  ) {\n    token_id\n    sender_account_id\n    receiver_account_id\n    state\n    timestamp_range\n  }\n}",
+        "explanation": "Track historical airdrop state changes"
+      }
+    ]
+  },
+  "token_allowance": {
+    "use_cases": [
+      "Query fungible token spending allowances",
+      "Track token approval delegations",
+      "Find allowances by owner or spender",
+      "Monitor token marketplace approvals"
+    ],
+    "rules": [
+      "CRITICAL: owner is the account that granted the allowance",
+      "CRITICAL: spender is the authorized account",
+      "token_id identifies the token",
+      "amount shows current allowance balance",
+      "amount_granted shows initial allowance"
+    ],
+    "examples": [
+      {
+        "query": "What token allowances has account 0.0.123456 granted?",
+        "graphql": "query {\n  token_allowance(\n    where: { owner: { _eq: 123456 } }\n    order_by: { amount: desc }\n  ) {\n    owner\n    spender\n    token_id\n    amount\n    amount_granted\n  }\n}",
+        "explanation": "Find token spending approvals granted by an account"
+      }
+    ]
+  },
+  "token_allowance_history": {
+    "use_cases": [
+      "Track historical token allowance changes",
+      "Analyze token approval patterns",
+      "Audit token delegation history"
+    ],
+    "rules": [
+      "Similar to token_allowance but includes historical records",
+      "Use timestamp_range for temporal queries"
+    ],
+    "examples": [
+      {
+        "query": "Show allowance history for token 0.0.789 between owner 0.0.123 and spender 0.0.456",
+        "graphql": "query {\n  token_allowance_history(\n    where: {\n      token_id: { _eq: 789 }\n      owner: { _eq: 123 }\n      spender: { _eq: 456 }\n    }\n    order_by: { timestamp_range: desc }\n    limit: 10\n  ) {\n    token_id\n    owner\n    spender\n    amount\n    timestamp_range\n  }\n}",
+        "explanation": "Track historical changes to a token allowance"
+      }
+    ]
+  },
+  "token_history": {
+    "use_cases": [
+      "Track historical token configuration changes",
+      "Monitor token metadata modifications",
+      "Analyze token supply changes over time"
+    ],
+    "rules": [
+      "Similar to token but includes historical snapshots",
+      "Use timestamp_range for temporal queries"
+    ],
+    "examples": [
+      {
+        "query": "Show supply changes for token 0.0.456",
+        "graphql": "query {\n  token_history(\n    where: { token_id: { _eq: 456 } }\n    order_by: { timestamp_range: desc }\n    limit: 10\n  ) {\n    token_id\n    total_supply\n    timestamp_range\n  }\n}",
+        "explanation": "Track token configuration changes over time"
+      }
+    ]
+  },
+  "topic": {
+    "use_cases": [
+      "Query Hedera Consensus Service (HCS) topics",
+      "Find topics by topic_id",
+      "Track topic creation and configuration",
+      "Monitor topic metadata"
+    ],
+    "rules": [
+      "CRITICAL: Use topic_id for topic identification",
+      "Use running_hash for message chain verification",
+      "auto_renew_account_id handles topic renewal"
+    ],
+    "examples": [
+      {
+        "query": "Get details for topic 0.0.12345",
+        "graphql": "query {\n  topic(\n    where: { topic_id: { _eq: 12345 } }\n  ) {\n    topic_id\n    running_hash\n    auto_renew_account_id\n    auto_renew_period\n    memo\n  }\n}",
+        "explanation": "Retrieve HCS topic configuration"
+      }
+    ]
+  },
+  "topic_message_lookup": {
+    "use_cases": [
+      "Fast lookup of topic messages",
+      "Find messages by sequence number",
+      "Optimized topic message queries"
+    ],
+    "rules": [
+      "Optimized view for topic message lookups",
+      "Use for better performance on message queries"
+    ],
+    "examples": [
+      {
+        "query": "Fast lookup for topic 0.0.12345 message sequence 100",
+        "graphql": "query {\n  topic_message_lookup(\n    where: {\n      topic_id: { _eq: 12345 }\n      sequence_number: { _eq: 100 }\n    }\n  ) {\n    topic_id\n    sequence_number\n    message\n    consensus_timestamp_iso8601\n  }\n}",
+        "explanation": "Optimized lookup for a specific topic message"
+      }
+    ]
+  },
+  "total_accounts": {
+    "use_cases": [
+      "Get total account count statistics",
+      "Monitor network account growth",
+      "Track ecosystem expansion metrics"
+    ],
+    "rules": [
+      "Provides aggregated total account counts",
+      "Updated periodically"
+    ],
+    "examples": [
+      {
+        "query": "How many total accounts exist on Hedera?",
+        "graphql": "query {\n  total_accounts {\n    count\n    updated_at\n  }\n}",
+        "explanation": "Get total account count on the network"
+      }
+    ]
+  },
+  "transaction_signature": {
+    "use_cases": [
+      "Query transaction signature details",
+      "Verify multi-signature transactions",
+      "Track transaction signing parties",
+      "Analyze signature patterns"
+    ],
+    "rules": [
+      "CRITICAL: Links to transaction via consensus_timestamp",
+      "public_key_prefix identifies the signing key",
+      "signature contains the cryptographic signature",
+      "type indicates signature type"
+    ],
+    "examples": [
+      {
+        "query": "Show all signatures for transaction at timestamp 1234567890000000000",
+        "graphql": "query {\n  transaction_signature(\n    where: { consensus_timestamp: { _eq: 1234567890000000000 } }\n  ) {\n    consensus_timestamp_iso8601\n    public_key_prefix\n    signature\n    type\n  }\n}",
+        "explanation": "Get all cryptographic signatures for a transaction"
+      }
+    ]
+  },
+  "transactions_last_24hrs": {
+    "use_cases": [
+      "Get current transaction count in last 24 hours",
+      "Monitor recent transaction activity",
+      "Track network usage trends"
+    ],
+    "rules": [
+      "This is a summary view updated periodically",
+      "count field shows total transactions",
+      "updated_at shows when metric was last refreshed"
+    ],
+    "examples": [
+      {
+        "query": "How many transactions occurred on the Hedera mainnet in the last 24 hours?",
+        "graphql": "query {\n  transactions_last_24hrs {\n    count\n    updated_at\n  }\n}",
+        "explanation": "Get current 24-hour transaction count"
+      }
+    ]
+  },
+  "transaction_aggregate": {
+    "use_cases": [
+      "Find the transaction with the highest/largest fee using max selection",
+      "Count total transaction records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on transaction fields",
+      "Find transaction records with extreme values (max/min)",
+      "Calculate totals and averages across transaction dataset"
+    ],
+    "rules": [
+      "CRITICAL: transaction_aggregate returns aggregate statistics and selections, not full record lists",
+      "CRITICAL: Do NOT combine transaction_aggregate and transaction in the same query - this creates invalid subquery patterns",
+      "CRITICAL: Do NOT use placeholder values like charged_tx_fee: { _eq: null } - this is invalid GraphQL syntax",
+      "TERMINOLOGY: transaction_aggregate is for transaction FEES (charged_tx_fee field), NOT for transaction amounts",
+      "TERMINOLOGY: For questions about 'largest transaction amount' or 'biggest transfer', use crypto_transfer_aggregate instead (has 'amount' field)",
+      "MAX SELECTION: Use aggregate { max { charged_tx_fee, transaction_hash, consensus_timestamp_iso8601, ... } } to get ALL needed fields in ONE query",
+      "MAX SELECTION: Include all fields you need in the max selection - do NOT query transaction separately to get full details",
+      "Use aggregate { count } to count transaction records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use transaction with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "What is the transaction with the highest fee ever recorded?",
+        "graphql": "query {\n  transaction_aggregate {\n    aggregate {\n      max {\n        charged_tx_fee\n        transaction_hash\n        consensus_timestamp_iso8601\n        payer_account_id\n        type\n      }\n    }\n  }\n}",
+        "explanation": "Use max with multiple fields to get the complete transaction with highest fee"
+      },
+      {
+        "query": "How many transactions occurred today?",
+        "graphql": "query {\n  transaction_aggregate(\n    where: {\n      consensus_timestamp: { _gte: 1755561600000000000 }\n    }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count transactions in a time range"
+      },
+      {
+        "query": "What's the average transaction fee today?",
+        "graphql": "query {\n  transaction_aggregate(\n    where: {\n      consensus_timestamp: { _gte: 1755561600000000000 }\n    }\n  ) {\n    aggregate {\n      avg {\n        charged_tx_fee\n      }\n    }\n  }\n}",
+        "explanation": "Calculate average transaction fee"
+      }
+    ]
+  },
+  "crypto_transfer_aggregate": {
+    "use_cases": [
+      "Find the largest/biggest HBAR transfer or transaction by amount using max selection",
+      "Count total crypto_transfer records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on crypto_transfer fields",
+      "Find crypto_transfer records with extreme values (max/min)",
+      "Calculate totals and averages across crypto_transfer dataset"
+    ],
+    "rules": [
+      "CRITICAL: crypto_transfer_aggregate returns aggregate statistics and selections, not full record lists",
+      "CRITICAL: Do NOT combine crypto_transfer_aggregate and crypto_transfer in the same query - this creates invalid subquery patterns",
+      "CRITICAL: Do NOT use placeholder values like amount: { _eq: null } - this is invalid GraphQL syntax",
+      "TERMINOLOGY: Use crypto_transfer_aggregate for questions about 'transaction amount' or 'transfer amount' (the 'amount' field is in crypto_transfer, not transaction table)",
+      "TERMINOLOGY: transaction table has 'charged_tx_fee' (fees), crypto_transfer has 'amount' (actual HBAR moved)",
+      "MAX SELECTION: Use aggregate { max { amount, entity_id, consensus_timestamp_iso8601, ... } } to get ALL needed fields in ONE query",
+      "MAX SELECTION: Include all fields you need in the max selection - do NOT query crypto_transfer separately to get full details",
+      "Use aggregate { count } to count crypto_transfer records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use crypto_transfer with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "What is the largest transaction by amount ever recorded on Hedera?",
+        "graphql": "query {\n  crypto_transfer_aggregate {\n    aggregate {\n      max {\n        amount\n        entity_id\n        consensus_timestamp_iso8601\n      }\n    }\n  }\n}",
+        "explanation": "Use crypto_transfer_aggregate with max to find the largest HBAR amount transferred (note: 'transaction amount' means crypto_transfer.amount, not transaction.charged_tx_fee)"
+      },
+      {
+        "query": "What is the largest HBAR transfer ever recorded?",
+        "graphql": "query {\n  crypto_transfer_aggregate {\n    aggregate {\n      max {\n        amount\n        entity_id\n        consensus_timestamp_iso8601\n      }\n    }\n  }\n}",
+        "explanation": "Use max with multiple fields to get the complete record of largest transfer"
+      },
+      {
+        "query": "What is the biggest transaction amount on the Hedera mainnet?",
+        "graphql": "query {\n  crypto_transfer_aggregate {\n    aggregate {\n      max {\n        amount\n        entity_id\n        consensus_timestamp_iso8601\n      }\n    }\n  }\n}",
+        "explanation": "Same as largest transfer - use crypto_transfer_aggregate for transaction amounts"
+      },
+      {
+        "query": "What was the biggest transaction by amount in the last 24 hours?",
+        "graphql": "query {\n  crypto_transfer_aggregate(\n    where: {\n      consensus_timestamp: { _gte: 1755561600000000000, _lte: 1755648000000000000 }\n    }\n  ) {\n    aggregate {\n      max {\n        amount\n        entity_id\n        consensus_timestamp_iso8601\n      }\n    }\n  }\n}",
+        "explanation": "Use aggregate max with time filtering to find largest transfer in last 24 hours. Include all needed fields in max selection - do NOT combine with crypto_transfer base query."
+      },
+      {
+        "query": "What's the total HBAR transferred today?",
+        "graphql": "query {\n  crypto_transfer_aggregate(\n    where: {\n      consensus_timestamp: { _gte: 1755561600000000000 }\n    }\n  ) {\n    aggregate {\n      sum {\n        amount\n      }\n    }\n  }\n}",
+        "explanation": "Sum total HBAR transferred (note: amounts can be negative for debits)"
+      }
+    ]
+  },
+  "token_transfer_aggregate": {
+    "use_cases": [
+      "Count total token_transfer records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on token_transfer fields",
+      "Find token_transfer records with extreme values (max/min)",
+      "Calculate totals and averages across token_transfer dataset"
+    ],
+    "rules": [
+      "CRITICAL: token_transfer_aggregate returns aggregate statistics and selections, not full record lists",
+      "Use aggregate { count } to count token_transfer records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use token_transfer with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many token transfers happened for token 0.0.456 today?",
+        "graphql": "query {\n  token_transfer_aggregate(\n    where: {\n      token_id: { _eq: 456 }\n      consensus_timestamp: { _gte: 1755561600000000000 }\n    }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count token transfer activity"
+      }
+    ]
+  },
+  "nft_transfer_aggregate": {
+    "use_cases": [
+      "Count total nft_transfer records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on nft_transfer fields",
+      "Find nft_transfer records with extreme values (max/min)",
+      "Calculate totals and averages across nft_transfer dataset"
+    ],
+    "rules": [
+      "CRITICAL: nft_transfer_aggregate returns aggregate statistics and selections, not full record lists",
+      "Use aggregate { count } to count nft_transfer records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use nft_transfer with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many NFTs were minted from collection 0.0.789?",
+        "graphql": "query {\n  nft_transfer_aggregate(\n    where: {\n      token_id: { _eq: 789 }\n      sender_account_id: { _is_null: true }\n    }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count NFT mints (null sender indicates mint)"
+      }
+    ]
+  },
+  "contract_result_aggregate": {
+    "use_cases": [
+      "Count total contract_result records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on contract_result fields",
+      "Find contract_result records with extreme values (max/min)",
+      "Calculate totals and averages across contract_result dataset"
+    ],
+    "rules": [
+      "CRITICAL: contract_result_aggregate returns aggregate statistics and selections, not full record lists",
+      "Use aggregate { count } to count contract_result records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use contract_result with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "What's the total gas consumed by contract 0.0.789?",
+        "graphql": "query {\n  contract_result_aggregate(\n    where: { contract_id: { _eq: 789 } }\n  ) {\n    aggregate {\n      sum {\n        gas_used\n      }\n      count\n    }\n  }\n}",
+        "explanation": "Sum total gas usage and count executions"
+      }
+    ]
+  },
+  "contract_log_aggregate": {
+    "use_cases": [
+      "Count total contract_log records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on contract_log fields",
+      "Find contract_log records with extreme values (max/min)",
+      "Calculate totals and averages across contract_log dataset"
+    ],
+    "rules": [
+      "CRITICAL: contract_log_aggregate returns aggregate statistics and selections, not full record lists",
+      "Use aggregate { count } to count contract_log records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use contract_log with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many contract_log records exist?",
+        "graphql": "query {\n  contract_log_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total contract_log records"
+      }
+    ]
+  },
+  "contract_action_aggregate": {
+    "use_cases": [
+      "Count total contract_action records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on contract_action fields",
+      "Find contract_action records with extreme values (max/min)",
+      "Calculate totals and averages across contract_action dataset"
+    ],
+    "rules": [
+      "CRITICAL: contract_action_aggregate returns aggregate statistics and selections, not full record lists",
+      "Use aggregate { count } to count contract_action records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use contract_action with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many contract_action records exist?",
+        "graphql": "query {\n  contract_action_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total contract_action records"
+      }
+    ]
+  },
+  "token_account_aggregate": {
+    "use_cases": [
+      "Find the biggest/largest holder of a token using aggregate max",
+      "Count total number of token holders",
+      "Calculate total circulating supply (sum of all balances)",
+      "Get average balance per holder",
+      "Find accounts with minimum or maximum balances"
+    ],
+    "rules": [
+      "CRITICAL: Use direct filtering with relationship: where: { token: { symbol: {...} }, associated: true }",
+      "CRITICAL: Use aggregate { max { balance, account_id } } to find the biggest holder",
+      "Use aggregate { count } to count total token holders",
+      "Use aggregate { sum { balance } } for total circulating supply",
+      "CRITICAL: Always filter by associated:true to count only active token holders",
+      "Use aggregate { avg { balance } } for average balance per holder",
+      "For questions about 'biggest', 'largest', 'top holder': Use max selection",
+      "For listing multiple top holders: Use token_account with order_by instead"
+    ],
+    "examples": [
+      {
+        "query": "Who is the biggest holder of USDC?",
+        "graphql": "query {\n  token_account_aggregate(\n    where: {\n      token: { symbol: { _ilike: \"USDC%\" } }\n      associated: { _eq: true }\n    }\n  ) {\n    aggregate {\n      max {\n        balance\n        account_id\n      }\n    }\n  }\n}",
+        "explanation": "Use aggregate max to find the account with the largest balance. Filter by associated:true to get only active holders."
+      },
+      {
+        "query": "How many accounts hold USDC?",
+        "graphql": "query {\n  token_account_aggregate(\n    where: {\n      token: { symbol: { _ilike: \"USDC%\" } }\n      associated: { _eq: true }\n    }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total active token holders. associated:true filters out dissociated accounts."
+      },
+      {
+        "query": "What's the total circulating supply of USDC held by users?",
+        "graphql": "query {\n  token_account_aggregate(\n    where: {\n      token: { symbol: { _ilike: \"USDC%\" } }\n      associated: { _eq: true }\n    }\n  ) {\n    aggregate {\n      sum {\n        balance\n      }\n    }\n  }\n}",
+        "explanation": "Sum all token balances to get circulating supply. Only counts associated accounts."
+      },
+      {
+        "query": "What's the average USDC balance per holder?",
+        "graphql": "query {\n  token_account_aggregate(\n    where: {\n      token: { symbol: { _ilike: \"USDC%\" } }\n      associated: { _eq: true }\n      balance: { _gt: 0 }\n    }\n  ) {\n    aggregate {\n      avg {\n        balance\n      }\n    }\n  }\n}",
+        "explanation": "Calculate average balance. Filter balance > 0 to exclude zero balances."
+      }
+    ]
+  },
+  "token_aggregate": {
+    "use_cases": [
+      "Count total token records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on token fields",
+      "Find token records with extreme values (max/min)",
+      "Calculate totals and averages across token dataset"
+    ],
+    "rules": [
+      "CRITICAL: token_aggregate returns aggregate statistics and selections, not full record lists",
+      "Use aggregate { count } to count token records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use token with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many tokens are on Hedera?",
+        "graphql": "query {\n  token_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total tokens created"
+      }
+    ]
+  },
+  "nft_aggregate": {
+    "use_cases": [
+      "Count total nft records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on nft fields",
+      "Find nft records with extreme values (max/min)",
+      "Calculate totals and averages across nft dataset"
+    ],
+    "rules": [
+      "CRITICAL: nft_aggregate returns aggregate statistics and selections, not full record lists",
+      "Use aggregate { count } to count nft records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use nft with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many nft records exist?",
+        "graphql": "query {\n  nft_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total nft records"
+      }
+    ]
+  },
+  "entity_aggregate": {
+    "use_cases": [
+      "Count total entity records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on entity fields",
+      "Find entity records with extreme values (max/min)",
+      "Calculate totals and averages across entity dataset"
+    ],
+    "rules": [
+      "CRITICAL: entity_aggregate returns aggregate statistics and selections, not full record lists",
+      "Use aggregate { count } to count entity records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use entity with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many accounts exist on Hedera?",
+        "graphql": "query {\n  entity_aggregate(\n    where: { deleted: { _eq: false } }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total active accounts"
+      }
+    ]
+  },
+  "topic_message_aggregate": {
+    "use_cases": [
+      "Count total topic_message records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on topic_message fields",
+      "Find topic_message records with extreme values (max/min)",
+      "Calculate totals and averages across topic_message dataset"
+    ],
+    "rules": [
+      "CRITICAL: topic_message_aggregate returns aggregate statistics and selections, not full record lists",
+      "Use aggregate { count } to count topic_message records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use topic_message with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many topic_message records exist?",
+        "graphql": "query {\n  topic_message_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total topic_message records"
+      }
+    ]
+  },
+  "staking_reward_transfer_aggregate": {
+    "use_cases": [
+      "Count total staking_reward_transfer records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on staking_reward_transfer fields",
+      "Find staking_reward_transfer records with extreme values (max/min)",
+      "Calculate totals and averages across staking_reward_transfer dataset"
+    ],
+    "rules": [
+      "CRITICAL: staking_reward_transfer_aggregate returns aggregate statistics and selections, not full record lists",
+      "Use aggregate { count } to count staking_reward_transfer records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use staking_reward_transfer with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How much total staking rewards were distributed?",
+        "graphql": "query {\n  staking_reward_transfer_aggregate {\n    aggregate {\n      sum {\n        amount\n      }\n    }\n  }\n}",
+        "explanation": "Sum all staking rewards paid out"
+      }
+    ]
+  },
+  "assessed_custom_fee_aggregate": {
+    "use_cases": [
+      "Count total assessed_custom_fee records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on assessed_custom_fee fields",
+      "Find assessed_custom_fee records with extreme values (max/min)",
+      "Calculate totals and averages across assessed_custom_fee dataset"
+    ],
+    "rules": [
+      "CRITICAL: assessed_custom_fee_aggregate returns aggregate statistics and selections, not full record lists",
+      "Use aggregate { count } to count assessed_custom_fee records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use assessed_custom_fee with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many assessed_custom_fee records exist?",
+        "graphql": "query {\n  assessed_custom_fee_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total assessed_custom_fee records"
+      }
+    ]
+  },
+  "schedule_aggregate": {
+    "use_cases": [
+      "Count total schedule records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on schedule fields",
+      "Find schedule records with extreme values (max/min)",
+      "Calculate totals and averages across schedule dataset"
+    ],
+    "rules": [
+      "CRITICAL: schedule_aggregate returns aggregate statistics and selections, not full record lists",
+      "Use aggregate { count } to count schedule records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use schedule with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many schedule records exist?",
+        "graphql": "query {\n  schedule_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total schedule records"
+      }
+    ]
+  },
+  "contract_state_change_aggregate": {
+    "use_cases": [
+      "Count total contract_state_change records matching criteria",
+      "Get statistical aggregations (sum, avg, min, max) on contract_state_change fields",
+      "Find contract_state_change records with extreme values (max/min)",
+      "Calculate totals and averages across contract_state_change dataset"
+    ],
+    "rules": [
+      "CRITICAL: contract_state_change_aggregate returns aggregate statistics and selections, not full record lists",
+      "Use aggregate { count } to count contract_state_change records",
+      "Use aggregate { max/min } to select records with extreme values",
+      "Use aggregate { sum/avg } for numeric field calculations",
+      "For listing multiple records: Use contract_state_change with order_by and limit instead",
+      "Syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many contract_state_change records exist?",
+        "graphql": "query {\n  contract_state_change_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total contract_state_change records"
+      }
+    ]
+  },
+  "_transfer_aggregate": {
+    "use_cases": [
+      "Count total _transfer records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on _transfer numeric fields",
+      "Find _transfer records with extreme values using max/min selection",
+      "Get totals and averages across the _transfer dataset"
+    ],
+    "rules": [
+      "CRITICAL: _transfer_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count _transfer records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use _transfer with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many _transfer records exist?",
+        "graphql": "query {\n  _transfer_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of _transfer records"
+      },
+      {
+        "query": "How many _transfer records match specific criteria?",
+        "graphql": "query {\n  _transfer_aggregate(\n    where: { consensus_timestamp: { _gte: 1755561600000000000 } }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count _transfer records within a time range"
+      }
+    ]
+  },
+  "address_book_aggregate": {
+    "use_cases": [
+      "Count total address_book records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on address_book numeric fields",
+      "Find address_book records with extreme values using max/min selection",
+      "Get totals and averages across the address_book dataset"
+    ],
+    "rules": [
+      "CRITICAL: address_book_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count address_book records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use address_book with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many address_book records exist?",
+        "graphql": "query {\n  address_book_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of address_book records"
+      }
+    ]
+  },
+  "address_book_entry_aggregate": {
+    "use_cases": [
+      "Count total address_book_entry records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on address_book_entry numeric fields",
+      "Find address_book_entry records with extreme values using max/min selection",
+      "Get totals and averages across the address_book_entry dataset"
+    ],
+    "rules": [
+      "CRITICAL: address_book_entry_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count address_book_entry records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use address_book_entry with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many address_book_entry records exist?",
+        "graphql": "query {\n  address_book_entry_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of address_book_entry records"
+      }
+    ]
+  },
+  "address_book_service_endpoint_aggregate": {
+    "use_cases": [
+      "Count total address_book_service_endpoint records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on address_book_service_endpoint numeric fields",
+      "Find address_book_service_endpoint records with extreme values using max/min selection",
+      "Get totals and averages across the address_book_service_endpoint dataset"
+    ],
+    "rules": [
+      "CRITICAL: address_book_service_endpoint_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count address_book_service_endpoint records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use address_book_service_endpoint with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many address_book_service_endpoint records exist?",
+        "graphql": "query {\n  address_book_service_endpoint_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of address_book_service_endpoint records"
+      }
+    ]
+  },
+  "contract_aggregate": {
+    "use_cases": [
+      "Count total contract records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on contract numeric fields",
+      "Find contract records with extreme values using max/min selection",
+      "Get totals and averages across the contract dataset"
+    ],
+    "rules": [
+      "CRITICAL: contract_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count contract records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use contract with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many contract records exist?",
+        "graphql": "query {\n  contract_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of contract records"
+      },
+      {
+        "query": "What is the total count of contract entities?",
+        "graphql": "query {\n  contract_aggregate(\n    where: { deleted: { _eq: false } }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count active (non-deleted) contract entities"
+      }
+    ]
+  },
+  "contract_state_aggregate": {
+    "use_cases": [
+      "Count total contract_state records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on contract_state numeric fields",
+      "Find contract_state records with extreme values using max/min selection",
+      "Get totals and averages across the contract_state dataset"
+    ],
+    "rules": [
+      "CRITICAL: contract_state_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count contract_state records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use contract_state with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many contract_state records exist?",
+        "graphql": "query {\n  contract_state_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of contract_state records"
+      }
+    ]
+  },
+  "contract_transactions_last_24hrs_aggregate": {
+    "use_cases": [
+      "Count total contract_transactions_last_24hrs records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on contract_transactions_last_24hrs numeric fields",
+      "Find contract_transactions_last_24hrs records with extreme values using max/min selection",
+      "Get totals and averages across the contract_transactions_last_24hrs dataset"
+    ],
+    "rules": [
+      "CRITICAL: contract_transactions_last_24hrs_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count contract_transactions_last_24hrs records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use contract_transactions_last_24hrs with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many contract_transactions_last_24hrs records exist?",
+        "graphql": "query {\n  contract_transactions_last_24hrs_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of contract_transactions_last_24hrs records"
+      }
+    ]
+  },
+  "crypto_allowance_aggregate": {
+    "use_cases": [
+      "Count total crypto_allowance records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on crypto_allowance numeric fields",
+      "Find crypto_allowance records with extreme values using max/min selection",
+      "Get totals and averages across the crypto_allowance dataset"
+    ],
+    "rules": [
+      "CRITICAL: crypto_allowance_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count crypto_allowance records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use crypto_allowance with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many crypto_allowance records exist?",
+        "graphql": "query {\n  crypto_allowance_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of crypto_allowance records"
+      },
+      {
+        "query": "How many crypto_allowance records match specific criteria?",
+        "graphql": "query {\n  crypto_allowance_aggregate(\n    where: { consensus_timestamp: { _gte: 1755561600000000000 } }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count crypto_allowance records within a time range"
+      }
+    ]
+  },
+  "crypto_allowance_history_aggregate": {
+    "use_cases": [
+      "Count total crypto_allowance_history records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on crypto_allowance_history numeric fields",
+      "Find crypto_allowance_history records with extreme values using max/min selection",
+      "Get totals and averages across the crypto_allowance_history dataset"
+    ],
+    "rules": [
+      "CRITICAL: crypto_allowance_history_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count crypto_allowance_history records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use crypto_allowance_history with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many crypto_allowance_history records exist?",
+        "graphql": "query {\n  crypto_allowance_history_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of crypto_allowance_history records"
+      },
+      {
+        "query": "How many crypto_allowance_history records match specific criteria?",
+        "graphql": "query {\n  crypto_allowance_history_aggregate(\n    where: { consensus_timestamp: { _gte: 1755561600000000000 } }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count crypto_allowance_history records within a time range"
+      }
+    ]
+  },
+  "custom_fee_aggregate": {
+    "use_cases": [
+      "Count total custom_fee records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on custom_fee numeric fields",
+      "Find custom_fee records with extreme values using max/min selection",
+      "Get totals and averages across the custom_fee dataset"
+    ],
+    "rules": [
+      "CRITICAL: custom_fee_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count custom_fee records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use custom_fee with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many custom_fee records exist?",
+        "graphql": "query {\n  custom_fee_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of custom_fee records"
+      }
+    ]
+  },
+  "ecosystem_active_nft_account_cohorts_aggregate": {
+    "use_cases": [
+      "Count total ecosystem_active_nft_account_cohorts records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on ecosystem_active_nft_account_cohorts numeric fields",
+      "Find ecosystem_active_nft_account_cohorts records with extreme values using max/min selection",
+      "Get totals and averages across the ecosystem_active_nft_account_cohorts dataset"
+    ],
+    "rules": [
+      "CRITICAL: ecosystem_active_nft_account_cohorts_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count ecosystem_active_nft_account_cohorts records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use ecosystem_active_nft_account_cohorts with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many ecosystem_active_nft_account_cohorts records exist?",
+        "graphql": "query {\n  ecosystem_active_nft_account_cohorts_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of ecosystem_active_nft_account_cohorts records"
+      }
+    ]
+  },
+  "ecosystem_estimated_transaction_totals_aggregate": {
+    "use_cases": [
+      "Count total ecosystem_estimated_transaction_totals records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on ecosystem_estimated_transaction_totals numeric fields",
+      "Find ecosystem_estimated_transaction_totals records with extreme values using max/min selection",
+      "Get totals and averages across the ecosystem_estimated_transaction_totals dataset"
+    ],
+    "rules": [
+      "CRITICAL: ecosystem_estimated_transaction_totals_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count ecosystem_estimated_transaction_totals records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use ecosystem_estimated_transaction_totals with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many ecosystem_estimated_transaction_totals records exist?",
+        "graphql": "query {\n  ecosystem_estimated_transaction_totals_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of ecosystem_estimated_transaction_totals records"
+      }
+    ]
+  },
+  "ecosystem_metric_aggregate": {
+    "use_cases": [
+      "Count total ecosystem_metric records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on ecosystem_metric numeric fields",
+      "Find ecosystem_metric records with extreme values using max/min selection",
+      "Get totals and averages across the ecosystem_metric dataset"
+    ],
+    "rules": [
+      "CRITICAL: ecosystem_metric_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count ecosystem_metric records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use ecosystem_metric with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many ecosystem_metric records exist?",
+        "graphql": "query {\n  ecosystem_metric_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of ecosystem_metric records"
+      }
+    ]
+  },
+  "ecosystem_metric_description_aggregate": {
+    "use_cases": [
+      "Count total ecosystem_metric_description records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on ecosystem_metric_description numeric fields",
+      "Find ecosystem_metric_description records with extreme values using max/min selection",
+      "Get totals and averages across the ecosystem_metric_description dataset"
+    ],
+    "rules": [
+      "CRITICAL: ecosystem_metric_description_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count ecosystem_metric_description records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use ecosystem_metric_description with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many ecosystem_metric_description records exist?",
+        "graphql": "query {\n  ecosystem_metric_description_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of ecosystem_metric_description records"
+      }
+    ]
+  },
+  "ecosystem_transaction_count_by_type_aggregate": {
+    "use_cases": [
+      "Count total ecosystem_transaction_count_by_type records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on ecosystem_transaction_count_by_type numeric fields",
+      "Find ecosystem_transaction_count_by_type records with extreme values using max/min selection",
+      "Get totals and averages across the ecosystem_transaction_count_by_type dataset"
+    ],
+    "rules": [
+      "CRITICAL: ecosystem_transaction_count_by_type_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count ecosystem_transaction_count_by_type records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use ecosystem_transaction_count_by_type with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many ecosystem_transaction_count_by_type records exist?",
+        "graphql": "query {\n  ecosystem_transaction_count_by_type_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of ecosystem_transaction_count_by_type records"
+      }
+    ]
+  },
+  "entity_history_aggregate": {
+    "use_cases": [
+      "Count total entity_history records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on entity_history numeric fields",
+      "Find entity_history records with extreme values using max/min selection",
+      "Get totals and averages across the entity_history dataset"
+    ],
+    "rules": [
+      "CRITICAL: entity_history_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count entity_history records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use entity_history with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many entity_history records exist?",
+        "graphql": "query {\n  entity_history_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of entity_history records"
+      },
+      {
+        "query": "How many historical entity changes are recorded?",
+        "graphql": "query {\n  entity_history_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total historical records in entity_history"
+      }
+    ]
+  },
+  "entity_stake_aggregate": {
+    "use_cases": [
+      "Count total entity_stake records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on entity_stake numeric fields",
+      "Find entity_stake records with extreme values using max/min selection",
+      "Get totals and averages across the entity_stake dataset"
+    ],
+    "rules": [
+      "CRITICAL: entity_stake_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count entity_stake records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use entity_stake with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many entity_stake records exist?",
+        "graphql": "query {\n  entity_stake_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of entity_stake records"
+      }
+    ]
+  },
+  "erc_beta_nft_aggregate": {
+    "use_cases": [
+      "Count total erc_beta_nft records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on erc_beta_nft numeric fields",
+      "Find erc_beta_nft records with extreme values using max/min selection",
+      "Get totals and averages across the erc_beta_nft dataset"
+    ],
+    "rules": [
+      "CRITICAL: erc_beta_nft_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count erc_beta_nft records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use erc_beta_nft with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many erc_beta_nft records exist?",
+        "graphql": "query {\n  erc_beta_nft_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of erc_beta_nft records"
+      }
+    ]
+  },
+  "erc_beta_token_account_aggregate": {
+    "use_cases": [
+      "Count total erc_beta_token_account records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on erc_beta_token_account numeric fields",
+      "Find erc_beta_token_account records with extreme values using max/min selection",
+      "Get totals and averages across the erc_beta_token_account dataset"
+    ],
+    "rules": [
+      "CRITICAL: erc_beta_token_account_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count erc_beta_token_account records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use erc_beta_token_account with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many erc_beta_token_account records exist?",
+        "graphql": "query {\n  erc_beta_token_account_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of erc_beta_token_account records"
+      }
+    ]
+  },
+  "erc_beta_token_aggregate": {
+    "use_cases": [
+      "Count total erc_beta_token records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on erc_beta_token numeric fields",
+      "Find erc_beta_token records with extreme values using max/min selection",
+      "Get totals and averages across the erc_beta_token dataset"
+    ],
+    "rules": [
+      "CRITICAL: erc_beta_token_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count erc_beta_token records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use erc_beta_token with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many erc_beta_token records exist?",
+        "graphql": "query {\n  erc_beta_token_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of erc_beta_token records"
+      }
+    ]
+  },
+  "ethereum_transaction_aggregate": {
+    "use_cases": [
+      "Count total ethereum_transaction records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on ethereum_transaction numeric fields",
+      "Find ethereum_transaction records with extreme values using max/min selection",
+      "Get totals and averages across the ethereum_transaction dataset"
+    ],
+    "rules": [
+      "CRITICAL: ethereum_transaction_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count ethereum_transaction records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use ethereum_transaction with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many ethereum_transaction records exist?",
+        "graphql": "query {\n  ethereum_transaction_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of ethereum_transaction records"
+      }
+    ]
+  },
+  "network_stake_aggregate": {
+    "use_cases": [
+      "Count total network_stake records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on network_stake numeric fields",
+      "Find network_stake records with extreme values using max/min selection",
+      "Get totals and averages across the network_stake dataset"
+    ],
+    "rules": [
+      "CRITICAL: network_stake_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count network_stake records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use network_stake with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many network_stake records exist?",
+        "graphql": "query {\n  network_stake_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of network_stake records"
+      }
+    ]
+  },
+  "nft_allowance_aggregate": {
+    "use_cases": [
+      "Count total nft_allowance records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on nft_allowance numeric fields",
+      "Find nft_allowance records with extreme values using max/min selection",
+      "Get totals and averages across the nft_allowance dataset"
+    ],
+    "rules": [
+      "CRITICAL: nft_allowance_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count nft_allowance records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use nft_allowance with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many nft_allowance records exist?",
+        "graphql": "query {\n  nft_allowance_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of nft_allowance records"
+      },
+      {
+        "query": "How many nft_allowance records match specific criteria?",
+        "graphql": "query {\n  nft_allowance_aggregate(\n    where: { consensus_timestamp: { _gte: 1755561600000000000 } }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count nft_allowance records within a time range"
+      }
+    ]
+  },
+  "nft_allowance_history_aggregate": {
+    "use_cases": [
+      "Count total nft_allowance_history records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on nft_allowance_history numeric fields",
+      "Find nft_allowance_history records with extreme values using max/min selection",
+      "Get totals and averages across the nft_allowance_history dataset"
+    ],
+    "rules": [
+      "CRITICAL: nft_allowance_history_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count nft_allowance_history records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use nft_allowance_history with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many nft_allowance_history records exist?",
+        "graphql": "query {\n  nft_allowance_history_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of nft_allowance_history records"
+      },
+      {
+        "query": "How many nft_allowance_history records match specific criteria?",
+        "graphql": "query {\n  nft_allowance_history_aggregate(\n    where: { consensus_timestamp: { _gte: 1755561600000000000 } }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count nft_allowance_history records within a time range"
+      }
+    ]
+  },
+  "nft_history_aggregate": {
+    "use_cases": [
+      "Count total nft_history records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on nft_history numeric fields",
+      "Find nft_history records with extreme values using max/min selection",
+      "Get totals and averages across the nft_history dataset"
+    ],
+    "rules": [
+      "CRITICAL: nft_history_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count nft_history records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use nft_history with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many nft_history records exist?",
+        "graphql": "query {\n  nft_history_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of nft_history records"
+      },
+      {
+        "query": "How many historical nft changes are recorded?",
+        "graphql": "query {\n  nft_history_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total historical records in nft_history"
+      }
+    ]
+  },
+  "node_stake_aggregate": {
+    "use_cases": [
+      "Count total node_stake records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on node_stake numeric fields",
+      "Find node_stake records with extreme values using max/min selection",
+      "Get totals and averages across the node_stake dataset"
+    ],
+    "rules": [
+      "CRITICAL: node_stake_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count node_stake records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use node_stake with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many node_stake records exist?",
+        "graphql": "query {\n  node_stake_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of node_stake records"
+      }
+    ]
+  },
+  "non_fee_transfer_aggregate": {
+    "use_cases": [
+      "Count total non_fee_transfer records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on non_fee_transfer numeric fields",
+      "Find non_fee_transfer records with extreme values using max/min selection",
+      "Get totals and averages across the non_fee_transfer dataset"
+    ],
+    "rules": [
+      "CRITICAL: non_fee_transfer_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count non_fee_transfer records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use non_fee_transfer with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many non_fee_transfer records exist?",
+        "graphql": "query {\n  non_fee_transfer_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of non_fee_transfer records"
+      },
+      {
+        "query": "How many non_fee_transfer records match specific criteria?",
+        "graphql": "query {\n  non_fee_transfer_aggregate(\n    where: { consensus_timestamp: { _gte: 1755561600000000000 } }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count non_fee_transfer records within a time range"
+      }
+    ]
+  },
+  "token_airdrop_aggregate": {
+    "use_cases": [
+      "Count total token_airdrop records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on token_airdrop numeric fields",
+      "Find token_airdrop records with extreme values using max/min selection",
+      "Get totals and averages across the token_airdrop dataset"
+    ],
+    "rules": [
+      "CRITICAL: token_airdrop_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count token_airdrop records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use token_airdrop with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many token_airdrop records exist?",
+        "graphql": "query {\n  token_airdrop_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of token_airdrop records"
+      }
+    ]
+  },
+  "token_airdrop_history_aggregate": {
+    "use_cases": [
+      "Count total token_airdrop_history records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on token_airdrop_history numeric fields",
+      "Find token_airdrop_history records with extreme values using max/min selection",
+      "Get totals and averages across the token_airdrop_history dataset"
+    ],
+    "rules": [
+      "CRITICAL: token_airdrop_history_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count token_airdrop_history records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use token_airdrop_history with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many token_airdrop_history records exist?",
+        "graphql": "query {\n  token_airdrop_history_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of token_airdrop_history records"
+      },
+      {
+        "query": "How many historical token_airdrop changes are recorded?",
+        "graphql": "query {\n  token_airdrop_history_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total historical records in token_airdrop_history"
+      }
+    ]
+  },
+  "token_allowance_aggregate": {
+    "use_cases": [
+      "Count total token_allowance records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on token_allowance numeric fields",
+      "Find token_allowance records with extreme values using max/min selection",
+      "Get totals and averages across the token_allowance dataset"
+    ],
+    "rules": [
+      "CRITICAL: token_allowance_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count token_allowance records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use token_allowance with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many token_allowance records exist?",
+        "graphql": "query {\n  token_allowance_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of token_allowance records"
+      },
+      {
+        "query": "How many token_allowance records match specific criteria?",
+        "graphql": "query {\n  token_allowance_aggregate(\n    where: { consensus_timestamp: { _gte: 1755561600000000000 } }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count token_allowance records within a time range"
+      }
+    ]
+  },
+  "token_allowance_history_aggregate": {
+    "use_cases": [
+      "Count total token_allowance_history records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on token_allowance_history numeric fields",
+      "Find token_allowance_history records with extreme values using max/min selection",
+      "Get totals and averages across the token_allowance_history dataset"
+    ],
+    "rules": [
+      "CRITICAL: token_allowance_history_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count token_allowance_history records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use token_allowance_history with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many token_allowance_history records exist?",
+        "graphql": "query {\n  token_allowance_history_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of token_allowance_history records"
+      },
+      {
+        "query": "How many token_allowance_history records match specific criteria?",
+        "graphql": "query {\n  token_allowance_history_aggregate(\n    where: { consensus_timestamp: { _gte: 1755561600000000000 } }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count token_allowance_history records within a time range"
+      }
+    ]
+  },
+  "token_history_aggregate": {
+    "use_cases": [
+      "Count total token_history records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on token_history numeric fields",
+      "Find token_history records with extreme values using max/min selection",
+      "Get totals and averages across the token_history dataset"
+    ],
+    "rules": [
+      "CRITICAL: token_history_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count token_history records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use token_history with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many token_history records exist?",
+        "graphql": "query {\n  token_history_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of token_history records"
+      },
+      {
+        "query": "How many historical token changes are recorded?",
+        "graphql": "query {\n  token_history_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total historical records in token_history"
+      }
+    ]
+  },
+  "topic_aggregate": {
+    "use_cases": [
+      "Count total topic records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on topic numeric fields",
+      "Find topic records with extreme values using max/min selection",
+      "Get totals and averages across the topic dataset"
+    ],
+    "rules": [
+      "CRITICAL: topic_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count topic records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use topic with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many topic records exist?",
+        "graphql": "query {\n  topic_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of topic records"
+      },
+      {
+        "query": "What is the total count of topic entities?",
+        "graphql": "query {\n  topic_aggregate(\n    where: { deleted: { _eq: false } }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count active (non-deleted) topic entities"
+      }
+    ]
+  },
+  "topic_message_lookup_aggregate": {
+    "use_cases": [
+      "Count total topic_message_lookup records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on topic_message_lookup numeric fields",
+      "Find topic_message_lookup records with extreme values using max/min selection",
+      "Get totals and averages across the topic_message_lookup dataset"
+    ],
+    "rules": [
+      "CRITICAL: topic_message_lookup_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count topic_message_lookup records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use topic_message_lookup with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many topic_message_lookup records exist?",
+        "graphql": "query {\n  topic_message_lookup_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of topic_message_lookup records"
+      }
+    ]
+  },
+  "total_accounts_aggregate": {
+    "use_cases": [
+      "Count total total_accounts records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on total_accounts numeric fields",
+      "Find total_accounts records with extreme values using max/min selection",
+      "Get totals and averages across the total_accounts dataset"
+    ],
+    "rules": [
+      "CRITICAL: total_accounts_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count total_accounts records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use total_accounts with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many total_accounts records exist?",
+        "graphql": "query {\n  total_accounts_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of total_accounts records"
+      }
+    ]
+  },
+  "transaction_signature_aggregate": {
+    "use_cases": [
+      "Count total transaction_signature records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on transaction_signature numeric fields",
+      "Find transaction_signature records with extreme values using max/min selection",
+      "Get totals and averages across the transaction_signature dataset"
+    ],
+    "rules": [
+      "CRITICAL: transaction_signature_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count transaction_signature records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use transaction_signature with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many transaction_signature records exist?",
+        "graphql": "query {\n  transaction_signature_aggregate {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count total number of transaction_signature records"
+      }
+    ]
+  },
+  "transactions_last_24hrs_aggregate": {
+    "use_cases": [
+      "Count total transactions_last_24hrs records matching criteria",
+      "Calculate statistical aggregations (sum, avg, min, max) on transactions_last_24hrs numeric fields",
+      "Find transactions_last_24hrs records with extreme values using max/min selection",
+      "Get totals and averages across the transactions_last_24hrs dataset"
+    ],
+    "rules": [
+      "CRITICAL: transactions_last_24hrs_aggregate returns aggregate statistics (count, sum, avg, etc.)",
+      "Use aggregate { count } to count transactions_last_24hrs records",
+      "Use aggregate { max/min } with field selection to get records with extreme values",
+      "Use aggregate { sum/avg } for calculating totals and averages on numeric fields",
+      "For listing multiple complete records: Use transactions_last_24hrs with order_by and limit",
+      "Aggregate syntax: { aggregate { count } } or { aggregate { sum { field } } }"
+    ],
+    "examples": [
+      {
+        "query": "How many transactions occurred in the last 24 hours?",
+        "graphql": "query {\n  transactions_last_24hrs_aggregate {\n    aggregate {\n      max {\n        count\n      }\n    }\n  }\n}",
+        "explanation": "Use aggregate max to find the largest number of transactions in the last 24 hours"
+      }
     ]
   }
-}
+}                                                                                                                                            
