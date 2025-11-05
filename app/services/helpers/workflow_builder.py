@@ -101,17 +101,18 @@ class WorkflowBuilder:
                 state["total_output_tokens"] = state.get("total_output_tokens", 0) + output_tokens
                 # Update state with new message
                 state["messages"] = state["messages"] + [response]
-                
-                # Parse tool call from response
-                tool_call = self.tool_parser.parse_tool_call(response.content)
-                
-                if tool_call:
-                    state["pending_tool_call"] = tool_call
-                    logger.debug("🔍 Parsed tool call: %s", tool_call['name'])
+
+                # Parse tool calls from response (supports batch calling)
+                tool_calls = self.tool_parser.parse_tool_calls(response.content)
+
+                if tool_calls:
+                    state["pending_tool_calls"] = tool_calls
+                    tool_names = [tc['name'] for tc in tool_calls]
+                    logger.info("🔍 Parsed %d tool calls: %s", len(tool_calls), ', '.join(tool_names))
                 else:
                     state["final_response"] = response.content
                     logger.debug("✅ Generated final response")
-                
+
                 state["iteration_count"] = state.get("iteration_count", 0) + 1
                 return state
                 
@@ -123,46 +124,56 @@ class WorkflowBuilder:
         return call_model_node
     
     def create_tool_node_executor(self, tools: List[Any], network: str):
-        """Create a tool node execution function with proper error handling."""
+        """Create a tool node execution function with proper error handling (supports batch calling)."""
         async def call_tool_node(state):
             try:
-                tool_call = state.get("pending_tool_call")
-                if not tool_call:
-                    state["final_response"] = "Error: No tool call found to execute."
+                tool_calls = state.get("pending_tool_calls", [])
+                if not tool_calls:
+                    state["final_response"] = "Error: No tool calls found to execute."
                     return state
-                
-                tool_name = tool_call["name"]
-                tool_params = tool_call.get("parameters", {})
-                
-                # Find and execute the tool
-                result = await self._execute_tool(tools, tool_name, tool_params, network)
-                
-                logger.info("✅ %s completed", tool_name, extra={"result_size": len(str(result)) if result else 0})
-                
-                # Store the tool call result
-                tool_call_record = {
-                    "name": tool_name,
-                    "parameters": tool_params,
-                    "result": result
-                }
-                
-                state["tool_calls_made"] = state.get("tool_calls_made", []) + [tool_call_record]
-                state['pending_tool_call'] = None
-                
-                # Add tool result to messages
-                tool_result_message = HumanMessage(
-                    content=f"Tool '{tool_name}' returned: {json.dumps(result, indent=2)}"
-                )
+
+                logger.info("🔧 Executing %d tool calls in batch", len(tool_calls))
+
+                # Execute all pending tool calls
+                all_results = []
+                for tool_call in tool_calls:
+                    tool_name = tool_call["name"]
+                    tool_params = tool_call.get("parameters", {})
+
+                    # Find and execute the tool
+                    result = await self._execute_tool(tools, tool_name, tool_params, network)
+
+                    logger.info("✅ %s completed", tool_name, extra={"result_size": len(str(result)) if result else 0})
+
+                    # Store the tool call result
+                    tool_call_record = {
+                        "name": tool_name,
+                        "parameters": tool_params,
+                        "result": result
+                    }
+
+                    state["tool_calls_made"] = state.get("tool_calls_made", []) + [tool_call_record]
+                    all_results.append(tool_call_record)
+
+                # Clear pending tool calls
+                state['pending_tool_calls'] = []
+
+                # Add all tool results to messages in one message
+                results_summary = "\n\n".join([
+                    f"Tool '{tc['name']}' returned: {json.dumps(tc['result'], indent=2)}"
+                    for tc in all_results
+                ])
+                tool_result_message = HumanMessage(content=results_summary)
                 state["messages"] = state["messages"] + [tool_result_message]
-                
+
                 return state
-                
+
             except Exception as e:
                 logger.error("❌ Error in call_tool_node: %s", e, exc_info=True)
                 error_message = HumanMessage(content=f"Tool execution failed: {str(e)}")
                 state["messages"] = state["messages"] + [error_message]
                 return state
-        
+
         return call_tool_node
     
     def _build_tool_context(self, tool_calls_made: List[Dict], max_items: int) -> str:

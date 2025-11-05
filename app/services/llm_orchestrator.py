@@ -38,7 +38,7 @@ class GraphState(TypedDict):
     messages: List[BaseMessage]
     tool_calls_made: List[dict]
     iteration_count: int
-    pending_tool_call: Optional[dict]
+    pending_tool_calls: List[dict]
     account_id: Optional[str]
     total_input_tokens: Optional[int]
     total_output_tokens: Optional[int]
@@ -102,7 +102,7 @@ class LLMOrchestrator:
 
     def _continue_with_tool_or_end(self, state: GraphState) -> str:
         """Determine graph routing based on state."""
-        if state.get("pending_tool_call"):
+        if state.get("pending_tool_calls"):
             return "call_tool"
         return END
 
@@ -148,7 +148,7 @@ class LLMOrchestrator:
             "messages": messages,
             "tool_calls_made": [],
             "iteration_count": 0,
-            "pending_tool_call": None,
+            "pending_tool_calls": [],
             "account_id": account_id,
             "total_input_tokens": 0,
             "total_output_tokens": 0,

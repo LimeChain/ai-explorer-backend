@@ -2,7 +2,7 @@
 SaucerSwap API service for real-time token pricing.
 """
 import httpx
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 from ..settings import settings
 from ..logging_config import get_logger
@@ -161,15 +161,99 @@ class SaucerSwapService:
     async def get_hbar_price(self, correlation_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Convenience method to get current HBAR price in USD.
-        
+
         Args:
             correlation_id: Optional correlation ID for request tracking
-            
+
         Returns:
             Same format as get_token_price() but specifically for HBAR
         """
         return await self.get_token_price(settings.hbar_token_id, correlation_id)
-    
+
+    async def get_token_prices_batch(self, token_ids: List[str], correlation_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get USD prices for multiple tokens concurrently from SaucerSwap API.
+
+        Args:
+            token_ids: List of Hedera token IDs (e.g., ["0.0.456858", "0.0.731861"])
+            correlation_id: Optional correlation ID for request tracking
+
+        Returns:
+            Dict containing:
+            - success: Boolean indicating if at least one price was fetched
+            - prices: Dict mapping token_id to USD price (only successful fetches)
+            - failed: List of token_ids that failed to fetch
+            - correlation_id: Request correlation ID
+
+        Example:
+            {
+                "success": True,
+                "prices": {"0.0.456858": 1.0025, "0.0.731861": 0.0034},
+                "failed": ["0.0.999999"],
+                "correlation_id": "abc123"
+            }
+        """
+        import asyncio
+
+        if not token_ids:
+            return {
+                "success": False,
+                "prices": {},
+                "failed": [],
+                "error": "No token IDs provided",
+                "correlation_id": correlation_id
+            }
+
+        logger.info("🔍 Fetching batch token prices from SaucerSwap", extra={
+            "token_count": len(token_ids),
+            "token_ids": token_ids,
+            "correlation_id": correlation_id
+        })
+
+        async def fetch_single_price(token_id: str) -> tuple[str, Optional[float]]:
+            """Fetch price for a single token, return (token_id, price or None)."""
+            try:
+                result = await self.get_token_price(token_id, correlation_id)
+                if result.get("success") and "price_usd" in result:
+                    return (token_id, result["price_usd"])
+                return (token_id, None)
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to fetch price for token {token_id}", extra={
+                    "token_id": token_id,
+                    "error": str(e),
+                    "correlation_id": correlation_id
+                })
+                return (token_id, None)
+
+        # Fetch all prices concurrently
+        results = await asyncio.gather(*[fetch_single_price(token_id) for token_id in token_ids])
+
+        # Separate successful and failed fetches
+        prices = {}
+        failed = []
+
+        for token_id, price in results:
+            if price is not None:
+                prices[token_id] = price
+            else:
+                failed.append(token_id)
+
+        success = len(prices) > 0
+
+        logger.info("✅ Batch token price fetch completed", extra={
+            "successful_count": len(prices),
+            "failed_count": len(failed),
+            "total_requested": len(token_ids),
+            "correlation_id": correlation_id
+        })
+
+        return {
+            "success": success,
+            "prices": prices,
+            "failed": failed,
+            "correlation_id": correlation_id
+        }
+
     async def close(self):
         """Close the HTTP client."""
         await self.client.aclose()
