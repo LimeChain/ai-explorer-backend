@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - dev
+      - feat/support-tokens-soucerswap
 
 env:
   GCP_REGION: us-central1

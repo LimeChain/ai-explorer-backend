@@ -806,7 +806,7 @@ async def process_tokens_with_balances(token_data: List[Dict[str, Any]], network
         return handle_exception(e, {"correlation_id": correlation_id})
 
 @mcp.tool()
-async def enrich_tokens_with_usd_prices(token_data: List[Dict[str, Any]], network: str = "mainnet") -> Dict[str, Any]:
+async def enrich_tokens_with_usd_prices(token_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Enrich token data from GraphQL responses with real-time USD prices from SaucerSwap.
 
@@ -826,7 +826,6 @@ async def enrich_tokens_with_usd_prices(token_data: List[Dict[str, Any]], networ
                     }
                 }
             ]
-        network: Network for API calls (default "mainnet")
 
     Returns:
         Dict containing:
@@ -836,7 +835,7 @@ async def enrich_tokens_with_usd_prices(token_data: List[Dict[str, Any]], networ
         - count: Number of tokens processed
 
     Example usage:
-        - enrich_tokens_with_usd_prices(token_data=[...], network="mainnet")
+        - enrich_tokens_with_usd_prices(token_data=[...])
     """
     # Set correlation ID for request tracking
     correlation_id = set_correlation_id()

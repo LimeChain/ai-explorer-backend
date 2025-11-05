@@ -171,19 +171,35 @@ class ToolCallParser:
         """Fix missing closing braces/brackets in JSON string."""
         # First apply Python syntax fixes
         json_str = self._fix_python_syntax(json_str)
-
-        # Count opening and closing braces
-        open_braces = json_str.count('{')
-        close_braces = json_str.count('}')
-        open_brackets = json_str.count('[')
-        close_brackets = json_str.count(']')
-
-        # Add missing closing characters
-        if close_braces < open_braces:
-            json_str += '}' * (open_braces - close_braces)
-        if close_brackets < open_brackets:
-            json_str += ']' * (open_brackets - close_brackets)
-
+        # Track unclosed delimiters in order
+        stack = []
+        in_string = False
+        escape_next = False
+        
+        for char in json_str:
+            if escape_next:
+                escape_next = False
+                continue
+            if char == '\\':
+                escape_next = True
+                continue
+            if char == '"':
+                in_string = not in_string
+            elif not in_string:
+                if char in '{[':
+                    stack.append(char)
+                elif char == '}':
+                    if stack and stack[-1] == '{':
+                        stack.pop()
+                elif char == ']':
+                    if stack and stack[-1] == '[':
+                        stack.pop()
+        
+        # Close in LIFO order
+        closing = {'[': ']', '{': '}'}
+        for opener in reversed(stack):
+            json_str += closing[opener]
+        
         return json_str
 
     def _fix_python_syntax(self, json_str: str) -> str:
