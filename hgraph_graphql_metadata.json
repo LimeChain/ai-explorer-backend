@@ -95,6 +95,7 @@
       "CRITICAL: Combine token_id and serial_number for unique NFT identification",
       "CRITICAL: ALWAYS include nested token details for collection name, symbol, and type",
       "Use consensus_timestamp for NFT creation queries",
+      "Include metadata field for NFT properties and attributes",
       "Filter by deleted field to exclude burned NFTs",
       "WARNING: nft is a state table - use nft_aggregate only for collection size counts",
       "For specific NFTs: use filtering (where) not aggregation"
@@ -181,6 +182,9 @@
       "CRITICAL: DO NOT nest crypto_transfer/token_transfer/nft_transfer inside the transaction object - this creates invalid circular queries",
       "CRITICAL: Transaction nesting ONLY for metadata (hash, type, result, fee, timestamp) - NO nested transfers",
       "Use order_by: { consensus_timestamp: desc_nulls_last } for most recent transfers",
+      "amount field shows raw token amount (apply decimals for display)",
+      "Use consensus_timestamp for time-based token transfer analysis",
+      "Combine with token table for token metadata and decimals",
       "AGGREGATION: Use token_transfer_aggregate for counting token transfers or summing amounts",
       "Aggregate syntax: token_transfer_aggregate(where: {...}) { aggregate { sum { amount } } }",
       "Available aggregations: count, sum(amount), avg(amount), min(amount), max(amount)",
