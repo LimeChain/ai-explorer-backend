@@ -339,7 +339,7 @@ Use all tool results to write formatted response.
 - Start with what happened (main action)
 - **For account operations**: If `entity_id` differs from the payer account, the payer is performing an action on the entity_id account
 - Example: If account 0.0.1282 pays to update entity_id 0.0.6406692, say "Account 0.0.1282 paid to update account 0.0.6406692"
-- Include amounts, parties, and timing
+- Include amounts, parties, and timing, transaction IDs, etc.
 
 **Account Information:**
 - Present balances clearly with USD equivalents
