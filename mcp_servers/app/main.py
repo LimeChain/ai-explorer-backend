@@ -298,13 +298,15 @@ def normalize_hbar_amounts(hbar_amounts: Union[str, int, float, List[Union[str, 
 def validate_hbar_amount(hbar_amount: Union[str, int, float]) -> int:
     """
     Validate and convert a single HBAR amount to tinybars.
-    
+
+    NOTE: Negative amounts are allowed - they represent outgoing transfers in crypto_transfer queries.
+
     Args:
         hbar_amount: Amount in tinybars (string, int, or float)
-        
+
     Returns:
-        Validated amount as integer (tinybars)
-        
+        Validated amount as integer (tinybars) - can be negative for outgoing transfers
+
     Raises:
         ValidationError: If amount is invalid
     """
@@ -315,12 +317,9 @@ def validate_hbar_amount(hbar_amount: Union[str, int, float]) -> int:
             tinybar_amount = int(hbar_amount)
         else:
             tinybar_amount = int(hbar_amount)
-        
-        if tinybar_amount < 0:
-            raise ValidationError("HBAR amount cannot be negative", "hbar_amount", hbar_amount)
-            
+
         return tinybar_amount
-        
+
     except (ValueError, TypeError) as e:
         raise ValidationError(f"Invalid HBAR amount format: {hbar_amount}", "hbar_amount", hbar_amount) from e
 
@@ -344,29 +343,29 @@ def build_error_response(error_msg: str, hbar_amount: Union[str, int, float], co
     }
 
 def build_success_response(
-    tinybar_amount: int, 
-    hbar_amount_actual: float, 
-    price_per_hbar: float, 
-    price_data: Dict[str, Any], 
+    tinybar_amount: int,
+    hbar_amount_actual: float,
+    price_per_hbar: float,
+    price_data: Dict[str, Any],
     correlation_id: str
 ) -> Dict[str, Any]:
     """
     Build a standardized success response for a single calculation.
-    
+
     Args:
         tinybar_amount: Amount in tinybars (integer)
         hbar_amount_actual: Amount in HBAR (float)
         price_per_hbar: Current HBAR price in USD
         price_data: Price data from SaucerSwap
         correlation_id: Request correlation ID
-        
+
     Returns:
         Standardized success response dictionary
     """
     from decimal import Decimal, ROUND_HALF_UP
     hbar_dec = (Decimal(tinybar_amount) / Decimal(100_000_000))
     usd_dec = (hbar_dec * Decimal(str(price_per_hbar))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    
+
     return {
         "success": True,
         "tinybar_amount": tinybar_amount,
@@ -526,24 +525,32 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
 @mcp.tool()
 async def process_tokens_with_balances(token_data: List[Dict[str, Any]], network: str) -> Dict[str, Any]:
     """
-    Process a list of tokens with their balances, fetch token details, and convert amounts using proper decimals.
-    
-    This tool takes token data with raw balances (in tinybars) and fetches the corresponding token 
-    details to perform proper decimal conversion. It eliminates the need for multiple get_token calls
-    and prevents decimal conversion errors in the agent.
-    
+    Process tokens with balances: fetch details, convert amounts with decimals, and add USD prices.
+
+    This unified tool handles token processing end-to-end:
+    1. Fetches token details (name, symbol, decimals) from Hedera Mirror Node
+    2. Converts raw balances using proper decimals
+    3. Fetches real-time USD prices from SaucerSwap
+    4. Returns fully enriched token data with USD values
+
     Args:
-        token_data: List of token data with format [{"token_id": "0.0.456858", "balance": 353156}]
-        network: Network to use for API calls
-        
+        token_data: List of token data with one of two formats:
+            - Single balance: [{"token_id": "0.0.456858", "balance": 353156}]
+            - Multiple balances (batched): [{"token_id": "0.0.456858", "balances": [353156, 500000, -100000]}]
+            Note: Use batched format when same token appears multiple times (e.g., in token_transfers)
+        network: Network to use for API calls ("mainnet" or "testnet")
+
     Returns:
         Dict containing:
-        - tokens: List of processed token data with converted balances
-        - count: Number of tokens processed
+        - tokens: List of processed tokens with converted balances, USD prices, and formatted display
+          Each token includes: token_id, name, symbol, decimals, raw_balance, converted_balance,
+          formatted_balance, price_per_token_usd, usd_value
+        - count: Number of token entries processed (one per balance)
         - success: Whether all processing succeeded
-        
+
     Example usage:
-        - process_tokens_with_balances([{"token_id": "0.0.456858", "balance": 353156}], "mainnet")
+        - Single transfer: [{"token_id": "0.0.456858", "balance": 353156}]
+        - Multiple transfers of same token: [{"token_id": "0.0.4431990", "balances": [6964995459189, -7255203603321, 290208144132]}]
     """
     # Set correlation ID for request tracking
     correlation_id = set_correlation_id()
@@ -556,6 +563,7 @@ async def process_tokens_with_balances(token_data: List[Dict[str, Any]], network
         )
         logger.warning("⚠️ Invalid token_data provided", extra={"token_data": token_data, "correlation_id": correlation_id})
         return error_response
+
     # Validate token data structure
     for idx, item in enumerate(token_data):
         if not isinstance(item, dict):
@@ -565,7 +573,7 @@ async def process_tokens_with_balances(token_data: List[Dict[str, Any]], network
             )
             logger.warning("⚠️ Invalid token data structure", extra={"item": item, "index": idx, "correlation_id": correlation_id})
             return error_response
-        
+
         if "token_id" not in item:
             error_response = handle_exception(
                 ValidationError(f"token_data[{idx}] missing required field 'token_id'", "token_data", item),
@@ -573,16 +581,16 @@ async def process_tokens_with_balances(token_data: List[Dict[str, Any]], network
             )
             logger.warning("⚠️ Missing token_id", extra={"item": item, "index": idx, "correlation_id": correlation_id})
             return error_response
-        
-        if "balance" not in item:
+
+        # Check for either "balance" (single) or "balances" (array)
+        if "balance" not in item and "balances" not in item:
             error_response = handle_exception(
-                ValidationError(f"token_data[{idx}] missing required field 'balance'", "token_data", item),
+                ValidationError(f"token_data[{idx}] missing required field 'balance' or 'balances'", "token_data", item),
                 {"correlation_id": correlation_id}
             )
-            logger.warning("⚠️ Missing balance", extra={"item": item, "index": idx, "correlation_id": correlation_id})
+            logger.warning("⚠️ Missing balance/balances", extra={"item": item, "index": idx, "correlation_id": correlation_id})
             return error_response
 
-    
     if not network or not isinstance(network, str):
         error_response = handle_exception(
             ValidationError("network is required and must be a string", "network", network),
@@ -591,60 +599,50 @@ async def process_tokens_with_balances(token_data: List[Dict[str, Any]], network
         logger.warning("⚠️ Invalid network provided", extra={"network": network, "correlation_id": correlation_id})
         return error_response
 
-    async def process_single_token(token_info, balance, correlation_id):
+    async def process_single_token(token_info, balance, price_usd, correlation_id):
         try:
-            # Validate balance
-            try:
-                raw_balance = int(balance)
-                if raw_balance < 0:
-                    return {
-                        "error": "Token balance cannot be negative",
-                        "token_id": token_info.get("token_id", "unknown"),
-                        "success": False,
-                        "correlation_id": correlation_id
-                    }
-            except (ValueError, TypeError):
-                return {
-                    "error": f"Invalid balance format: {balance}",
-                    "token_id": token_info.get("token_id", "unknown"),
-                    "success": False,
-                    "correlation_id": correlation_id
-                }
-            
+
             # Extract token details from the fetched token info
             token_id = token_info.get("token_id", "")
             name = token_info.get("name", "Unknown Token")
             symbol = token_info.get("symbol", "")
             decimals = token_info.get("decimals", 0)
-            
+
             # Convert balance using decimals
             if decimals > 0:
-                converted_balance = raw_balance / (10 ** decimals)
+                converted_balance = balance / (10 ** decimals)
             else:
-                converted_balance = raw_balance
-            
+                converted_balance = balance
+
             # Format the balance for display
             if decimals > 0:
                 # Format to reasonable precision, removing trailing zeros
                 formatted_balance = f"{converted_balance:.{decimals}f}".rstrip('0').rstrip('.')
             else:
-                formatted_balance = str(raw_balance)
-            
-            # Include symbol in formatted display if available
-            display_balance = f"{formatted_balance} {symbol}".strip() if symbol else formatted_balance
-            
+                formatted_balance = str(balance)
+
+            # Calculate USD value if price available
+            if price_usd is not None:
+                usd_value = converted_balance * price_usd
+                display_balance = f"{formatted_balance} {symbol} (${abs(usd_value):.2f} USD)".strip() if symbol else formatted_balance
+            else:
+                usd_value = None
+                display_balance = f"{formatted_balance} {symbol} (price unavailable)".strip() if symbol else formatted_balance
+
             return {
                 "token_id": token_id,
                 "name": name,
                 "symbol": symbol,
                 "decimals": decimals,
-                "raw_balance": raw_balance,
+                "raw_balance": balance,
                 "converted_balance": str(converted_balance),
                 "formatted_balance": display_balance,
+                "price_per_token_usd": price_usd,
+                "usd_value": usd_value,
                 "success": True,
                 "correlation_id": correlation_id
             }
-            
+
         except Exception as e:
             logger.error("❌ Processing failed for token %s", token_info.get("token_id", "unknown"), exc_info=True, extra={
                 "token_id": token_info.get("token_id", "unknown"),
@@ -663,40 +661,51 @@ async def process_tokens_with_balances(token_data: List[Dict[str, Any]], network
             "tokens_count": len(token_data),
             "correlation_id": correlation_id
         })
-        
-        # Extract unique token IDs for batch fetching
-        token_ids = []
-        balance_map = {}
-        
+
+        unique_token_ids = set()
+        transfer_list = []
+
         for item in token_data:
-            if not isinstance(item, dict) or "token_id" not in item or "balance" not in item:
-                logger.warning("⚠️ Invalid token data item skipped", extra={
+            if not isinstance(item, dict) or "token_id" not in item:
+                logger.warning("⚠️ Invalid token data item skipped (missing token_id)", extra={
                     "item": item,
                     "correlation_id": correlation_id
                 })
                 continue
-            
+
             token_id = item["token_id"]
-            balance = item["balance"]
-            
-            if token_id not in balance_map:
-                token_ids.append(token_id)
-            balance_map[token_id] = balance
-        
-        if not token_ids:
+            unique_token_ids.add(token_id)
+
+            # Handle both "balance" (single) and "balances" (array)
+            if "balances" in item:
+                # Batched format: multiple balances for same token
+                balances_list = item["balances"]
+                if not isinstance(balances_list, list):
+                    logger.warning("⚠️ 'balances' field must be a list", extra={
+                        "item": item,
+                        "correlation_id": correlation_id
+                    })
+                    continue
+
+                for balance in balances_list:
+                    transfer_list.append({"token_id": token_id, "balance": balance})
+
+            elif "balance" in item:
+                # Single balance format
+                balance = item["balance"]
+                transfer_list.append({"token_id": token_id, "balance": balance})
+
+        if not transfer_list:
             error_response = handle_exception(
                 ValidationError("No valid token data found", "token_data", token_data),
                 {"correlation_id": correlation_id}
             )
-            logger.warning("⚠️ No valid token IDs found", extra={"correlation_id": correlation_id})
+            logger.warning("⚠️ No valid token transfers found", extra={"correlation_id": correlation_id})
             return error_response
-        
-        # Batch fetch token details using get_tokens with multiple calls if needed
-        # Since get_tokens doesn't support multiple token_ids in one call, we'll call get_token for each
-        # But we can optimize this by calling them concurrently
+
         token_details = {}
-        
-        for token_id in token_ids:
+
+        for token_id in unique_token_ids:
             try:
                 result = await get_sdk_service(network).call_method("get_token", token_id=token_id)
                 if result.get("success", False) and "data" in result:
@@ -728,23 +737,42 @@ async def process_tokens_with_balances(token_data: List[Dict[str, Any]], network
                 })
                 token_details[token_id] = {
                     "token_id": token_id,
-                    "name": "Unknown Token", 
+                    "name": "Unknown Token",
                     "symbol": "",
                     "decimals": 0,
                     "error": f"Fetch failed: {str(e)}"
                 }
-        
-        # Process each token with its balance
+
+        # Fetch USD prices from SaucerSwap for all unique token_ids
+        token_prices = {}
+        try:
+            async with SaucerSwapService() as saucerswap:
+                price_result = await saucerswap.get_token_prices_batch(list(unique_token_ids), correlation_id)
+                token_prices = price_result.get("prices", {})
+
+            logger.info("💵 Fetched USD prices for %d/%d tokens", len(token_prices), len(unique_token_ids), extra={
+                "successful_count": len(token_prices),
+                "total_count": len(unique_token_ids),
+                "correlation_id": correlation_id
+            })
+        except Exception as e:
+            logger.warning("⚠️ Failed to fetch USD prices, continuing without pricing", exc_info=True, extra={
+                "correlation_id": correlation_id
+            })
+
+        # Process each transfer (including duplicate token_ids with different balances)
         processed_tokens = []
         all_successful = True
-        
-        for token_id in token_ids:
+
+        for transfer in transfer_list:
+            token_id = transfer["token_id"]
+            balance = transfer["balance"]
             token_info = token_details[token_id]
-            balance = balance_map[token_id]
-            
-            result = await process_single_token(token_info, balance, correlation_id)
+            price_usd = token_prices.get(token_id)  # None if price unavailable
+
+            result = await process_single_token(token_info, balance, price_usd, correlation_id)
             processed_tokens.append(result)
-            
+
             if not result.get("success", False):
                 all_successful = False
 
@@ -772,6 +800,221 @@ async def process_tokens_with_balances(token_data: List[Dict[str, Any]], network
     
     except Exception as e:
         logger.error("❌ Unexpected error during token processing", exc_info=True, extra={
+            "tokens_count": len(token_data),
+            "correlation_id": correlation_id
+        })
+        return handle_exception(e, {"correlation_id": correlation_id})
+
+@mcp.tool()
+async def enrich_tokens_with_usd_prices(token_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Enrich token data from GraphQL responses with real-time USD prices from SaucerSwap.
+
+    This tool takes token data from text_to_graphql_query results (token_account format) and adds
+    USD pricing information. It handles decimal conversion and calculates total portfolio value.
+
+    Args:
+        token_data: List of token data from GraphQL with format:
+            [
+                {
+                    "balance": 1000000,
+                    "token": {
+                        "token_id": "0.0.456858",
+                        "symbol": "USDC",
+                        "name": "USD Coin",
+                        "decimals": 6
+                    }
+                }
+            ]
+
+    Returns:
+        Dict containing:
+        - success: Whether enrichment succeeded
+        - tokens: List of enriched token data with USD values
+        - total_usd_value: Sum of all token USD values
+        - count: Number of tokens processed
+
+    Example usage:
+        - enrich_tokens_with_usd_prices(token_data=[...])
+    """
+    # Set correlation ID for request tracking
+    correlation_id = set_correlation_id()
+
+    # Input validation
+    if not token_data or not isinstance(token_data, list):
+        error_response = handle_exception(
+            ValidationError("token_data is required and must be a non-empty list", "token_data", token_data),
+            {"correlation_id": correlation_id}
+        )
+        logger.warning("⚠️ Invalid token_data provided", extra={"token_data": token_data, "correlation_id": correlation_id})
+        return error_response
+
+    try:
+        logger.info("💰 Enriching %d token(s) with USD prices", len(token_data), extra={
+            "tokens_count": len(token_data),
+            "correlation_id": correlation_id
+        })
+
+        # Extract unique token IDs from token_data
+        token_ids = []
+        token_map = {}  # Map token_id to full token info
+
+        for idx, item in enumerate(token_data):
+            # Validate structure
+            if not isinstance(item, dict):
+                logger.warning("⚠️ Invalid token data item skipped", extra={
+                    "item": item,
+                    "index": idx,
+                    "correlation_id": correlation_id
+                })
+                continue
+
+            # Support two formats:
+            # Format 1: {'balance': X, 'token': {'token_id': '0.0.123', ...}} (GraphQL format)
+            # Format 2: {'token_id': '0.0.123', 'balance': X} (SDK format)
+
+            balance = item.get("balance")
+            if balance is None:
+                logger.warning("⚠️ Token data item missing balance field", extra={
+                    "item": item,
+                    "index": idx,
+                    "correlation_id": correlation_id
+                })
+                continue
+
+            # Check which format we have
+            if "token" in item:
+                # Format 1: GraphQL format with nested token object
+                token_info = item["token"]
+                if not isinstance(token_info, dict) or "token_id" not in token_info:
+                    logger.warning("⚠️ Invalid token info structure", extra={
+                        "token_info": token_info,
+                        "index": idx,
+                        "correlation_id": correlation_id
+                    })
+                    continue
+
+                token_id = token_info.get("token_id", "")
+                symbol = token_info.get("symbol", "")
+                name = token_info.get("name", "Unknown Token")
+                decimals = token_info.get("decimals", 0)
+            elif "token_id" in item:
+                # Format 2: SDK format with token_id at top level
+                token_id = item.get("token_id", "")
+                symbol = item.get("symbol", "")
+                name = item.get("name", "Unknown Token")
+                decimals = item.get("decimals", 0)
+            else:
+                logger.warning("⚠️ Token data item missing token_id", extra={
+                    "item": item,
+                    "index": idx,
+                    "correlation_id": correlation_id
+                })
+                continue
+
+            # Normalize token_id format
+            if isinstance(token_id, int):
+                token_id = f"0.0.{token_id}"
+            elif not str(token_id).startswith("0.0."):
+                token_id = f"0.0.{token_id}"
+
+            if token_id not in token_map:
+                token_ids.append(token_id)
+                token_map[token_id] = {
+                    "balance": balance,
+                    "symbol": symbol,
+                    "name": name,
+                    "decimals": decimals
+                }
+
+        if not token_ids:
+            error_response = handle_exception(
+                ValidationError("No valid token data found in input", "token_data", token_data),
+                {"correlation_id": correlation_id}
+            )
+            logger.warning("⚠️ No valid tokens found", extra={"correlation_id": correlation_id})
+            return error_response
+
+        # Fetch USD prices from SaucerSwap
+        async with SaucerSwapService() as saucerswap:
+            price_result = await saucerswap.get_token_prices_batch(token_ids, correlation_id)
+
+        prices = price_result.get("prices", {})
+        failed_tokens = price_result.get("failed", [])
+
+        logger.info("💵 Fetched prices for %d/%d tokens", len(prices), len(token_ids), extra={
+            "successful_count": len(prices),
+            "failed_count": len(failed_tokens),
+            "correlation_id": correlation_id
+        })
+
+        # Enrich token data with USD values
+        enriched_tokens = []
+        total_usd_value = 0.0
+
+        for token_id in token_ids:
+            token_info = token_map[token_id]
+            raw_balance = token_info["balance"]
+            decimals = token_info["decimals"]
+            symbol = token_info["symbol"]
+            name = token_info["name"]
+
+            # Convert balance using decimals
+            if decimals > 0:
+                converted_balance = float(raw_balance) / (10 ** decimals)
+            else:
+                converted_balance = float(raw_balance)
+
+            # Format balance for display
+            if decimals > 0:
+                balance_str = f"{converted_balance:.{decimals}f}".rstrip('0').rstrip('.')
+            else:
+                balance_str = str(int(converted_balance))
+
+            # Calculate USD value if price available
+            price_usd = prices.get(token_id)
+            if price_usd is not None:
+                usd_value = converted_balance * price_usd
+                total_usd_value += usd_value
+                price_available = True
+            else:
+                usd_value = None
+                price_available = False
+
+            enriched_token = {
+                "token_id": token_id,
+                "symbol": symbol,
+                "name": name,
+                "decimals": decimals,
+                "raw_balance": raw_balance,
+                "balance": balance_str,
+                "balance_formatted": f"{balance_str} {symbol}".strip() if symbol else balance_str,
+                "price_per_token_usd": price_usd,
+                "usd_value": usd_value,
+                "price_available": price_available
+            }
+
+            enriched_tokens.append(enriched_token)
+
+        result = {
+            "success": True,
+            "tokens": enriched_tokens,
+            "total_usd_value": round(total_usd_value, 2),
+            "count": len(enriched_tokens),
+            "prices_unavailable_count": len(failed_tokens),
+            "correlation_id": correlation_id
+        }
+
+        logger.info("✅ Token enrichment completed", extra={
+            "tokens_count": len(enriched_tokens),
+            "total_usd_value": round(total_usd_value, 2),
+            "correlation_id": correlation_id
+        })
+
+        return result
+
+    except Exception as e:
+        logger.error("❌ Unexpected error during token enrichment", exc_info=True, extra={
             "tokens_count": len(token_data),
             "correlation_id": correlation_id
         })
@@ -860,10 +1103,28 @@ def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, fl
                         "correlation_id": correlation_id
                     }
             else:
-                # Unix timestamp
+                # Numeric timestamp without decimal: detect unit by magnitude
                 try:
-                    unix_seconds = int(float(timestamp_str))
-                    nanoseconds = 0
+                    val = int(timestamp_str)
+                    abs_val = abs(val)
+
+                    # Heuristics based on epoch magnitude:
+                    # - ns: 1e18+ (e.g., 1732449096127739000)
+                    # - µs: 1e15..1e18
+                    # - ms: 1e12..1e15
+                    # - s:  else
+                    if abs_val >= 1_000_000_000_000_000_000:  # nanoseconds
+                        unix_seconds = val // 1_000_000_000
+                        nanoseconds = int(val % 1_000_000_000)
+                    elif abs_val >= 1_000_000_000_000_000:   # microseconds
+                        unix_seconds = val // 1_000_000
+                        nanoseconds = int((val % 1_000_000) * 1_000)
+                    elif abs_val >= 1_000_000_000_000:       # milliseconds
+                        unix_seconds = val // 1_000
+                        nanoseconds = int((val % 1_000) * 1_000_000)
+                    else:                                    # seconds
+                        unix_seconds = val
+                        nanoseconds = 0
                 except ValueError:
                     return {
                         "original_timestamp": timestamp,
