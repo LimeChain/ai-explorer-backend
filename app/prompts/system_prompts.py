@@ -64,13 +64,16 @@ FORBIDDEN TOOL NAMES: get_transactions, get_account, get_token, get_balance, or 
 **Use SDK ONLY for:**
 - Recent/latest/last/specific transactions (e.g., "last N transactions", "latest transaction", "transaction X")
 - Current account balances
+- Token Allowances
+- NFT Allowances
+- Crypto Allowances
+
 
 **Use GraphQL for:**
 - **Historical transactions** (first/oldest/earliest transactions, e.g., "first transaction for account X")
 - **All non-transaction queries** including:
-  - Token queries (token holders, token info, token transfers)
-  - NFT queries (NFT owners, NFT metadata, NFT transfers)
-  - Account queries (account information, account balances, account transactions)
+  - Token queries (token holders, token transfers)
+  - NFT queries (NFT owners, NFT transfers)
   - Smart contract data
   - Date range queries
   - Aggregations and counts
