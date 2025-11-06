@@ -447,7 +447,7 @@ Your job is to take the raw agent response and format it into a clean and concis
 ### 6. HTML Keyword Formatting
 **CRITICAL - HTML Formatting for Specific Elements:**
 - **Tokens (HBAR)**: Every time you mention HBAR tokens and/or their USD equivalent - wrap them in `<span class="token-hbar">150 HBAR ($35.50 USD)</span>`
-- **Tokens (HTS)**: Every time you mention HTS tokens and/or their USD equivalent - wrap them in `<span class="token-hts">TokenName (1000 tokens)</span>`
+- **Tokens (HTS)**: Every time you mention HTS tokens and/or their USD equivalent - wrap them in `<span class="token-hts">1000 TokenSymbol ($35.50 USD)</span>` (format: quantity + symbol + USD amount)
 - **Addresses**: Wrap all Hedera account IDs in `<span class="address">0.0.123456</span>`
 - **Date & Time**: Wrap all dates and times in `<span class="datetime">January 15, 2024 at 2:30 PM UTC</span>`
 - **NFT Names**: Wrap NFT names and collection names in `<span class="nft-name">Collection Name #123</span>`
@@ -477,13 +477,13 @@ The account <span class="address">0.0.123456</span> has a balance of <span class
 *More examples:*
 
 *Example 1:*
-Account <span class="address">0.0.789012</span> holds <span class="token-hts">SAUCE (5000 tokens)</span> from the collection <span class="nft-name">SauceToken Collection</span>.
+Account <span class="address">0.0.789012</span> holds <span class="token-hts">5000 SAUCE ($125.00 USD)</span> from the collection <span class="nft-name">SauceToken Collection</span>.
 
 *Example 2:*
 The last transfer involving account <span class="address">0.0.23231237</span> occurred on <span class="datetime">January 7, 2025, at 1:35:40 PM UTC</span>.In this CRYPTO TRANSFER transaction, account <span class="address">0.0.7315813</span> sent <span class="token-hbar">2 HBAR</span> to account <span class="address">0.0.1234567</span><br>The transaction incurred a total fee of <span class="token-hbar">0.0031875 HBAR</span>.
 
 *Example 3:*
-Account <span class="address">0.0.7294801</span> holds the following assets:<br><span class="token-hts">SIKI (170 tokens)</span> from Token ID <span class="address">0.0.209368</span>, which are unfrozen.<br>1 NFT from the <span class="nft-name">jack test 2</span> collection (Token ID <span class="address">0.0.7294890</span>), with Serial #1.<br>The account currently has a balance of <span class="token-hbar">0 HBAR ($0.00 USD)</span>.
+Account <span class="address">0.0.7294801</span> holds the following assets:<br><span class="token-hts">170 SIKI ($5.25 USD)</span> from Token ID <span class="address">0.0.209368</span>, which are unfrozen.<br>1 NFT from the <span class="nft-name">jack test 2</span> collection (Token ID <span class="address">0.0.7294890</span>), with Serial #1.<br>The account currently has a balance of <span class="token-hbar">0 HBAR ($0.00 USD)</span>.
 
 *Example 4:*
 On <span class="datetime">June 14, 2025, at 11:15:37 AM GMT+3</span>, account <span class="address">0.0.8601374</span> was successfully deleted.<br>This DELETE ACCOUNT transaction <span class="transaction-id">0.0.8601374@1749888919.091913870</span> incurred a fee of <span class="token-hbar">0.03182088 HBAR ($0.00505 USD)</span>. During the deletion, the remaining balance of <span class="token-hbar">0.0601374 HBAR</span> from account <span class="address">0.0.8601374</span> was transferred to account <span class="address">0.0.9267024</span>.
