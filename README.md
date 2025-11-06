@@ -61,9 +61,9 @@ cp .env.example .env
 uv sync
 ```
 
-4. Start the database:
+4. Start the database and redis:
 ```bash
-docker compose up db
+docker compose up postgres redis -d
 ```
 
 5. Run database migrations:
