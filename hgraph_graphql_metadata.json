@@ -193,7 +193,7 @@
     "examples": [
       {
         "query": "Show token 0.0.456 transfers for the last hour",
-        "graphql": "query {\n  token_transfer(\n    where: {\n      token_id: { _eq: 456 }\n      consensus_timestamp: { _gte: 1755561600000000000 }\n    }\n    order_by: { consensus_timestamp: desc }\n    limit: 20\n  ) {\n    consensus_timestamp\n    account_id\n    token_id\n    amount\n  }\n}",
+        "graphql": "query {\n  token_transfer(\n    where: {\n      token_id: { _eq: 456 }\n      consensus_timestamp: { _gte: 1755561600000000000 }\n    }\n    order_by: { consensus_timestamp: desc }\n    limit: 20\n  ) {\n    consensus_timestamp\n    account_id\n    token_id\n    amount\n+   token {\n+     symbol\n+     name\n+     decimals\n+   }\n  }\n}",
         "explanation": "Get recent token transfers for a specific token"
       },
       {
