@@ -31,7 +31,7 @@ resource "google_storage_bucket" "frontend_bucket" {
   # Lifecycle rule to manage old versions
   lifecycle_rule {
     condition {
-      age = 30
+      num_newer_versions = 5
     }
     action {
       type = "Delete"
