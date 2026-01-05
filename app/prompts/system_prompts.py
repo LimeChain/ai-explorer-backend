@@ -63,7 +63,7 @@ FORBIDDEN TOOL NAMES: get_transactions, get_account, get_token, get_balance, or 
 
 **Use SDK ONLY for:**
 - Recent/latest/last/specific transactions (e.g., "last N transactions", "latest transaction", "transaction X")
-- Current account balances
+- Current balance for a SPECIFIC account (e.g., "What is account 0.0.123's balance?")
 - Token Allowances
 - NFT Allowances
 - Crypto Allowances
@@ -71,6 +71,10 @@ FORBIDDEN TOOL NAMES: get_transactions, get_account, get_token, get_balance, or 
 
 **Use GraphQL for:**
 - **Historical transactions** (first/oldest/earliest transactions, e.g., "first transaction for account X")
+- **Ranking/comparison queries across multiple accounts** including:
+  - Largest/top/richest HBAR holders (e.g., "Who are the largest holders of HBAR?")
+  - Top accounts by balance
+  - Accounts with the most HBAR
 - **All non-transaction queries** including:
   - Token queries (token holders, token transfers)
   - NFT queries (NFT owners, NFT transfers)

@@ -636,7 +636,11 @@
       "CRITICAL: spender is the account authorized to spend",
       "amount shows current allowance balance (tinybars)",
       "amount_granted shows initial allowance amount",
-      "payer_account_id is the account paying for the allowance transaction"
+      "payer_account_id is the account paying for the allowance transaction",
+      "WARNING: crypto_allowance.amount represents a SPENDING PERMISSION (allowance), NOT an actual HBAR balance",
+      "WARNING: For queries about 'largest holders', 'who has the most HBAR', or 'richest accounts', use entity.balance NOT crypto_allowance.amount",
+      "CRITICAL: Use crypto_allowance ONLY for allowance/approval queries, NOT for balance or holdings queries",
+      "CRITICAL: Allowance amounts can be larger than market cap because they are permissions, not actual balances"
     ],
     "examples": [
       {
@@ -817,7 +821,8 @@
       "Query account/entity information",
       "Find accounts by ID or alias",
       "Track account creation and balances",
-      "Monitor account activity and metadata"
+      "Monitor account activity and metadata",
+      "Find top HBAR holders by balance"
     ],
     "rules": [
       "CRITICAL: Use id field for account identification (numeric)",
@@ -826,13 +831,22 @@
       "Use deleted flag to filter out deleted accounts",
       "auto_renew_period indicates account renewal settings",
       "WARNING: entity is a state table - use entity_aggregate only for total account counts",
-      "For specific accounts: use filtering (where) not aggregation"
+      "For specific accounts: use filtering (where) not aggregation",
+      "CRITICAL: For 'largest holders', 'top accounts by balance', or 'richest accounts' queries, use order_by: { balance: desc_nulls_last }",
+      "CRITICAL: Filter by type: { _eq: \"ACCOUNT\" } to exclude contracts and other entity types when querying account balances",
+      "WARNING: balance field is in tinybars - always convert to HBAR for user display (1 HBAR = 100,000,000 tinybars)",
+      "WARNING: Do NOT confuse entity.balance (actual HBAR holdings) with crypto_allowance.amount (spending permissions)"
     ],
     "examples": [
       {
         "query": "Get account details by account ID",
         "graphql": "query {\n  entity(\n    where: { id: { _eq: 123456 } }\n  ) {\n    id\n    alias\n    balance\n    created_timestamp_iso8601\n    deleted\n    memo\n    auto_renew_period\n  }\n}",
         "explanation": "Retrieve account information including balance and metadata"
+      },
+      {
+        "query": "What accounts are the largest holders of HBAR?",
+        "graphql": "query {\n  entity(\n    where: { type: { _eq: \"ACCOUNT\" } }\n    order_by: [{ balance: desc_nulls_last }]\n    limit: 10\n  ) {\n    num\n    balance\n    memo\n    evm_address\n  }\n}",
+        "explanation": "Find top HBAR holders by actual balance. Use type filter to exclude contracts, order by balance descending with nulls last, and limit results. The balance field shows actual HBAR holdings in tinybars."
       }
     ]
   },
@@ -2691,4 +2705,4 @@
       }
     ]
   }
-}                                                                                                                                            
+}

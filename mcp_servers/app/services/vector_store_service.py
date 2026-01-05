@@ -418,9 +418,9 @@ class VectorStoreService:
             logger.info(f"🔍 Retrieving context for: '{query}'")
             
             # Core schemas that should be prioritized
-            core_schemas = {'transaction', 'crypto_transfer', 'token', 'nft', 
-                          'contract_result', 'token_transfer', 'nft_transfer', 
-                          'account', 'topic_message'}
+            core_schemas = {'transaction', 'crypto_transfer', 'token', 'nft',
+                          'contract_result', 'token_transfer', 'nft_transfer',
+                          'account', 'topic_message', 'entity'}
             
             # Strategy: Force-include core schemas based on query keywords
             # This ensures relevant core schemas appear even if vector similarity ranks them low
@@ -434,9 +434,19 @@ class VectorStoreService:
                 'token': ['token', 'token_transfer'],
                 'nft': ['nft', 'nft_transfer'],
                 'contract': ['contract_result'],
-                'account': ['account'],
+                'account': ['account', 'entity'],
                 'topic': ['topic_message'],
-                'message': ['topic_message']
+                'message': ['topic_message'],
+                # Balance/holder queries should use entity table (actual HBAR balances)
+                'holder': ['entity'],
+                'holders': ['entity'],
+                'balance': ['entity'],
+                'balances': ['entity'],
+                'richest': ['entity'],
+                'largest': ['entity'],
+                'biggest': ['entity'],
+                'most hbar': ['entity'],
+                'top accounts': ['entity']
             }
             
             # Check for keyword matches
