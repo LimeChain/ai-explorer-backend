@@ -36,10 +36,10 @@ class Settings(BaseSettings):
 
     # Token pricing settings
     llm_input_cost_per_token: float = Field(
-        default=0.000002, ge=0, description="Cost per input token in USD"
+        ..., ge=0, description="Cost per input token in USD"
     )
     llm_output_cost_per_token: float = Field(
-        default=0.000002, ge=0, description="Cost per output token in USD"
+        ..., ge=0, description="Cost per output token in USD"
     )
 
     environment: str = Field(..., pattern="^(development|production|staging)$")
