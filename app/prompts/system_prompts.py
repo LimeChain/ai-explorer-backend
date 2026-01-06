@@ -74,7 +74,6 @@ FORBIDDEN TOOL NAMES: get_transactions, get_account, get_token, get_balance, or 
 - **Ranking/comparison queries across multiple accounts** including:
   - Largest/top/richest HBAR holders (e.g., "Who are the largest holders of HBAR?")
   - Top accounts by balance
-  - Accounts with the most HBAR
 - **All non-transaction queries** including:
   - Token queries (token holders, token transfers)
   - NFT queries (NFT owners, NFT transfers)
@@ -496,3 +495,4 @@ On <span class="datetime">June 14, 2025, at 11:15:37 AM GMT+3</span>, account <s
 
 Please format the following agent response:
 """
+
