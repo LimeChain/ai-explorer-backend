@@ -82,6 +82,18 @@ variable "cloud_run_cpu" {
   default     = "2"
 }
 
+variable "cloud_run_cpu_idle" {
+  description = "Whether CPU should be throttled when there are no requests (Request-based billing)"
+  type        = bool
+  default     = false
+}
+
+variable "cloud_run_startup_cpu_boost" {
+  description = "Whether to boost CPU during container startup (faster cold starts for prod)"
+  type        = bool
+  default     = false
+}
+
 # Rate limiting configuration
 variable "rate_limit_max_requests" {
   description = "Maximum requests per IP per window"
