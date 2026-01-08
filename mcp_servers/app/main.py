@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from hiero_mirror.async_client import AsyncMirrorNodeClient
 from hiero_mirror.client import MirrorNodeClient
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
+
 
 from .services.sdk_service import HederaSDKService
 from .services.saucerswap_service import SaucerSwapService
@@ -27,7 +29,23 @@ load_dotenv()
 logger = get_logger(__name__, service_name="mcp")
 
 # Initialize the FastMCP server for Hedera Mirror Node
-mcp = FastMCP("HederaMirrorNode")
+mcp = FastMCP(
+    "HederaMirrorNode", 
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[
+            "localhost:*", 
+            "127.0.0.1:*", 
+            "ai-explorer-prod-mcp-server-rggz6cn2pq-uc.a.run.app:*", 
+            "ai-explorer-prod-mcp-external-rggz6cn2pq-uc.a.run.app:*"
+            ],
+        allowed_origins=[
+            "http://localhost:*", 
+            "https://ai-explorer-prod-mcp-server-rggz6cn2pq-uc.a.run.app:*",
+            "ai-explorer-prod-mcp-external-rggz6cn2pq-uc.a.run.app:*"
+            ],
+    )
+)
 ASYNC_METHODS = ["get_transactions", "get_account", "get_token_balances"]
 network_sdk_service = {}
 async_network_sdk_service = {}
