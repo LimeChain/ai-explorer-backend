@@ -5,12 +5,13 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "hiero-mirror-node-sdk",
     "fastapi>=0.116.0",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.0.0",
     "uvicorn[standard]>=0.35.0",
     "httpx>=0.28.1",
-    "mcp>=1.0.0",
+    "mcp==1.22.0",
     "pydantic-settings>=2.0.0",
     "langchain-mcp-adapters>=0.1.9",
     "hiero-mirror-node-sdk",
@@ -25,3 +26,6 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "psycopg2-binary>=2.9.0",
 ]
+
+[tool.uv.sources]
+hiero-mirror-node-sdk = { path = "../sdk" }
