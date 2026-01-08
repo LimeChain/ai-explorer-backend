@@ -47,6 +47,8 @@ resource "google_cloud_run_v2_service" "backend_api" {
           cpu    = var.cloud_run_cpu
           memory = var.cloud_run_memory
         }
+        cpu_idle          = var.cloud_run_cpu_idle
+        startup_cpu_boost = var.cloud_run_startup_cpu_boost
       }
 
       startup_probe {
@@ -257,6 +259,8 @@ resource "google_cloud_run_v2_service" "mcp_servers" {
           cpu    = var.cloud_run_cpu
           memory = var.cloud_run_memory
         }
+        cpu_idle          = var.cloud_run_cpu_idle
+        startup_cpu_boost = var.cloud_run_startup_cpu_boost
       }
 
       env {
@@ -374,6 +378,8 @@ resource "google_cloud_run_v2_service" "mcp_external" {
           cpu    = var.cloud_run_cpu
           memory = var.cloud_run_memory
         }
+        cpu_idle          = var.cloud_run_cpu_idle
+        startup_cpu_boost = var.cloud_run_startup_cpu_boost
       }
 
       env {
