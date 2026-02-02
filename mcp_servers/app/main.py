@@ -1505,3 +1505,58 @@ async def find_token_by_name(token_name: str, network: str = "mainnet") -> Dict[
         }
 
 
+@mcp.tool()
+def format_transaction_types(transaction_types: list[str]) -> Dict[str, Any]:
+    """
+    Convert transaction type codes to human-readable format.
+
+    Converts UPPERCASE transaction type codes (like "CRYPTOTRANSFER", "CONSENSUSSUBMITMESSAGE")
+    to Title Case with spaces (like "Crypto Transfer", "Consensus Submit Message").
+
+    Args:
+        transaction_types: List of transaction type codes to format (e.g., ["CRYPTOTRANSFER", "TOKENCREATION"])
+
+    Returns:
+        Dict containing:
+        - success: Whether the formatting was successful
+        - formatted_types: List of dicts with original and formatted names
+        - count: Number of types formatted
+
+    Example usage:
+        - format_transaction_types(transaction_types=["CRYPTOTRANSFER", "CONSENSUSSUBMITMESSAGE"])
+        - format_transaction_types(transaction_types=["TOKENCREATION"])
+
+    Use this when displaying transaction types to users to make them more readable.
+    """
+    try:
+        logger.info(f"🔄 FORMAT_TRANSACTION_TYPES TOOL: Formatting {len(transaction_types)} transaction type(s)")
+
+        # Import the utility function
+        from hiero_mirror.utils import format_transaction_type
+
+        formatted_results = []
+        for tx_type in transaction_types:
+            formatted_name = format_transaction_type(tx_type)
+            formatted_results.append({
+                "original": tx_type,
+                "formatted": formatted_name
+            })
+
+        logger.info(f"✅ FORMAT_TRANSACTION_TYPES TOOL: Successfully formatted {len(formatted_results)} type(s)")
+
+        return {
+            "success": True,
+            "formatted_types": formatted_results,
+            "count": len(formatted_results)
+        }
+
+    except Exception as e:
+        logger.error(f"💥 FORMAT_TRANSACTION_TYPES TOOL: Unexpected error: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "formatted_types": [],
+            "count": 0,
+            "error": f"Failed to format transaction types: {str(e)}"
+        }
+
+

@@ -413,5 +413,54 @@ def extract_next_link(links: Optional[Dict[str, Optional[str]]]) -> Optional[str
     # Extract just the query parameters from the next link
     if "?" in next_link:
         return next_link.split("?", 1)[1]
-    
+
     return next_link
+
+
+def format_transaction_type(transaction_type: str) -> str:
+    """Convert transaction type code to human-readable format.
+
+    Converts UPPERCASE transaction type codes to Title Case with spaces.
+
+    Args:
+        transaction_type: Transaction type code (e.g., "CRYPTOTRANSFER", "CONSENSUSSUBMITMESSAGE")
+
+    Returns:
+        Formatted transaction type name (e.g., "Crypto Transfer", "Consensus Submit Message")
+
+    Examples:
+        >>> format_transaction_type("CRYPTOTRANSFER")
+        'Crypto Transfer'
+        >>> format_transaction_type("CONSENSUSSUBMITMESSAGE")
+        'Consensus Submit Message'
+        >>> format_transaction_type("TOKENCREATION")
+        'Token Creation'
+    """
+    if not transaction_type or not isinstance(transaction_type, str):
+        return transaction_type
+
+    # Handle empty string or already formatted
+    if transaction_type.islower() or transaction_type.istitle():
+        return transaction_type
+
+    # Split on capital letters and join with spaces
+    # Insert space before each capital letter (except first) and title case
+    words = []
+    current_word = []
+
+    for i, char in enumerate(transaction_type):
+        if char.isupper() and i > 0 and current_word:
+            # Start new word
+            words.append(''.join(current_word))
+            current_word = [char]
+        else:
+            current_word.append(char)
+
+    # Add last word
+    if current_word:
+        words.append(''.join(current_word))
+
+    # Title case each word
+    formatted_words = [word.capitalize() for word in words]
+
+    return ' '.join(formatted_words)
