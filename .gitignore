@@ -192,3 +192,5 @@ settings.local.*
 *.egg-info/
 build/
 dist/
+.claude/
+.context/

@@ -2690,5 +2690,56 @@
         "explanation": "Use aggregate max to find the largest number of transactions in the last 24 hours"
       }
     ]
+  },
+  "network_statistics": {
+    "use_cases": [
+      "Calculate current TPS (transactions per second)",
+      "Get average TPS over time periods",
+      "Analyze network throughput and transaction rates",
+      "Compare transaction volumes across different time ranges"
+    ],
+    "rules": [
+      "CRITICAL: TPS = Total Transactions / Time Period (in seconds)",
+      "CRITICAL: For 'current TPS' or 'recent TPS': Use last 60 seconds of data",
+      "CRITICAL: For 'average TPS': Use appropriate time window (1 hour = 3600 seconds, 24 hours = 86400 seconds)",
+      "CRITICAL: Hedera mainnet TPS is typically 5-10, peaks at 20-50, theoretical max ~10,000",
+      "VALIDATION: Any calculated TPS > 100 should be flagged as potentially incorrect - double-check your math",
+      "ALWAYS show your calculation: 'X transactions / Y seconds = Z TPS'",
+      "Use transaction_aggregate to count transactions in time range",
+      "consensus_timestamp is in nanoseconds - calculate correctly: current_time_ns - (seconds * 1_000_000_000)",
+      "DO NOT divide daily transaction count by 1 second - this is mathematically incorrect",
+      "DO NOT use transaction count as TPS directly - you must divide by the time period",
+      "Include only SUCCESS transactions for accurate TPS: result: { _eq: \"SUCCESS\" }"
+    ],
+    "examples": [
+      {
+        "query": "What is the current TPS on Hedera?",
+        "graphql": "query {\n  last_minute: transaction_aggregate(\n    where: {\n      consensus_timestamp: { _gte: \"<current_timestamp_minus_60_seconds_in_nanoseconds>\" }\n      result: { _eq: \"SUCCESS\" }\n    }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count successful transactions in last 60 seconds, then divide by 60 to get TPS. Formula: count / 60 = TPS",
+        "calculation_example": "If count = 450 transactions in 60 seconds, TPS = 450 / 60 = 7.5 TPS",
+        "response_format": "The current transaction rate is approximately 7.5 TPS (450 transactions in the last 60 seconds). Hedera mainnet typically processes 5-10 transactions per second."
+      },
+      {
+        "query": "What was the average TPS in the last hour?",
+        "graphql": "query {\n  last_hour: transaction_aggregate(\n    where: {\n      consensus_timestamp: { _gte: \"<current_timestamp_minus_3600_seconds_in_nanoseconds>\" }\n      result: { _eq: \"SUCCESS\" }\n    }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Count transactions in last 3600 seconds (1 hour), divide by 3600 to get average TPS. Formula: count / 3600 = TPS",
+        "calculation_example": "If count = 25,200 transactions in 3600 seconds, TPS = 25,200 / 3,600 = 7.0 TPS",
+        "response_format": "The average transaction rate over the last hour was 7.0 TPS (25,200 transactions / 3,600 seconds)."
+      },
+      {
+        "query": "How many TPS does Hedera have?",
+        "graphql": "query {\n  last_5_minutes: transaction_aggregate(\n    where: {\n      consensus_timestamp: { _gte: \"<current_timestamp_minus_300_seconds_in_nanoseconds>\" }\n      result: { _eq: \"SUCCESS\" }\n    }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "For general TPS question, use 5-minute window (300 seconds) for balanced accuracy. Formula: count / 300 = TPS",
+        "calculation_example": "If count = 2,400 transactions in 300 seconds, TPS = 2,400 / 300 = 8.0 TPS",
+        "response_format": "Hedera is currently processing approximately 8.0 TPS (2,400 transactions in the last 5 minutes). The network typically runs at 5-10 TPS with peaks up to 20-50 TPS during high activity."
+      },
+      {
+        "query": "What's the transaction throughput on Hedera?",
+        "graphql": "query {\n  last_minute: transaction_aggregate(\n    where: {\n      consensus_timestamp: { _gte: \"<current_timestamp_minus_60_seconds_in_nanoseconds>\" }\n      result: { _eq: \"SUCCESS\" }\n    }\n  ) {\n    aggregate {\n      count\n    }\n  }\n}",
+        "explanation": "Throughput is synonymous with TPS. Use 60-second window for current throughput",
+        "calculation_example": "If count = 540 transactions in 60 seconds, TPS = 540 / 60 = 9.0 TPS",
+        "response_format": "The current network throughput is approximately 9.0 TPS (540 transactions processed in the last minute)."
+      }
+    ]
   }
 }                                                                                                                                            

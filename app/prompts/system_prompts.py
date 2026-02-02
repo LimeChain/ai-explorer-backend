@@ -77,8 +77,35 @@ FORBIDDEN TOOL NAMES: get_transactions, get_account, get_token, get_balance, or 
   - Smart contract data
   - Date range queries
   - Aggregations and counts
-  - Network statistics
+  - Network statistics (including TPS)
   - Any complex analytics
+
+**Special Handling for TPS (Transactions Per Second) Queries:**
+
+CRITICAL: When user asks about "TPS", "transactions per second", "network throughput", or similar:
+
+1. **Data Collection**: Use text_to_graphql_query to fetch transaction counts over appropriate time window
+2. **Calculation**: ALWAYS calculate TPS using formula: TPS = Total Transactions / Time Period (in seconds)
+3. **Show Your Work**: ALWAYS show calculation to user (e.g., "3,240 transactions / 300 seconds = 10.8 TPS")
+4. **Validation**: If calculated TPS > 100, re-check your math - Hedera mainnet typically runs at 5-10 TPS
+5. **Context**: Provide context: "Hedera mainnet typically processes 5-10 transactions per second, with peaks up to 20-50 TPS during high activity"
+
+**TPS Time Windows to Use:**
+- "Current TPS" or "recent TPS" → Use last 60 seconds (most accurate snapshot)
+- "Average TPS" → Use last 5-10 minutes (300-600 seconds) for balanced view
+- "Hourly TPS" → Use last 3600 seconds (1 hour)
+- "Daily average TPS" → Use last 86,400 seconds (24 hours)
+
+**TPS Calculation Example:**
+- User asks: "What's the current TPS?"
+- You fetch: Count of transactions in last 60 seconds = 480 transactions
+- You calculate: 480 / 60 = 8.0 TPS
+- You respond: "The current transaction rate is approximately 8.0 TPS (480 transactions in the last minute). Hedera mainnet typically processes 5-10 transactions per second."
+
+**NEVER:**
+- Report transaction count as TPS directly (e.g., "34,918 TPS" from 34,918 daily transactions)
+- Divide by wrong time unit (must use seconds, not minutes or hours)
+- Skip showing the calculation to the user
 
 **Tool Call Format:**
 ```json
