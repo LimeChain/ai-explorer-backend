@@ -1314,3 +1314,194 @@ async def text_to_graphql_query(question: str, network: str = "mainnet") -> Dict
         }
 
 
+@mcp.tool()
+async def get_token_price(token_id: str, network: str = "mainnet") -> Dict[str, Any]:
+    """
+    Get the current USD price for a Hedera token from SaucerSwap API.
+
+    This tool fetches real-time token pricing data from SaucerSwap, the leading
+    DEX on Hedera. Use this when users ask about token prices directly.
+
+    Args:
+        token_id: Hedera token ID in format "0.0.XXXXXX" (e.g., "0.0.1456986" for HBAR)
+        network: Network to query (defaults to "mainnet", SaucerSwap data is mainnet-only)
+
+    Returns:
+        Dict containing:
+        - success: Whether the price fetch was successful
+        - token_id: The token ID that was queried
+        - price_usd: Current USD price per token
+        - timestamp: When the price was fetched
+        - error: Error message if the request failed
+
+    Example usage:
+        - get_token_price(token_id="0.0.1456986")  # Get HBAR price
+        - get_token_price(token_id="0.0.731861")   # Get SAUCE token price
+
+    Note: If you only have the token name (e.g., "GIB"), use find_token_by_name first
+    to get the token_id, then use this tool.
+    """
+    try:
+        logger.info(f"🔍 GET_TOKEN_PRICE TOOL: Fetching price for token {token_id} on {network}")
+
+        # Initialize SaucerSwap service
+        saucerswap_service = SaucerSwapService()
+
+        # Fetch token price
+        result = await saucerswap_service.get_token_price(token_id)
+
+        if result.get("success"):
+            price_usd = result["price_usd"]
+            logger.info(f"✅ GET_TOKEN_PRICE TOOL: Successfully fetched price: ${price_usd:.6f} USD")
+
+            return {
+                "success": True,
+                "token_id": token_id,
+                "price_usd": price_usd,
+                "timestamp": result.get("timestamp"),
+                "network": network
+            }
+        else:
+            logger.error(f"❌ GET_TOKEN_PRICE TOOL: Failed to fetch price for {token_id}")
+            return {
+                "success": False,
+                "token_id": token_id,
+                "error": "Failed to fetch token price from SaucerSwap",
+                "network": network
+            }
+
+    except SDKError as e:
+        logger.error(f"❌ GET_TOKEN_PRICE TOOL: SDKError: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "token_id": token_id,
+            "error": f"SaucerSwap API error: {str(e)}",
+            "network": network
+        }
+    except Exception as e:
+        logger.error(f"💥 GET_TOKEN_PRICE TOOL: Unexpected error: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "token_id": token_id,
+            "error": f"Unexpected error fetching token price: {str(e)}",
+            "network": network
+        }
+
+
+@mcp.tool()
+async def find_token_by_name(token_name: str, network: str = "mainnet") -> Dict[str, Any]:
+    """
+    Find a Hedera token by its name or symbol using GraphQL.
+
+    This tool searches for tokens by name/symbol and returns their token IDs and metadata.
+    Use this when users mention a token by name (e.g., "GIB", "SAUCE", "USDC") instead
+    of token ID.
+
+    Args:
+        token_name: Token name or symbol to search for (e.g., "GIB", "SAUCE", "HBAR")
+        network: Network to query ("mainnet" or "testnet", defaults to "mainnet")
+
+    Returns:
+        Dict containing:
+        - success: Whether the search was successful
+        - token_name: The search term used
+        - tokens: List of matching tokens with their details (token_id, name, symbol, decimals)
+        - count: Number of tokens found
+        - error: Error message if the search failed
+
+    Example usage:
+        - find_token_by_name(token_name="GIB")
+        - find_token_by_name(token_name="SAUCE", network="mainnet")
+
+    Workflow:
+        1. User asks: "What's the price of GIB?"
+        2. Call: find_token_by_name(token_name="GIB")
+        3. Get: token_id from results
+        4. Call: get_token_price(token_id=token_id)
+        5. Return: "GIB (token 0.0.XXXXX) is trading at $X.XX USD"
+    """
+    try:
+        logger.info(f"🔍 FIND_TOKEN_BY_NAME TOOL: Searching for token '{token_name}' on {network}")
+
+        # Use GraphQL to search for token by name/symbol
+        gql_service = get_graphql_service()
+
+        # Craft a question to search for the token
+        question = f"Find token with name or symbol '{token_name}'"
+
+        logger.info(f"🚀 FIND_TOKEN_BY_NAME TOOL: Querying GraphQL for token search")
+        result = await gql_service.text_to_graphql_query(question, network)
+
+        if result.get("success"):
+            data = result.get("data", {})
+
+            # Extract token information from GraphQL result
+            # The structure depends on what GraphQL returns, but typically:
+            # {"token": [{"token_id": "...", "name": "...", "symbol": "...", "decimals": ...}]}
+            tokens = []
+
+            # Try to extract tokens from different possible GraphQL response structures
+            if "token" in data:
+                token_data = data["token"]
+                if isinstance(token_data, list):
+                    for token in token_data:
+                        tokens.append({
+                            "token_id": token.get("token_id"),
+                            "name": token.get("name"),
+                            "symbol": token.get("symbol"),
+                            "decimals": token.get("decimals"),
+                            "type": token.get("type")
+                        })
+                elif isinstance(token_data, dict):
+                    tokens.append({
+                        "token_id": token_data.get("token_id"),
+                        "name": token_data.get("name"),
+                        "symbol": token_data.get("symbol"),
+                        "decimals": token_data.get("decimals"),
+                        "type": token_data.get("type")
+                    })
+
+            if tokens:
+                logger.info(f"✅ FIND_TOKEN_BY_NAME TOOL: Found {len(tokens)} matching token(s)")
+                return {
+                    "success": True,
+                    "token_name": token_name,
+                    "tokens": tokens,
+                    "count": len(tokens),
+                    "network": network
+                }
+            else:
+                logger.warning(f"⚠️ FIND_TOKEN_BY_NAME TOOL: No tokens found matching '{token_name}'")
+                return {
+                    "success": False,
+                    "token_name": token_name,
+                    "tokens": [],
+                    "count": 0,
+                    "error": f"No tokens found with name or symbol '{token_name}'",
+                    "network": network,
+                    "suggestion": "Try using the exact token ID if you know it (format: 0.0.XXXXXX)"
+                }
+        else:
+            error_msg = result.get("error", "GraphQL query failed")
+            logger.error(f"❌ FIND_TOKEN_BY_NAME TOOL: GraphQL query failed: {error_msg}")
+            return {
+                "success": False,
+                "token_name": token_name,
+                "tokens": [],
+                "count": 0,
+                "error": f"Failed to search for token: {error_msg}",
+                "network": network
+            }
+
+    except Exception as e:
+        logger.error(f"💥 FIND_TOKEN_BY_NAME TOOL: Unexpected error: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "token_name": token_name,
+            "tokens": [],
+            "count": 0,
+            "error": f"Unexpected error searching for token: {str(e)}",
+            "network": network
+        }
+
+
