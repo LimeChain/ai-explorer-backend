@@ -136,6 +136,9 @@ class Settings(BaseSettings):
     # Global
     request_timeout: int = Field(default=5, description="Request timeout in seconds")
 
+    # Admin API key – guards write endpoints (feature flags, etc.)
+    admin_api_key: SecretStr = Field(..., description="Secret key required in X-Admin-Key header for admin write endpoints")
+
     # SaucerSwap settings
     saucerswap_base_url: str = Field(default="https://api.saucerswap.finance", description="SaucerSwap API base URL")
     saucerswap_api_key: SecretStr = Field(..., description="SaucerSwap API key")

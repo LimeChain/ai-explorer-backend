@@ -21,7 +21,7 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 # Import models to ensure they're registered with Base
-from app.db.models import Conversation, Message
+from app.db.models import Conversation, Message, FeatureFlag
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,

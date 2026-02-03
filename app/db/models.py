@@ -3,7 +3,7 @@ Database models for the AI Explorer backend.
 """
 import uuid
 from enum import Enum
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum as DBEnum, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum as DBEnum, UniqueConstraint, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID
@@ -89,3 +89,22 @@ class Feedback(Base):
     message_id = Column(UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), nullable=False)
     feedback = Column(DBEnum(FeedbackType, name='feedback_type_enum'), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class FeatureFlag(Base):
+    """
+    Model for runtime feature flags.
+
+    Uniqueness is enforced by two partial indexes in the migration rather than
+    a SQLAlchemy UniqueConstraint, because PostgreSQL treats NULL ≠ NULL in
+    standard unique indexes.  A NULL account_id means *global* scope; a non-NULL
+    value is a per-account override.
+    """
+    __tablename__ = "feature_flags"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key = Column(String(255), nullable=False)
+    value = Column(Boolean, nullable=False)
+    account_id = Column(String(50), nullable=True)  # NULL = global scope
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

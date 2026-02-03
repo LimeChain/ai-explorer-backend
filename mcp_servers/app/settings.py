@@ -98,6 +98,11 @@ class MCPSettings(BaseSettings):
         description="Path to the GraphQL metadata JSON file"
     )
 
+    # Redis settings (used by the feature-flag reader)
+    redis_url: str = Field(..., description="Redis connection URL")
+    redis_max_connections: int = Field(default=10, description="Redis connection pool max connections")
+    redis_socket_timeout: float = Field(default=5.0, description="Redis socket timeout in seconds")
+
 
 # Global settings instance
 settings = MCPSettings()

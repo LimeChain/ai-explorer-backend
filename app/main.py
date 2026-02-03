@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from psycopg_pool import AsyncConnectionPool
 
-from app.api.endpoints import chat, message, suggestions
+from app.api.endpoints import chat, message, suggestions, feature_flags
 from app.config import settings
 from app.exception_handlers import register_exception_handlers
 from app.utils.logging_config import setup_logging, get_logger, set_correlation_id
@@ -104,6 +104,7 @@ register_exception_handlers(app)
 app.include_router(message.router, prefix="/api/v1", tags=["message"])
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(suggestions.router, prefix="/api/v1", tags=["suggestions"])
+app.include_router(feature_flags.router, prefix="/api/v1", tags=["feature-flags"])
 
 logger.info("🚀 AI Explorer Backend service started")
 

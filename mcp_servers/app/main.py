@@ -13,11 +13,27 @@ from .services.graphql_service import GraphQLService
 from .settings import settings
 from .logging_config import get_logger, set_correlation_id
 from .exceptions import (
-    ServiceInitializationError, 
-    DocumentProcessingError, 
+    ServiceInitializationError,
+    DocumentProcessingError,
     SDKError,
     ValidationError,
     handle_exception
+)
+from .feature_flag_guard import require_flag
+from app.services.feature_flag_defaults import (
+    TOOL_CALL_SDK_METHOD,
+    TOOL_RETRIEVE_SDK_METHOD,
+    TOOL_CALCULATE_HBAR_VALUE,
+    TOOL_PROCESS_TOKENS_WITH_BALANCES,
+    TOOL_ENRICH_TOKENS_WITH_USD_PRICES,
+    TOOL_CONVERT_TIMESTAMP,
+    TOOL_TEXT_TO_GRAPHQL_QUERY,
+    TOOL_GET_TOKEN_PRICE,
+    TOOL_FIND_TOKEN_BY_NAME,
+    TOOL_FORMAT_TRANSACTION_TYPES,
+    DATASOURCE_MIRROR_NODE,
+    DATASOURCE_GRAPHQL,
+    DATASOURCE_SAUCERSWAP,
 )
 
 from dotenv import load_dotenv
@@ -133,6 +149,7 @@ def get_graphql_service() -> GraphQLService:
 
 
 @mcp.tool()
+@require_flag(TOOL_CALL_SDK_METHOD, datasource_flags=[DATASOURCE_MIRROR_NODE])
 async def call_sdk_method(method_name: str, network: str, **kwargs) -> Dict[str, Any]:
     """
     Call any method from the Hedera Mirror Node SDK dynamically.
@@ -198,6 +215,7 @@ async def call_sdk_method(method_name: str, network: str, **kwargs) -> Dict[str,
 
 
 @mcp.tool()
+@require_flag(TOOL_RETRIEVE_SDK_METHOD)
 def retrieve_sdk_method(query: str) -> Dict[str, Any]:
     """
     Retrieve SDK methods using natural language queries via vector similarity search.
@@ -439,6 +457,7 @@ async def calculate_single_hbar_value(
 
 
 @mcp.tool()
+@require_flag(TOOL_CALCULATE_HBAR_VALUE, datasource_flags=[DATASOURCE_SAUCERSWAP])
 async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[str, int, float]]], network: str, timestamp: Union[str, int, float] = None) -> Dict[str, Any]:
     """
     Calculate the USD value of HBAR tokens using real-time SaucerSwap pricing.
@@ -523,6 +542,7 @@ async def calculate_hbar_value(hbar_amounts: Union[str, int, float, List[Union[s
         return handle_exception(e, {"correlation_id": correlation_id})
 
 @mcp.tool()
+@require_flag(TOOL_PROCESS_TOKENS_WITH_BALANCES, datasource_flags=[DATASOURCE_MIRROR_NODE, DATASOURCE_SAUCERSWAP])
 async def process_tokens_with_balances(token_data: List[Dict[str, Any]], network: str) -> Dict[str, Any]:
     """
     Process tokens with balances: fetch details, convert amounts with decimals, and add USD prices.
@@ -806,6 +826,7 @@ async def process_tokens_with_balances(token_data: List[Dict[str, Any]], network
         return handle_exception(e, {"correlation_id": correlation_id})
 
 @mcp.tool()
+@require_flag(TOOL_ENRICH_TOKENS_WITH_USD_PRICES, datasource_flags=[DATASOURCE_SAUCERSWAP])
 async def enrich_tokens_with_usd_prices(token_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Enrich token data from GraphQL responses with real-time USD prices from SaucerSwap.
@@ -1021,6 +1042,7 @@ async def enrich_tokens_with_usd_prices(token_data: List[Dict[str, Any]]) -> Dic
         return handle_exception(e, {"correlation_id": correlation_id})
 
 @mcp.tool()
+@require_flag(TOOL_CONVERT_TIMESTAMP)
 def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, float]]]) -> Dict[str, Any]:
     """
     Convert Unix timestamp(s) to human-readable date format.
@@ -1228,6 +1250,7 @@ def convert_timestamp(timestamps: Union[str, int, float, List[Union[str, int, fl
         return handle_exception(e, {"correlation_id": correlation_id})
 
 @mcp.tool()
+@require_flag(TOOL_TEXT_TO_GRAPHQL_QUERY, datasource_flags=[DATASOURCE_GRAPHQL])
 async def text_to_graphql_query(question: str, network: str = "mainnet") -> Dict[str, Any]:
     """
     Execute natural language queries against Hedera data using GraphQL through Hgraph API.
@@ -1313,4 +1336,252 @@ async def text_to_graphql_query(question: str, network: str = "mainnet") -> Dict
             "error": f"Text-to-GraphQL tool failed: {str(e)}",
         }
 
+
+@mcp.tool()
+@require_flag(TOOL_GET_TOKEN_PRICE, datasource_flags=[DATASOURCE_SAUCERSWAP])
+async def get_token_price(token_id: str, network: str = "mainnet") -> Dict[str, Any]:
+    """
+    Get the current USD price for a Hedera token from SaucerSwap API.
+
+    This tool fetches real-time token pricing data from SaucerSwap, the leading
+    DEX on Hedera. Use this when users ask about token prices directly.
+
+    Args:
+        token_id: Hedera token ID in format "0.0.XXXXXX" (e.g., "0.0.1456986" for HBAR)
+        network: Network to query (defaults to "mainnet", SaucerSwap data is mainnet-only)
+
+    Returns:
+        Dict containing:
+        - success: Whether the price fetch was successful
+        - token_id: The token ID that was queried
+        - price_usd: Current USD price per token
+        - timestamp: When the price was fetched
+        - error: Error message if the request failed
+
+    Example usage:
+        - get_token_price(token_id="0.0.1456986")  # Get HBAR price
+        - get_token_price(token_id="0.0.731861")   # Get SAUCE token price
+
+    Note: If you only have the token name (e.g., "GIB"), use find_token_by_name first
+    to get the token_id, then use this tool.
+    """
+    try:
+        logger.info(f"🔍 GET_TOKEN_PRICE TOOL: Fetching price for token {token_id} on {network}")
+
+        # Initialize SaucerSwap service
+        saucerswap_service = SaucerSwapService()
+
+        # Fetch token price
+        result = await saucerswap_service.get_token_price(token_id)
+
+        if result.get("success"):
+            price_usd = result["price_usd"]
+            logger.info(f"✅ GET_TOKEN_PRICE TOOL: Successfully fetched price: ${price_usd:.6f} USD")
+
+            return {
+                "success": True,
+                "token_id": token_id,
+                "price_usd": price_usd,
+                "timestamp": result.get("timestamp"),
+                "network": network
+            }
+        else:
+            logger.error(f"❌ GET_TOKEN_PRICE TOOL: Failed to fetch price for {token_id}")
+            return {
+                "success": False,
+                "token_id": token_id,
+                "error": "Failed to fetch token price from SaucerSwap",
+                "network": network
+            }
+
+    except SDKError as e:
+        logger.error(f"❌ GET_TOKEN_PRICE TOOL: SDKError: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "token_id": token_id,
+            "error": f"SaucerSwap API error: {str(e)}",
+            "network": network
+        }
+    except Exception as e:
+        logger.error(f"💥 GET_TOKEN_PRICE TOOL: Unexpected error: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "token_id": token_id,
+            "error": f"Unexpected error fetching token price: {str(e)}",
+            "network": network
+        }
+
+
+@mcp.tool()
+@require_flag(TOOL_FIND_TOKEN_BY_NAME, datasource_flags=[DATASOURCE_GRAPHQL])
+async def find_token_by_name(token_name: str, network: str = "mainnet") -> Dict[str, Any]:
+    """
+    Find a Hedera token by its name or symbol using GraphQL.
+
+    This tool searches for tokens by name/symbol and returns their token IDs and metadata.
+    Use this when users mention a token by name (e.g., "GIB", "SAUCE", "USDC") instead
+    of token ID.
+
+    Args:
+        token_name: Token name or symbol to search for (e.g., "GIB", "SAUCE", "HBAR")
+        network: Network to query ("mainnet" or "testnet", defaults to "mainnet")
+
+    Returns:
+        Dict containing:
+        - success: Whether the search was successful
+        - token_name: The search term used
+        - tokens: List of matching tokens with their details (token_id, name, symbol, decimals)
+        - count: Number of tokens found
+        - error: Error message if the search failed
+
+    Example usage:
+        - find_token_by_name(token_name="GIB")
+        - find_token_by_name(token_name="SAUCE", network="mainnet")
+
+    Workflow:
+        1. User asks: "What's the price of GIB?"
+        2. Call: find_token_by_name(token_name="GIB")
+        3. Get: token_id from results
+        4. Call: get_token_price(token_id=token_id)
+        5. Return: "GIB (token 0.0.XXXXX) is trading at $X.XX USD"
+    """
+    try:
+        logger.info(f"🔍 FIND_TOKEN_BY_NAME TOOL: Searching for token '{token_name}' on {network}")
+
+        # Use GraphQL to search for token by name/symbol
+        gql_service = get_graphql_service()
+
+        # Craft a question to search for the token
+        question = f"Find token with name or symbol '{token_name}'"
+
+        logger.info(f"🚀 FIND_TOKEN_BY_NAME TOOL: Querying GraphQL for token search")
+        result = await gql_service.text_to_graphql_query(question, network)
+
+        if result.get("success"):
+            data = result.get("data", {})
+
+            # Extract token information from GraphQL result
+            # The structure depends on what GraphQL returns, but typically:
+            # {"token": [{"token_id": "...", "name": "...", "symbol": "...", "decimals": ...}]}
+            tokens = []
+
+            # Try to extract tokens from different possible GraphQL response structures
+            if "token" in data:
+                token_data = data["token"]
+                if isinstance(token_data, list):
+                    for token in token_data:
+                        tokens.append({
+                            "token_id": token.get("token_id"),
+                            "name": token.get("name"),
+                            "symbol": token.get("symbol"),
+                            "decimals": token.get("decimals"),
+                            "type": token.get("type")
+                        })
+                elif isinstance(token_data, dict):
+                    tokens.append({
+                        "token_id": token_data.get("token_id"),
+                        "name": token_data.get("name"),
+                        "symbol": token_data.get("symbol"),
+                        "decimals": token_data.get("decimals"),
+                        "type": token_data.get("type")
+                    })
+
+            if tokens:
+                logger.info(f"✅ FIND_TOKEN_BY_NAME TOOL: Found {len(tokens)} matching token(s)")
+                return {
+                    "success": True,
+                    "token_name": token_name,
+                    "tokens": tokens,
+                    "count": len(tokens),
+                    "network": network
+                }
+            else:
+                logger.warning(f"⚠️ FIND_TOKEN_BY_NAME TOOL: No tokens found matching '{token_name}'")
+                return {
+                    "success": False,
+                    "token_name": token_name,
+                    "tokens": [],
+                    "count": 0,
+                    "error": f"No tokens found with name or symbol '{token_name}'",
+                    "network": network,
+                    "suggestion": "Try using the exact token ID if you know it (format: 0.0.XXXXXX)"
+                }
+        else:
+            error_msg = result.get("error", "GraphQL query failed")
+            logger.error(f"❌ FIND_TOKEN_BY_NAME TOOL: GraphQL query failed: {error_msg}")
+            return {
+                "success": False,
+                "token_name": token_name,
+                "tokens": [],
+                "count": 0,
+                "error": f"Failed to search for token: {error_msg}",
+                "network": network
+            }
+
+    except Exception as e:
+        logger.error(f"💥 FIND_TOKEN_BY_NAME TOOL: Unexpected error: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "token_name": token_name,
+            "tokens": [],
+            "count": 0,
+            "error": f"Unexpected error searching for token: {str(e)}",
+            "network": network
+        }
+
+
+@mcp.tool()
+@require_flag(TOOL_FORMAT_TRANSACTION_TYPES)
+def format_transaction_types(transaction_types: list[str]) -> Dict[str, Any]:
+    """
+    Convert transaction type codes to human-readable format.
+
+    Converts UPPERCASE transaction type codes (like "CRYPTOTRANSFER", "CONSENSUSSUBMITMESSAGE")
+    to Title Case with spaces (like "Crypto Transfer", "Consensus Submit Message").
+
+    Args:
+        transaction_types: List of transaction type codes to format (e.g., ["CRYPTOTRANSFER", "TOKENCREATION"])
+
+    Returns:
+        Dict containing:
+        - success: Whether the formatting was successful
+        - formatted_types: List of dicts with original and formatted names
+        - count: Number of types formatted
+
+    Example usage:
+        - format_transaction_types(transaction_types=["CRYPTOTRANSFER", "CONSENSUSSUBMITMESSAGE"])
+        - format_transaction_types(transaction_types=["TOKENCREATION"])
+
+    Use this when displaying transaction types to users to make them more readable.
+    """
+    try:
+        logger.info(f"🔄 FORMAT_TRANSACTION_TYPES TOOL: Formatting {len(transaction_types)} transaction type(s)")
+
+        # Import the utility function
+        from hiero_mirror.utils import format_transaction_type
+
+        formatted_results = []
+        for tx_type in transaction_types:
+            formatted_name = format_transaction_type(tx_type)
+            formatted_results.append({
+                "original": tx_type,
+                "formatted": formatted_name
+            })
+
+        logger.info(f"✅ FORMAT_TRANSACTION_TYPES TOOL: Successfully formatted {len(formatted_results)} type(s)")
+
+        return {
+            "success": True,
+            "formatted_types": formatted_results,
+            "count": len(formatted_results)
+        }
+
+    except Exception as e:
+        logger.error(f"💥 FORMAT_TRANSACTION_TYPES TOOL: Unexpected error: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "formatted_types": [],
+            "count": 0,
+            "error": f"Failed to format transaction types: {str(e)}"
+        }
 
