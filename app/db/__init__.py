@@ -2,6 +2,6 @@
 Database package for AI Explorer backend.
 """
 from .base import Base
-from .session import get_db
+from .session import get_async_db
 
-__all__ = ["Base", "get_db"]
+__all__ = ["Base", "get_async_db"]

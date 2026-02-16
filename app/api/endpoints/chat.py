@@ -11,8 +11,9 @@ from fastapi import APIRouter, Path, WebSocket, WebSocketDisconnect
 from app.schemas.chat import ChatRequest
 from app.services.llm_orchestrator import LLMOrchestrator
 from app.db.session import get_db_session
+from app.dependencies import get_redis_client
 from app.exceptions import ChatServiceError, ValidationError, LLMServiceError, RateLimitError
-from app.utils.rate_limiter import IPRateLimiter, GlobalRateLimiter, redis_client
+from app.utils.rate_limiter import IPRateLimiter, GlobalRateLimiter
 from app.utils.cost_limiter import CostLimiter
 from app.config import settings
 from app.utils.logging_config import get_api_logger
@@ -20,24 +21,6 @@ from app.utils.logging_config import get_api_logger
 logger = get_api_logger("chat")
 router = APIRouter()
 llm_orchestrator = LLMOrchestrator()
-
-# Create global rate limiter instance
-global_rate_limiter = GlobalRateLimiter(
-    redis_client,
-    max_requests=settings.global_rate_limit_max_requests,
-    window_seconds=settings.global_rate_limit_window_seconds
-)
-
-# Create cost limiter (separate from rate limiter)
-cost_limiter = CostLimiter(redis_client)
-
-# Create message-level rate limiter instance with global limiter
-ip_rate_limiter = IPRateLimiter(
-    redis_client, 
-    max_requests=settings.rate_limit_max_requests,
-    window_seconds=settings.rate_limit_window_seconds,
-    global_limiter=global_rate_limiter
-)
 
 
 @router.websocket("/chat/ws/{session_id}")
@@ -69,7 +52,21 @@ async def websocket_chat(
     correlation_id = set_correlation_id(str(session_id)[:8])
     
     await websocket.accept()
-    
+
+    redis = get_redis_client()
+    global_rate_limiter = GlobalRateLimiter(
+        redis,
+        max_requests=settings.global_rate_limit_max_requests,
+        window_seconds=settings.global_rate_limit_window_seconds,
+    )
+    cost_limiter = CostLimiter(redis)
+    ip_rate_limiter = IPRateLimiter(
+        redis,
+        max_requests=settings.rate_limit_max_requests,
+        window_seconds=settings.rate_limit_window_seconds,
+        global_limiter=global_rate_limiter,
+    )
+
     # Log WebSocket connection establishment
     logger.info("🔗 WebSocket connection established", extra={
         "session_id": str(session_id),
@@ -103,7 +100,7 @@ async def websocket_chat(
 
             try:
                 # Check rate limit for each message before processing
-                rate_limit_result = ip_rate_limiter.is_allowed(websocket)
+                rate_limit_result = await ip_rate_limiter.is_allowed(websocket)
                 if not rate_limit_result:
                     # Enhanced rate limit logging with detailed context
                     logger.warning("🚫 Rate limit exceeded", extra={
@@ -124,7 +121,7 @@ async def websocket_chat(
                     return
                 
                 # Check cost limits separately
-                cost_limit_result = cost_limiter.is_allowed(websocket)
+                cost_limit_result = await cost_limiter.is_allowed(websocket)
                 if not cost_limit_result:
                     # Parse the message to get query preview for logging
                     try:
@@ -238,80 +235,81 @@ async def websocket_chat(
 
                 async def run_flow_and_stream(local_chat_request: ChatRequest = chat_request, local_continue_id = continue_from_message_id):
                     with get_db_session() as db:
-
                         assistant_msg_id = None
                         user_msg_id = None
+                        recorded_cost = 0.0
 
                         def on_complete(_assistant_msg_id, _user_msg_id):
-                            nonlocal assistant_msg_id
-                            nonlocal user_msg_id
+                            nonlocal assistant_msg_id, user_msg_id
                             assistant_msg_id = _assistant_msg_id
                             user_msg_id = _user_msg_id
 
-                    def on_cost_calculated(final_state):
-                        """Record actual costs after LLM completion."""
-                        actual_cost = final_state.get("total_cost", 0.0)
-                        if actual_cost > 0:
-                            # Record cost using separate cost limiter
-                            cost_limiter.record_cost(websocket, actual_cost)
-                            logger.info("Recorded actual cost for session %s: $%.6f", session_id, actual_cost)
+                        def on_cost_calculated(final_state):
+                            nonlocal recorded_cost
+                            recorded_cost = final_state.get("total_cost", 0.0)
 
-                    try:
-                        async for token in llm_orchestrator.stream_llm_response(
-                            query=local_chat_request.query,
-                            network=local_chat_request.network,
-                            account_id=local_chat_request.account_id,
-                            session_id=session_id,
-                            db=db,  # Pass database session for conversation persistence
-                            on_complete=on_complete,
-                            on_cost_calculated=on_cost_calculated,
-                            continue_from_message_id=local_continue_id
-                        ):
+                        try:
+                            async for token in llm_orchestrator.stream_llm_response(
+                                query=local_chat_request.query,
+                                network=local_chat_request.network,
+                                account_id=local_chat_request.account_id,
+                                session_id=session_id,
+                                db=db,
+                                on_complete=on_complete,
+                                on_cost_calculated=on_cost_calculated,
+                                continue_from_message_id=local_continue_id,
+                            ):
+                                await websocket.send_text(json.dumps({
+                                    "token": token
+                                }))
+
+                            # Send assistant message ID to client if available
+                            if assistant_msg_id:
+                                await websocket.send_text(json.dumps({
+                                    "assistant_msg_id": str(assistant_msg_id)
+                                }))
+
+                            if user_msg_id:
+                                await websocket.send_text(json.dumps({
+                                    "user_msg_id": str(user_msg_id)
+                                }))
+
+                            # Send completion signal
                             await websocket.send_text(json.dumps({
-                                "token": token
+                                "complete": True
                             }))
-                        
-                        # Send assistant message ID to client if available
-                        if assistant_msg_id:
+
+                            logger.info("✅ Query processing completed", extra={
+                                "session_id": str(session_id),
+                                "operation": "query_completed",
+                            })
+
+                            # Explicit commit for any remaining uncommitted changes
+                            db.commit()
+
+                            # Record cost asynchronously after streaming completes
+                            if recorded_cost > 0:
+                                await cost_limiter.record_cost(websocket, recorded_cost)
+                                logger.info("Recorded actual cost for session %s: $%.6f", session_id, recorded_cost)
+
+                        except asyncio.CancelledError:
+                            logger.info("🚫 Flow cancelled for session %s", session_id)
+                            raise
+                        except (ValidationError, ChatServiceError) as e:
+                            logger.error("Service error for session %s: %s", session_id, e)
                             await websocket.send_text(json.dumps({
-                                "assistant_msg_id": str(assistant_msg_id)
+                                "error": f"Service error: {str(e)}"
                             }))
-
-                        if user_msg_id:
+                        except LLMServiceError as e:
+                            logger.error("LLM service error for session %s: %s", session_id, e)
                             await websocket.send_text(json.dumps({
-                                "user_msg_id": str(user_msg_id)
+                                "error": "AI service temporarily unavailable. Please try again."
                             }))
-
-                        # Send completion signal
-                        await websocket.send_text(json.dumps({
-                            "complete": True
-                        }))
-
-                        logger.info("✅ Query processing completed", extra={
-                            "session_id": str(session_id),
-                            "operation": "query_completed"
-                        })
-                        # Explicit commit for any remaining uncommitted changes
-                        db.commit()
-                        
-                    except asyncio.CancelledError:
-                        logger.info("🚫 Flow cancelled for session %s", session_id)
-                        raise
-                    except (ValidationError, ChatServiceError) as e:
-                        logger.error("Service error for session %s: %s", session_id, e)
-                        await websocket.send_text(json.dumps({
-                            "error": f"Service error: {str(e)}"
-                        }))
-                    except LLMServiceError as e:
-                        logger.error("LLM service error for session %s: %s", session_id, e)
-                        await websocket.send_text(json.dumps({
-                            "error": "AI service temporarily unavailable. Please try again."
-                        }))
-                    except Exception as e:
-                        logger.error("Unexpected error processing message for session %s: %s", session_id, e)
-                        await websocket.send_text(json.dumps({
-                            "error": "Internal server error"
-                        }))
+                        except Exception as e:
+                            logger.error("Unexpected error processing message for session %s: %s", session_id, e)
+                            await websocket.send_text(json.dumps({
+                                "error": "Internal server error"
+                            }))
 
                 # Start flow in background to allow cancellation on disconnect
                 active_flow_task = asyncio.create_task(run_flow_and_stream())
