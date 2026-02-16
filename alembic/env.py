@@ -54,6 +54,16 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _make_sync_url(url: str) -> str:
+    """Ensure the URL uses the psycopg (v3) sync driver for Alembic migrations."""
+    if url.startswith("postgresql+psycopg://"):
+        return url
+    for prefix in ("postgresql+asyncpg://", "postgresql+psycopg2://", "postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
@@ -62,7 +72,7 @@ def run_migrations_online() -> None:
 
     """
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = settings.database_url
+    configuration["sqlalchemy.url"] = _make_sync_url(settings.database_url)
     connectable = engine_from_config(
         configuration,
         prefix="sqlalchemy.",

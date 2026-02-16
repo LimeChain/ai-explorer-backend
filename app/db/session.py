@@ -1,113 +1,143 @@
 """
-Database session management and configuration.
-"""
-import threading
+Async database session management and configuration.
 
-from contextlib import contextmanager
-from functools import wraps
-from sqlalchemy import create_engine, Engine
-from sqlalchemy.orm import sessionmaker, Session
-from typing import Generator, Callable, Any
+Provides AsyncSession via FastAPI dependency injection.
+All database access should use get_async_db() or get_async_db_session().
+
+DEPRECATED: get_db_session() provides sync Session for backward compat.
+It will be removed once chat.py and evals are migrated (Task 5 / Story 1-2).
+"""
+import warnings
+from contextlib import asynccontextmanager, contextmanager
+from collections.abc import AsyncGenerator, Generator
+
+from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import Session, sessionmaker
+
 from app.config import settings
 
 
-# Thread-safe lazy initialization
-_engine_lock = threading.Lock()
-_session_lock = threading.Lock()
-_engine = None
-_SessionLocal = None
-
-def get_engine() -> Engine:
-    """Get or create database engine (thread-safe)."""
-    global _engine
-    if _engine is None:
-        with _engine_lock:
-            if _engine is None:  # Double-checked locking
-                _engine = create_engine(
-                    settings.database_url,
-                    pool_size=settings.database_pool_size,
-                    max_overflow=settings.database_max_overflow,
-                    pool_timeout=settings.database_pool_timeout,
-                    pool_recycle=settings.database_pool_recycle,
-                    pool_pre_ping=settings.database_pool_pre_ping,
-                    echo=settings.database_echo
-                )
-    return _engine
-
-def get_session_local() -> sessionmaker[Session]:
-    """Get or create SessionLocal class (thread-safe)."""
-    global _SessionLocal
-    if _SessionLocal is None:
-        with _session_lock:
-            if _SessionLocal is None:  # Double-checked locking
-                _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
-    return _SessionLocal
+def _make_async_url(url: str) -> str:
+    """Convert a postgresql:// URL to postgresql+asyncpg:// for async driver."""
+    if url.startswith("postgresql+asyncpg://"):
+        return url
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return url
 
 
-def get_db() -> Generator[Session, None, None]:
+def _make_sync_url(url: str) -> str:
+    """Convert a database URL to use the psycopg (v3) sync driver."""
+    for prefix in ("postgresql+asyncpg://", "postgresql+psycopg2://", "postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
+# Module-level engine and session factory — created once at import time.
+# Lifecycle (open/dispose) managed by app lifespan in main.py.
+_async_engine: AsyncEngine = create_async_engine(
+    _make_async_url(settings.database_url),
+    pool_size=settings.database_pool_size,
+    max_overflow=settings.database_max_overflow,
+    pool_timeout=settings.database_pool_timeout,
+    pool_recycle=settings.database_pool_recycle,
+    pool_pre_ping=settings.database_pool_pre_ping,
+    echo=settings.database_echo,
+)
+
+_async_session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
+    bind=_async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+
+def get_async_engine() -> AsyncEngine:
+    """Return the async engine for lifespan management (dispose on shutdown)."""
+    return _async_engine
+
+
+async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
     """
-    Dependency function to get database session.
-    
-    Yields:
-        Session: Database session
+    FastAPI dependency that yields an AsyncSession.
+
+    Usage:
+        @router.get("/items")
+        async def list_items(db: AsyncSession = Depends(get_async_db)):
+            result = await db.execute(select(Item))
+            return result.scalars().all()
     """
-    session_local = get_session_local()
-    db = session_local()
-    try:
-        yield db
-    finally:
-        db.close()
+    async with _async_session_factory() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+
+
+@asynccontextmanager
+async def get_async_db_session() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Async context manager for code that needs a session outside FastAPI DI.
+
+    Usage:
+        async with get_async_db_session() as db:
+            result = await db.execute(select(Item))
+            items = result.scalars().all()
+            await db.commit()
+    """
+    async with _async_session_factory() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+
+
+# ---------------------------------------------------------------------------
+# DEPRECATED sync session — used by chat.py and evals/main.py.
+# Will be removed in Task 5 (Story 1-1) / Story 1-2.
+# ---------------------------------------------------------------------------
+
+_sync_engine = create_engine(
+    _make_sync_url(settings.database_url),
+    pool_size=settings.database_pool_size,
+    max_overflow=settings.database_max_overflow,
+    pool_timeout=settings.database_pool_timeout,
+    pool_recycle=settings.database_pool_recycle,
+    pool_pre_ping=settings.database_pool_pre_ping,
+    echo=settings.database_echo,
+)
+
+_sync_session_factory = sessionmaker(
+    bind=_sync_engine,
+    autocommit=False,
+    autoflush=False,
+)
 
 
 @contextmanager
 def get_db_session() -> Generator[Session, None, None]:
-    """
-    Context manager to get database session with automatic cleanup.
-    
-    This ensures proper session management and prevents connection leaks.
-    The caller is responsible for committing or rolling back transactions.
-    
-    Yields:
-        Session: Database session
-    
-    Example:
-        with get_db_session() as db:
-            # Use db here
-            result = db.query(Model).all()
-            db.commit()  # Caller handles commit
-        # db is automatically closed
-    """
-    session_local = get_session_local()
-    db = session_local()
+    """DEPRECATED: Use get_async_db_session() instead. Removed in Task 5."""
+    warnings.warn(
+        "get_db_session() is deprecated. Use get_async_db_session().",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    session = _sync_session_factory()
     try:
-        yield db
+        yield session
     except Exception:
-        db.rollback()  # Auto-rollback on any exception
+        session.rollback()
         raise
     finally:
-        db.close()  # Always close the session
-
-
-def with_db_session(func: Callable) -> Callable:
-    """
-    Decorator to automatically provide and manage database sessions.
-    
-    The decorated function must accept 'db' as its first or keyword argument.
-    
-    Example:
-        @with_db_session
-        def some_function(db: Session, other_param: str):
-            # Use db here
-            return db.query(Model).all()
-    """
-    @wraps(func)
-    def wrapper(*args, **kwargs) -> Any:
-        with get_db_session() as db:
-            # Inject db as the first argument or as a keyword argument
-            if 'db' in kwargs:
-                kwargs['db'] = db
-            else:
-                # Insert db as first argument
-                args = (db,) + args
-            return func(*args, **kwargs)
-    return wrapper
+        session.close()

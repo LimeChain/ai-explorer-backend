@@ -1,7 +1,7 @@
 """
 Service for managing suggested queries.
 """
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from app.db.models import SuggestedQuery as SuggestedQueryModel
@@ -18,24 +18,21 @@ logger = get_service_logger("suggestion_service")
 class SuggestionService:
     """Service class for managing suggested queries."""
 
-    
     @staticmethod
-    def get_suggestions_by_context(
-        db: Session, 
+    async def get_suggestions_by_context(
+        db: AsyncSession,
         context: SuggestionContext,
         limit: int = DEFAULT_SUGGESTION_LIMIT
     ) -> List[SuggestedQueryModel]:
         """Retrieve suggested queries from the database filtered by context."""
         try:
-            # Validate inputs
             validated_context = SuggestionValidators.validate_context(context)
             validated_limit = SuggestionValidators.validate_limit(limit)
-            
-            # Query suggestions
-            return SuggestionDBOperations.get_suggestions_by_context(
+
+            return await SuggestionDBOperations.get_suggestions_by_context(
                 db, validated_context, validated_limit
             )
-            
+
         except ValidationError:
-            logger.warning("⚠️ Validation error in get_suggestions_by_context: context=%s, limit=%s", context, limit)
+            logger.warning("Validation error in get_suggestions_by_context: context=%s, limit=%s", context, limit)
             raise
