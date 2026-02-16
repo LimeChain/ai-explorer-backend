@@ -58,16 +58,16 @@ class Settings(BaseSettings):
     # Database settings
     database_url: str = Field(..., description="Database connection URL")
     database_pool_size: int = Field(
-        default=50, 
-        ge=5, 
-        le=200, 
-        description="Database connection pool size (5-200 connections)"
+        default=10,
+        ge=1,
+        le=200,
+        description="Database connection pool size per instance (1-200 connections)"
     )
     database_max_overflow: int = Field(
-        default=20, 
-        ge=0, 
-        le=100, 
-        description="Database connection pool max overflow (0-100 connections)"
+        default=5,
+        ge=0,
+        le=100,
+        description="Database connection pool max overflow per instance (0-100 connections)"
     )
     database_pool_timeout: int = Field(
         default=30, 
