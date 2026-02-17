@@ -66,6 +66,14 @@ def get_async_engine() -> AsyncEngine:
     return _async_engine
 
 
+def get_sync_engine():
+    """Return the sync engine for lifespan management (dispose on shutdown).
+
+    DEPRECATED: Will be removed alongside get_db_session() in Story 1-2.
+    """
+    return _sync_engine
+
+
 async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
     """
     FastAPI dependency that yields an AsyncSession.

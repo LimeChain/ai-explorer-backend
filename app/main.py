@@ -11,7 +11,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from app.api.endpoints import chat, message, suggestions
 from app.config import settings
-from app.db.session import get_async_engine
+from app.db.session import get_async_engine, get_sync_engine
 from app.dependencies import set_redis_client
 from app.exception_handlers import register_exception_handlers
 from app.utils.logging_config import setup_logging, get_logger
@@ -112,6 +112,10 @@ async def lifespan(app: FastAPI):
         engine = get_async_engine()
         await engine.dispose()
         logger.info("Async DB engine disposed")
+
+        sync_engine = get_sync_engine()
+        sync_engine.dispose()
+        logger.info("Sync DB engine disposed")
 
 
 # Create FastAPI app with lifespan

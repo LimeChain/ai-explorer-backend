@@ -190,6 +190,7 @@ async def edit_message(
 
         # Clear checkpoint state for the session
         # Re-fetch the message to get conversation relationship
+        conversation = None
         result = await db.execute(
             select(Message).where(Message.id == message_id)
         )
