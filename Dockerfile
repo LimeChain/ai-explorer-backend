@@ -12,10 +12,10 @@ ENV UV_CACHE_DIR=/tmp/uv-cache
 WORKDIR /app
 
 # Copy dependency files
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 
 # Install dependencies (generate lock file if needed)
-RUN uv sync --no-dev
+RUN uv sync --no-dev --frozen
 
 # Stage 2: Production image
 FROM python:3.13-slim AS runtime
@@ -32,7 +32,7 @@ COPY --from=builder /app/.venv /app/.venv
 
 # Copy application code
 COPY app/ ./app/
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 COPY alembic.ini ./
 COPY alembic/ ./alembic/
 
