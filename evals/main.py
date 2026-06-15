@@ -17,11 +17,11 @@ from typing import List, Optional
 
 EXPERIMENT_PREFIX = "gpt-4.1"
 
-NETWORK = "testnet"
+NETWORK = "mainnet"
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-    
+
 # Set the API key for openevals to use
 os.environ["OPENAI_API_KEY"] = settings.llm_api_key.get_secret_value()
 
@@ -30,35 +30,38 @@ dataset = get_or_create_dataset(client)
 
 llm_orchestrator = LLMOrchestrator(enable_persistence=False)
 
+
 async def get_orchestrator_response(
-    query: str, 
-    account_id: Optional[str] = None, 
-    session_id: Optional[uuid.UUID] = None, 
+    query: str,
+    account_id: Optional[str] = None,
+    session_id: Optional[uuid.UUID] = None,
 ) -> str:
     """
     Helper function to collect the full response from the streaming LLM orchestrator.
     This mirrors the flow used in the chat endpoint.
     """
     response_parts = []
-    
+
     try:
         # Use context manager for safe database session handling
         with get_db_session() as db:
             if account_id:
-                logger.info("Processing evaluation request with account_id=%s", account_id)
-            
+                logger.info(
+                    "Processing evaluation request with account_id=%s", account_id
+                )
+
             async for token in llm_orchestrator.stream_llm_response(
                 query=query,
                 network=NETWORK,
                 account_id=account_id,
                 session_id=session_id,
-                db=db
+                db=db,
             ):
                 response_parts.append(token)
-            
+
             # Explicit commit for any remaining uncommitted changes
             db.commit()
-                
+
     except (ValidationError, ChatServiceError) as e:
         logger.error("Service error for session %s: %s", session_id, e)
         return f"Service error: {str(e)}"
@@ -66,25 +69,28 @@ async def get_orchestrator_response(
         logger.error("LLM service error for session %s: %s", session_id, e)
         return f"AI service temporarily unavailable. Please try again. Error: {str(e)}"
     except Exception as e:
-        logger.error("Unexpected error processing evaluation for session %s: %s", session_id, e)
+        logger.error(
+            "Unexpected error processing evaluation for session %s: %s", session_id, e
+        )
         if response_parts:
             return "".join(response_parts)
         else:
             return "Internal server error"
-            
+
     return "".join(response_parts)
 
-# Define the logic you want to evaluate inside a target function. 
+
+# Define the logic you want to evaluate inside a target function.
 # The SDK will automatically send the inputs from the dataset to your target function
 def get_account_id(inputs: dict) -> Optional[str]:
     """Extract account_id from inputs, supporting both direct and regex extraction methods."""
     # First try direct account_id field (production style)
     if "account_id" in inputs and inputs["account_id"]:
         return inputs["account_id"]
-    
+
     # Fall back to regex extraction for backward compatibility
     question = inputs.get("question", "")
-    wallet_pattern = r'0\.0\.\d+'
+    wallet_pattern = r"0\.0\.\d+"
     match = re.search(wallet_pattern, question)
     return match.group(0) if match else None
 
@@ -98,13 +104,16 @@ def target(inputs: dict) -> dict:
     question = inputs["question"]
     account_id = get_account_id(inputs)
     session_id = uuid.uuid4()
-    
-    response = asyncio.run(get_orchestrator_response(
-        query=question,
-        account_id=account_id,
-        session_id=session_id,
-    ))
+
+    response = asyncio.run(
+        get_orchestrator_response(
+            query=question,
+            account_id=account_id,
+            session_id=session_id,
+        )
+    )
     return {"answer": response}
+
 
 experiment_results = client.evaluate(
     target,
@@ -119,4 +128,5 @@ experiment_results = client.evaluate(
 )
 
 # link will be provided to view the results in langsmith
-print(experiment_results) 
+print(experiment_results)
+
