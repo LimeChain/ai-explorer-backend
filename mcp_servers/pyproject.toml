@@ -13,7 +13,7 @@ dependencies = [
     "httpx>=0.28.1",
     "mcp==1.22.0",
     "pydantic-settings>=2.0.0",
-    "langchain-mcp-adapters>=0.1.9",
+    "langchain-mcp-adapters==0.1.9",
     "hiero-mirror-node-sdk",
     "sqlalchemy>=2.0.0",
     "psycopg[binary]>=3.2.9",
